@@ -1,0 +1,31 @@
+/**:
+  ros__parameters:
+    scan_cloud_topic: "/livox/lidar"
+    odom_topic: "odom"
+    local_frame_id: "base_link"
+    global_frame_id: "odom"
+    grid_resolution: 0.10
+    local_map_size_m: 20.0
+    z_min: 0.4
+    z_max: 1.2
+    slice_in_global_frame: false
+    slice_z_in_cloud_frame: true
+    invert_z_slice: true
+    log_z_slice_stats: true
+    publish_slice_debug_points: true
+    slice_debug_points_max_points: 80000
+    transform_cloud_to_local_frame: true
+    center_box_filter_half_extent_m: 0.80
+    range_min_m: 0.80
+    range_max_m: 12.0
+    enable_raycast_free_space: true
+    raycast_free_value: 0
+    raycast_occupied_value: 100
+    raycast_unknown_value: -1
+    raycast_max_range_m: 12.0
+    raycast_min_range_m: 0.80
+    raycast_clear_occupied: false
+    occupied_threshold_points: 1
+    publish_period_ms: 200
+    global_map_padding_m: 5.0
+    sync_queue_size: 100

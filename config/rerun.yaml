@@ -1,0 +1,7 @@
+co_3dto2d_rerun:
+  ros__parameters:
+    spawn_viewer: true
+    rerun_port: 9876
+    occupancy_point_radius: 0.045
+    slice_point_radius: 0.025
+    odometry_point_radius: 0.04
