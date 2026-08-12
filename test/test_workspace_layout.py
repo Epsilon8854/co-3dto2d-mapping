@@ -3,8 +3,8 @@ import re
 import xml.etree.ElementTree as ET
 
 
-ROOT = Path(__file__).resolve().parents[3]
-PACKAGE = ROOT / "src" / "co_3dto2d_mapping"
+PACKAGE = Path(__file__).resolve().parents[1]
+ROOT = PACKAGE.parent.parent if PACKAGE.parent.name == "src" else PACKAGE
 TEXT_SUFFIXES = {".py", ".cpp", ".hpp", ".xml", ".txt", ".yaml", ".sh"}
 FORBIDDEN = (
     "/home/user/Swarm-SLAM/src",
