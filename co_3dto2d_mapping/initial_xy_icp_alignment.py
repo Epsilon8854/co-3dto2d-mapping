@@ -30,7 +30,7 @@ class InitialXyIcpAlignment(Node):
         self.declare_parameter("local_frame_id", "base_link")
         self.declare_parameter("transform_cloud_to_local_frame", True)
         self.declare_parameter("z_min", 0.4)
-        self.declare_parameter("z_max", 1.2)
+        self.declare_parameter("z_max", 0.8)
         self.declare_parameter("invert_z_slice", True)
         self.declare_parameter("frame_count", 5)
         self.declare_parameter("invert_result", False)

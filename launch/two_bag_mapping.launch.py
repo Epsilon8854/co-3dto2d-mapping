@@ -254,7 +254,7 @@ def generate_launch_description():
             DeclareLaunchArgument("alignment_topic", default_value="/toy/initial_xy_alignment"),
             DeclareLaunchArgument("alignment_startup_delay_s", default_value="1.0"),
             DeclareLaunchArgument("alignment_z_min", default_value="0.4"),
-            DeclareLaunchArgument("alignment_z_max", default_value="1.2"),
+            DeclareLaunchArgument("alignment_z_max", default_value="0.8"),
             DeclareLaunchArgument("alignment_invert_z_slice", default_value="true"),
             DeclareLaunchArgument("alignment_frame_count", default_value="5"),
             DeclareLaunchArgument("alignment_invert_result", default_value="false"),

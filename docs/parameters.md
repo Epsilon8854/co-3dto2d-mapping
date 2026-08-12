@@ -28,9 +28,9 @@
 
 | 파라미터 | 기본값 | 설명 및 검증 |
 | --- | --- | --- |
-| `grid_resolution` | `0.10` | 격자 셀 한 변의 길이입니다. 양수여야 합니다. |
+| `grid_resolution` | `0.05` | 격자 셀 한 변의 길이입니다. 양수여야 합니다. |
 | `local_map_size_m` | `20.0` | 로컬 격자의 한 변 크기이며 `grid_resolution`보다 커야 합니다. |
-| `z_min`, `z_max` | `0.4`, `1.2` | Z 슬라이스 범위이며 `z_min <= z_max`여야 합니다. |
+| `z_min`, `z_max` | `0.4`, `0.8` | Z 슬라이스 범위이며 `z_min <= z_max`여야 합니다. |
 | `invert_z_slice` | `true` (YAML) | 선택한 Z 범위 안쪽이 아닌 바깥쪽의 점을 유지합니다. 노드 선언 기본값은 `false`입니다. |
 | `transform_cloud_to_local_frame` | `true` | TF를 사용해 클라우드 점을 `local_frame_id`로 변환합니다. |
 | `center_box_filter_half_extent_m` | `0.80` (launch) | 센서 주변 중앙 정사각형 영역을 제거합니다. 노드 선언 기본값은 `0.0`입니다. |
@@ -106,7 +106,7 @@ occupancy map 기본값은 [`config/occupancy.yaml`](../config/occupancy.yaml), 
 | `target_frame_id`, `source_frame_id` | `odom`, `r1/odom` |
 | `local_frame_id` | `base_link` |
 | `transform_cloud_to_local_frame` | `true` |
-| `z_min`, `z_max`, `invert_z_slice` | `0.4`, `1.2`, `true` |
+| `z_min`, `z_max`, `invert_z_slice` | `0.4`, `0.8`, `true` |
 | `frame_count` | `5` |
 | `invert_result` | `false` |
 | `center_box_half_extent_m` | `0.0` |

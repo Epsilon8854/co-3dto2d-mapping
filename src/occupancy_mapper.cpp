@@ -38,10 +38,10 @@ public:
     declare_parameter<std::string>("local_frame_id", "base_link");
     declare_parameter<std::string>("global_frame_id", "odom");
     declare_parameter<bool>("use_odom_header_frame", true);
-    declare_parameter<double>("grid_resolution", 0.10);
+    declare_parameter<double>("grid_resolution", 0.05);
     declare_parameter<double>("local_map_size_m", 20.0);
     declare_parameter<double>("z_min", 0.4);
-    declare_parameter<double>("z_max", 1.2);
+    declare_parameter<double>("z_max", 0.8);
     declare_parameter<bool>("slice_in_global_frame", false);
     declare_parameter<bool>("slice_z_in_cloud_frame", true);
     declare_parameter<bool>("invert_z_slice", false);

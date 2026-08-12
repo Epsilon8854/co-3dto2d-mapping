@@ -201,10 +201,10 @@ Bag 안의 source topic 이름이 `/livox/lidar` 또는 `/livox/imu`와 다르�
 ```yaml
 /**:
   ros__parameters:
-    grid_resolution: 0.10
+    grid_resolution: 0.05
     local_map_size_m: 20.0
     z_min: 0.4
-    z_max: 1.2
+    z_max: 0.8
     invert_z_slice: true
     center_box_filter_half_extent_m: 0.80
     range_min_m: 0.80

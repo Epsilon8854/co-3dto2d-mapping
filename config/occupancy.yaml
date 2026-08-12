@@ -4,10 +4,10 @@
     odom_topic: "odom"
     local_frame_id: "base_link"
     global_frame_id: "odom"
-    grid_resolution: 0.10
+    grid_resolution: 0.05
     local_map_size_m: 20.0
     z_min: 0.4
-    z_max: 1.2
+    z_max: 0.8
     slice_in_global_frame: false
     slice_z_in_cloud_frame: true
     invert_z_slice: true
