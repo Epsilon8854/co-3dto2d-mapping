@@ -56,6 +56,17 @@ source /opt/ros/humble/setup.bash
 source ~/co_3dto2d_mapping/install/local_setup.bash
 ```
 
+## 주요 토픽과 frame
+
+| 구분 | Live mode | Bag 한 개 |
+| --- | --- | --- |
+| LiDAR 입력 | `/livox/lidar` | bag의 `/livox/lidar`를 재생 후 `/livox/lidar` 또는 `/livox/lidar_raw` |
+| IMU 입력 | `/livox/imu` | bag의 `/livox/imu`를 재생 후 `/livox/imu` |
+| Filtered IMU | `/livox/imu_filtered` | `/livox/imu_filtered` |
+| Odometry | `/r0/odom` | `/r0/odom` |
+| Occupancy | `/r0/toy/local_occupancy`, `/r0/toy/global_occupancy` | 같은 토픽 |
+| Frame | `base_link`, `livox_frame`, `odom` | `base_link`, `livox_frame`, `odom` |
+
 ## 2. Live mode 실행
 
 Livox driver는 이미 실행 중이며 `/livox/lidar`와 `/livox/imu`를 publish한다고 가정합니다. 먼저 입력 토픽과 message type을 확인합니다.
@@ -230,7 +241,7 @@ Bag 안의 source topic 이름이 `/livox/lidar` 또는 `/livox/imu`와 다르�
 
 ## Hyperparameters
 
-아래 값은 occupancy map 생성에 직접 영향을 주는 hyperparameter입니다. 기본값은 `config/occupancy.yaml`에 있으며, 필요하면 파일을 복사해 수정한 뒤 실행 시 `occupancy_config_file:=/absolute/path/to/occupancy.yaml`로 지정합니다.
+전체 hyperparameter 목록, 기본값, 단위와 validation은 [`docs/parameters.md`](docs/parameters.md)를 참고하세요. 아래에는 occupancy map 생성에 직접 영향을 주는 값의 설정 예시만 정리했습니다. 기본값은 `config/occupancy.yaml`에 있으며, 필요하면 파일을 복사해 수정한 뒤 실행 시 `occupancy_config_file:=/absolute/path/to/occupancy.yaml`로 지정합니다.
 
 ```yaml
 /**:
@@ -257,18 +268,7 @@ Bag 안의 source topic 이름이 `/livox/lidar` 또는 `/livox/imu`와 다르�
 
 occupancy 값은 미관측 `-1`, free `0`, occupied `100`입니다. 미관측 영역을 free로 바꾸지 않습니다.
 
-전체 parameter 목록과 기본값, validation은 [`docs/parameters.md`](docs/parameters.md)를 참고하세요.
-
-## 주요 토픽과 frame
-
-| 구분 | Live mode | Bag 한 개 |
-| --- | --- | --- |
-| LiDAR 입력 | `/livox/lidar` | bag의 `/livox/lidar`를 재생 후 `/livox/lidar` 또는 `/livox/lidar_raw` |
-| IMU 입력 | `/livox/imu` | bag의 `/livox/imu`를 재생 후 `/livox/imu` |
-| Filtered IMU | `/livox/imu_filtered` | `/livox/imu_filtered` |
-| Odometry | `/r0/odom` | `/r0/odom` |
-| Occupancy | `/r0/toy/local_occupancy`, `/r0/toy/global_occupancy` | 같은 토픽 |
-| Frame | `base_link`, `livox_frame`, `odom` | `base_link`, `livox_frame`, `odom` |
+참고: 아래 예시는 occupancy mapping 관련 주요 parameter만 보여줍니다.
 
 ## 문제 해결
 
