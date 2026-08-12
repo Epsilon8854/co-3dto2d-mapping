@@ -162,8 +162,9 @@ Node: `rerun_mapping_node.py` (`co_3dto2d_rerun`). It subscribes to `/toy_record
 
 | Launch file | Key arguments (defaults) | Namespace/topic/frame behavior |
 | --- | --- | --- |
+| `live_mapping.launch.py` | `robot_id=0`, `use_sim_time=false`, `scan_cloud_topic=/livox/lidar`, `imu_raw_topic=/livox/imu`, `enable_rear_lidar_filter=false` | Sets `use_bag=false`; consumes live Livox topics and starts the single-robot mapper under `/r<robot_id>`. |
 | `bag_mid360.launch.py` | `bag_path` required, `rate=1.0`, `storage_id=sqlite3`, `lidar_topic=/livox/lidar`, `imu_topic=/livox/imu`, `play_tf_static=true` | Validates `metadata.yaml`; plays LiDAR, IMU, optional `/tf_static`, then remaps. |
-| `single_bag_mapping.launch.py` | `robot_id=0`, `bag_path` required, `rate=1.0`, `storage_id=sqlite3`, `occupancy_config_file=config/occupancy.yaml` | Namespace is `/r<robot_id>`; default mapper frames are `base_link` and `odom`. |
+| `single_bag_mapping.launch.py` | `robot_id=0`, `use_bag=true`, `bag_path` required in bag mode, `rate=1.0`, `storage_id=sqlite3`, `occupancy_config_file=config/occupancy.yaml` | Namespace is `/r<robot_id>`; default mapper frames are `base_link` and `odom`. Set `use_bag=false` when embedding this pipeline for live input. |
 |  | `enable_rear_lidar_filter=true`, `rear_filter_angle_deg=120`, `rear_filter_axis=-x`, `rear_filter_min_xy_range_m=0` | Configures filtered LiDAR routing; IMU raw/filtered defaults are `/livox/imu` and `/livox/imu_filtered`. |
 |  | `center_box_filter_half_extent_m=0.80`, `slice_z_in_cloud_frame=true`, `transform_cloud_to_local_frame=true` | Explicit mapper launch overrides after YAML. |
 | `two_bag_mapping.launch.py` | `bag_path_0`, `bag_path_1` required, `rate=1.0`, `storage_id=sqlite3`, `robot_delay_s=20` | Creates `/r0` and `/r1`, with `rN/base_link`, `rN/livox_frame`, `rN/odom`. |

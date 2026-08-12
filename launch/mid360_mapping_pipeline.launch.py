@@ -13,6 +13,7 @@ def launch_setup(context, *args, **kwargs):
     package_share = get_package_share_directory("co_3dto2d_mapping")
     robot_id = LaunchConfiguration("robot_id").perform(context)
     namespace = "/r" + robot_id
+    use_bag = LaunchConfiguration("use_bag").perform(context).lower() == "true"
     publish_sensor_static_tf = (
         LaunchConfiguration("publish_sensor_static_tf").perform(context).lower() == "true"
     )
@@ -26,24 +27,6 @@ def launch_setup(context, *args, **kwargs):
         LaunchConfiguration("bag_lidar_topic").perform(context)
         if enable_rear_lidar_filter
         else scan_cloud_topic
-    )
-
-    bag_proc = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                package_share,
-                "launch",
-                "bag_mid360.launch.py",
-            )
-        ),
-        launch_arguments={
-            "bag_path": LaunchConfiguration("bag_path").perform(context),
-            "rate": LaunchConfiguration("rate").perform(context),
-            "storage_id": LaunchConfiguration("storage_id").perform(context),
-            "lidar_topic": bag_lidar_topic,
-            "imu_topic": LaunchConfiguration("imu_raw_topic").perform(context),
-            "play_tf_static": LaunchConfiguration("play_tf_static").perform(context),
-        }.items(),
     )
 
     use_sim_time = (
@@ -136,7 +119,28 @@ def launch_setup(context, *args, **kwargs):
         }.items(),
     )
 
-    actions = [bag_proc, imu_filter_node, imu_frame_republisher_node, odom_proc]
+    actions = [imu_filter_node, imu_frame_republisher_node, odom_proc]
+    if use_bag:
+        actions.insert(
+            0,
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(
+                        package_share,
+                        "launch",
+                        "bag_mid360.launch.py",
+                    )
+                ),
+                launch_arguments={
+                    "bag_path": LaunchConfiguration("bag_path").perform(context),
+                    "rate": LaunchConfiguration("rate").perform(context),
+                    "storage_id": LaunchConfiguration("storage_id").perform(context),
+                    "lidar_topic": bag_lidar_topic,
+                    "imu_topic": LaunchConfiguration("imu_raw_topic").perform(context),
+                    "play_tf_static": LaunchConfiguration("play_tf_static").perform(context),
+                }.items(),
+            ),
+        )
     if enable_rear_lidar_filter:
         actions.insert(1, rear_lidar_filter_node)
     if publish_sensor_static_tf:
@@ -166,6 +170,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("robot_id", default_value="0"),
+            DeclareLaunchArgument("use_bag", default_value="true"),
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("publish_tf_odom", default_value="true"),
             DeclareLaunchArgument("play_tf_static", default_value="true"),

@@ -24,6 +24,7 @@ def launch_setup(context, *args, **kwargs):
         ),
         launch_arguments={
             "robot_id": robot_id,
+            "use_bag": LaunchConfiguration("use_bag").perform(context),
             "use_sim_time": LaunchConfiguration("use_sim_time").perform(context),
             "publish_tf_odom": LaunchConfiguration("publish_tf_odom").perform(context),
             "play_tf_static": LaunchConfiguration("play_tf_static").perform(context),
@@ -106,6 +107,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("robot_id", default_value="0"),
+            DeclareLaunchArgument("use_bag", default_value="true"),
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("publish_tf_odom", default_value="true"),
             DeclareLaunchArgument("play_tf_static", default_value="true"),

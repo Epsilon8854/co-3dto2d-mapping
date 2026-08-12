@@ -5,6 +5,7 @@ PACKAGE = Path(__file__).resolve().parents[1]
 LAUNCH_DIR = PACKAGE / "launch"
 LAUNCH_NAMES = (
     "bag_mid360.launch.py",
+    "live_mapping.launch.py",
     "rtabmap_mid360_odometry.launch.py",
     "mid360_mapping_pipeline.launch.py",
     "single_bag_mapping.launch.py",
