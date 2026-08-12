@@ -69,7 +69,22 @@ source ~/co_3dto2d_mapping/install/local_setup.bash
 
 ## 2. Live mode 실행
 
-Livox driver는 이미 실행 중이며 `/livox/lidar`와 `/livox/imu`를 publish한다고 가정합니다. 먼저 입력 토픽과 message type을 확인합니다.
+### 터미널 A: Livox MID-360 실행
+
+Livox workspace가 `~/ws_livox`에 설치되어 있다고 가정합니다. 경로가 다르면 `local_setup.bash` 경로를 실제 Livox workspace에 맞게 바꿉니다.
+
+```bash
+bash --noprofile --norc
+export PYTHONNOUSERSITE=1
+source /opt/ros/humble/setup.bash
+source ~/ws_livox/install/local_setup.bash
+
+ros2 launch livox_ros_driver2 rviz_MID360_launch.py
+```
+
+이 launch는 MID-360 driver를 시작하고 mapping에 필요한 `sensor_msgs/msg/PointCloud2` 형식의 `/livox/lidar`를 publish합니다. Livox driver에 포함된 센서 확인용 RViz도 함께 열리므로, 아래의 mapping RViz를 사용할 때는 해당 창을 닫아도 됩니다.
+
+Livox driver가 실행된 뒤 입력 토픽과 message type을 확인합니다.
 
 ```bash
 ros2 topic list | grep -E '/livox/(lidar|imu)'
@@ -147,20 +162,24 @@ ros2 topic list | grep -E 'livox|odom|occupancy'
 ros2 topic hz /r0/odom
 ```
 
-RViz를 별도로 실행하려면:
+단일 로봇 live mode용 RViz 설정 파일을 바로 실행하려면:
 
 ```bash
-rviz2
+rviz2 -d "$(ros2 pkg prefix --share co_3dto2d_mapping)/rviz/single_robot_mapping.rviz"
 ```
 
-RViz에서 Fixed Frame을 `odom`으로 설정하고 다음 display를 추가합니다.
+이 설정 파일은 Fixed Frame을 `odom`으로 두고 다음 display를 미리 구성합니다.
 
 - Map: `/r0/toy/global_occupancy`
 - Map: `/r0/toy/local_occupancy`
 - Odometry: `/r0/odom`
 - PointCloud2: `/livox/lidar` 또는 `/r0/toy/slice_kept_points`
 
-저장된 `rviz/two_robot_mapping.rviz`는 `/toy_record/*`와 `map` frame을 사용하는 두 로봇용 layout입니다. 단일 로봇 live mode에서는 위처럼 Fixed Frame과 topic을 설정합니다.
+저장된 `rviz/two_robot_mapping.rviz`는 `/toy_record/*`와 `map` frame을 사용하는 두 로봇용 layout입니다. 두 로봇 bag mode에서는 다음처럼 실행합니다.
+
+```bash
+rviz2 -d "$(ros2 pkg prefix --share co_3dto2d_mapping)/rviz/two_robot_mapping.rviz"
+```
 
 ## 4. Bag mode (선택 사항)
 
@@ -241,7 +260,7 @@ Bag 안의 source topic 이름이 `/livox/lidar` 또는 `/livox/imu`와 다르�
 
 ## Hyperparameters
 
-전체 hyperparameter 목록, 기본값, 단위와 validation은 [`docs/parameters.md`](docs/parameters.md)를 참고하세요. 아래에는 occupancy map 생성에 직접 영향을 주는 값의 설정 예시만 정리했습니다. 기본값은 `config/occupancy.yaml`에 있으며, 필요하면 파일을 복사해 수정한 뒤 실행 시 `occupancy_config_file:=/absolute/path/to/occupancy.yaml`로 지정합니다.
+핵심 파라미터와 그 외 파라미터의 분류, 기본값과 단위는 [`docs/parameters.md`](docs/parameters.md)를 참고하세요. 아래에는 occupancy map 생성에 직접 영향을 주는 핵심 값의 설정 예시만 정리했습니다. 기본값은 `config/occupancy.yaml`에 있으며, 필요하면 파일을 복사해 수정한 뒤 실행 시 `occupancy_config_file:=/absolute/path/to/occupancy.yaml`로 지정합니다.
 
 ```yaml
 /**:
