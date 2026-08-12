@@ -4,6 +4,16 @@
 
 이 README는 ROS 2와 Livox 입력 토픽이 이미 준비된 환경에서 mapping 패키지를 실행하는 흐름을 설명합니다. rosbag2는 센서가 없을 때 사용하는 선택 사항입니다.
 
+## 0. 사전 세팅
+
+이 문서는 ROS 2 Humble과 Livox MID-360이 이미 설치 및 설정되어 있다고 가정합니다. 설치가 되어 있지 않다면 아래 링크를 참고하여 먼저 설치해 주세요.
+
+- [ROS 2 Humble 설치 안내](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)
+- [Livox-SDK2 설치 안내](https://github.com/Livox-SDK/Livox-SDK2)
+- [Livox ROS Driver 2 설치 안내](https://github.com/Livox-SDK/livox_ros_driver2)
+
+설정이 완료되면 `/livox/lidar`와 `/livox/imu` 토픽을 확인한 뒤 mapping을 실행합니다.
+
 ## 실행 구조
 
 | 구성 요소 | 역할 |
@@ -14,29 +24,7 @@
 
 Livox 입력은 `/livox/lidar`와 `/livox/imu`를 사용한다고 가정합니다. mapping 패키지와 rosbag 파일만 이 저장소에서 관리합니다.
 
-## 1. ROS 2 Humble 설치
-
-Ubuntu 22.04에 [ROS 2 Humble 공식 설치 안내](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)에 따라 ROS 2 Desktop을 설치합니다. 설치 후 새 셸에서 ROS 2 환경을 확인합니다.
-
-```bash
-bash --noprofile --norc
-export PYTHONNOUSERSITE=1
-source /opt/ros/humble/setup.bash
-ros2 --help
-```
-
-같은 셸에서 ROS 1과 ROS 2를 함께 source하지 않습니다. 이 README의 명령은 ROS 2 Humble을 기준으로 합니다.
-
-`PYTHONNOUSERSITE=1`은 `~/.local`에 `pip install --user`로 설치한 Python 패키지가 ROS Humble의 system Python 패키지를 덮어쓰지 않게 합니다. 이 저장소는 서로 맞지 않는 사용자 `setuptools`/`packaging` 조합이 있으면 빌드가 실패할 수 있으므로, 아래의 모든 ROS 셸에 이 값을 설정합니다.
-
-기본 도구도 설치합니다.
-
-```bash
-sudo apt update
-sudo apt install -y git build-essential cmake python3-rosdep python3-colcon-common-extensions
-```
-
-## 2. mapping 패키지 clone과 빌드
+## 1. mapping 패키지 clone과 빌드
 
 이 저장소를 clone하고 저장소 루트에서 직접 빌드합니다.
 
@@ -68,7 +56,7 @@ source /opt/ros/humble/setup.bash
 source ~/co_3dto2d_mapping/install/local_setup.bash
 ```
 
-## 3. Live mode 실행
+## 2. Live mode 실행
 
 Livox driver는 이미 실행 중이며 `/livox/lidar`와 `/livox/imu`를 publish한다고 가정합니다. 먼저 입력 토픽과 message type을 확인합니다.
 
@@ -121,7 +109,7 @@ ros2 launch co_3dto2d_mapping live_mapping.launch.py \
 
 위 값은 예시입니다. 실제 장착값을 사용해야 하며, 기본값을 보정값으로 간주하지 않습니다.
 
-## 4. Live mode 확인
+## 3. Live mode 확인
 
 mapping 노드와 topic을 확인합니다.
 
@@ -146,7 +134,7 @@ RViz에서 Fixed Frame을 `odom`으로 설정하고 다음 display를 추가합�
 
 저장된 `rviz/two_robot_mapping.rviz`는 `/toy_record/*`와 `map` frame을 사용하는 두 로봇용 layout입니다. 단일 로봇 live mode에서는 위처럼 Fixed Frame과 topic을 설정합니다.
 
-## 5. Bag mode (선택 사항)
+## 4. Bag mode (선택 사항)
 
 센서 없이 저장된 rosbag2로 확인할 때만 bag mode를 사용합니다. Bag mode에는 센서 드라이버가 필요하지 않고, mapping 패키지와 ROS 2만 source하면 됩니다.
 
