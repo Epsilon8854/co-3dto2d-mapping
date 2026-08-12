@@ -59,21 +59,40 @@ sudo ldconfig
 ldconfig -p | grep liblivox_lidar_sdk_shared
 ```
 
-### 2.2 Driver clone, 네트워크 설정, 빌드
+### 2.2 Livox driver 설치
+
+다음 순서만 따르면 됩니다: **clone → 노트북과 LiDAR의 IP 확인 → 필요한 경우 JSON 수정 → build**.
 
 ```bash
 git clone https://github.com/Livox-SDK/livox_ros_driver2.git \
   ~/livox_ws/src/livox_ros_driver2
+```
 
-# 아래 JSON을 먼저 실제 IP로 수정합니다.
-# host의 cmd/push/point/imu_data_ip는 모두 노트북의 LiDAR 연결 NIC IP여야 합니다.
-# lidar_configs[0].ip는 MID-360 IP여야 합니다.
-nano ~/livox_ws/src/livox_ros_driver2/config/MID360_config.json
+#### 1. Ethernet IP 확인
 
-# NIC와 IP가 맞는지 확인합니다. NIC_NAME을 LiDAR에 연결한 interface 이름으로 바꿉니다.
+MID-360과 연결된 노트북 NIC와 LiDAR는 같은 subnet이어야 합니다. 새 MID-360의 기본 IP를 그대로 쓴다면 보통 LiDAR는 `192.168.1.12`, 노트북 NIC는 `192.168.1.5/24`로 설정합니다. LiDAR IP를 변경했다면 그 IP 대역에 맞춰 노트북 NIC도 설정합니다.
+
+```bash
+# LiDAR에 연결한 NIC와 IPv4 주소를 찾습니다.
 ip -br addr
-ip addr show NIC_NAME
+```
 
+#### 2. 필요한 경우 JSON 수정
+
+기본 IP(`192.168.1.12` LiDAR, `192.168.1.5` host)를 사용한다면 샘플 JSON은 수정할 필요가 없습니다. 다른 IP를 사용한다면 아래 파일을 열어 다음 두 가지만 바꿉니다.
+
+```bash
+nano ~/livox_ws/src/livox_ros_driver2/config/MID360_config.json
+```
+
+- `host_net_info` 안의 네 IP(`cmd_data_ip`, `push_msg_ip`, `point_data_ip`, `imu_data_ip`): 노트북의 LiDAR 연결 NIC IP
+- `lidar_configs[0].ip`: MID-360 IP
+
+포트 번호와 `extrinsic_parameter`는 그대로 둡니다. 이 패키지에서 센서 장착 보정은 뒤에서 설명하는 `sensor_tf_*`로 합니다.
+
+#### 3. Build 및 확인
+
+```bash
 cd ~/livox_ws/src/livox_ros_driver2
 export PYTHONNOUSERSITE=1
 source /opt/ros/humble/setup.bash
@@ -82,13 +101,7 @@ source ~/livox_ws/install/setup.bash
 ros2 pkg prefix livox_ros_driver2
 ```
 
-### MID-360 네트워크와 출력 형식
-
-MID-360과 노트북을 Ethernet으로 연결하고, driver의 `config/MID360_config.json`에서 노트북의 host IP와 LiDAR IP를 실제 네트워크에 맞춰 설정합니다. 샘플의 `192.168.1.5` (host)와 `192.168.1.12` (LiDAR)를 그대로 사용하지 말고, 노트북 NIC와 LiDAR가 같은 IPv4 subnet에 있도록 설정합니다. `host_net_info`의 `cmd_data_ip`, `push_msg_ip`, `point_data_ip`, `imu_data_ip`는 모두 host NIC IP를 사용합니다. `lidar_configs[0].ip`는 장비 IP입니다.
-
-driver launch는 설치된 package 아래의 JSON을 사용하므로 source JSON을 바꾼 뒤에는 반드시 `./build.sh humble`을 다시 실행합니다. `MID360_config.json`의 `extrinsic_parameter`와 이 패키지의 `sensor_tf_*`를 동시에 보정하지 마십시오. 이 README의 mapping pipeline은 `sensor_tf_*`를 TF의 단일 기준으로 사용합니다.
-
-mapping pipeline은 `sensor_msgs/msg/PointCloud2`를 사용하므로 driver launch의 `xfer_format`은 `0`이어야 합니다. `rviz_MID360_launch.py`의 현재 기본값은 `0`이며, `msg_MID360_launch.py`는 customized point cloud 형식(`1`)이므로 이 pipeline과 함께 사용하지 않습니다. `multi_topic=0`일 때 이 README는 `/livox/lidar`, `/livox/imu`를 기대합니다.
+JSON을 수정한 경우에는 설치본에도 반영되도록 반드시 이 build 명령을 다시 실행합니다. mapping pipeline은 `sensor_msgs/msg/PointCloud2`를 사용하므로 `rviz_MID360_launch.py`의 `xfer_format=0`과 `multi_topic=0`을 유지합니다. 이 설정에서는 `/livox/lidar`, `/livox/imu`를 사용합니다. `msg_MID360_launch.py`는 customized point cloud 형식이므로 사용하지 않습니다.
 
 ## 3. mapping 패키지 clone과 빌드
 
