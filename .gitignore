@@ -1,0 +1,24 @@
+# Colcon and ROS runtime artifacts
+/build/
+/install/
+/log/
+/.ros/
+
+# Python test and bytecode caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Local agent state
+/.omo/
+
+# Local rosbag2/MCAP recordings and generated mapping output
+/bags/
+/local_bags/
+/bag_output/
+/recordings/
+/output/
+/results/
+*.db3
+*.mcap
