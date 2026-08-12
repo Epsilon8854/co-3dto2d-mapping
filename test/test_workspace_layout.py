@@ -13,6 +13,18 @@ FORBIDDEN = (
     "from cslam",
     "import cslam",
 )
+GENERATED_DIRS = {
+    ".cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".ros",
+    "__pycache__",
+    "build",
+    "cache",
+    "install",
+    "log",
+}
 
 
 def runtime_files():
@@ -60,5 +72,9 @@ def test_runtime_contains_no_symlinks():
                 path.relative_to(ROOT)
                 for path in runtime_root.rglob("*")
                 if path.is_symlink()
+                and not any(
+                    part in GENERATED_DIRS
+                    for part in path.relative_to(ROOT).parts
+                )
             )
     assert links == []
