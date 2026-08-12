@@ -109,6 +109,23 @@ ros2 launch co_3dto2d_mapping live_mapping.launch.py \
 
 위 값은 예시입니다. 실제 장착값을 사용해야 하며, 기본값을 보정값으로 간주하지 않습니다.
 
+Live 실행에서 topic, 센서 extrinsic, rear-sector filter를 함께 지정하는 예시는 다음과 같습니다.
+
+```bash
+ros2 launch co_3dto2d_mapping live_mapping.launch.py \
+  scan_cloud_topic:=/livox/lidar \
+  imu_raw_topic:=/livox/imu \
+  sensor_tf_x:=0.10 \
+  sensor_tf_y:=0.00 \
+  sensor_tf_z:=0.20 \
+  sensor_tf_yaw:=0.00 \
+  sensor_tf_pitch:=0.00 \
+  sensor_tf_roll:=3.141592653589793 \
+  enable_rear_lidar_filter:=false
+```
+
+`sensor_tf_*` 값은 실제 측정값으로 바꾸고, 실제 topic 이름이 다르면 `scan_cloud_topic`과 `imu_raw_topic`도 함께 바꿉니다.
+
 ## 3. Live mode 확인
 
 mapping 노드와 topic을 확인합니다.
@@ -164,6 +181,18 @@ ros2 launch co_3dto2d_mapping single_bag_mapping.launch.py \
   use_sim_time:=true
 ```
 
+Bag 실행에서는 `bag_path`, `rate`, `storage_id`, `use_sim_time`을 주로 조정합니다. 별도 occupancy 설정 파일을 사용할 때는 다음처럼 `occupancy_config_file`을 추가합니다.
+
+```bash
+ros2 launch co_3dto2d_mapping single_bag_mapping.launch.py \
+  use_bag:=true \
+  bag_path:=/path/to/mid360_run \
+  occupancy_config_file:=/absolute/path/to/occupancy.yaml \
+  rate:=1.0 \
+  storage_id:=sqlite3 \
+  use_sim_time:=true
+```
+
 ### Bag 두 개
 
 ```bash
@@ -177,6 +206,20 @@ ros2 launch co_3dto2d_mapping two_bag_mapping.launch.py \
 
 두 bag launch는 `/r0`과 `/r1` pipeline을 실행하고 초기 XY 정렬을 계산합니다. 기본 설정에서는 `/toy_record/*` 토픽을 publish하므로 저장된 RViz layout을 사용할 수 있습니다.
 
+두 bag 실행에서는 `robot_delay_s`로 두 번째 bag의 시작 지연을 조정하고, `alignment_*`로 초기 XY 정렬 조건을 조정합니다. merged map을 저장하거나 output prefix를 바꾸려면 다음 옵션을 사용합니다.
+
+```bash
+ros2 launch co_3dto2d_mapping two_bag_mapping.launch.py \
+  bag_path_0:=/path/to/mid360_robot_0 \
+  bag_path_1:=/path/to/mid360_robot_1 \
+  robot_delay_s:=20.0 \
+  alignment_voxel_size:=0.05 \
+  alignment_min_fitness:=0.05 \
+  alignment_max_rmse:=0.40 \
+  record_output_prefix:=/toy_record \
+  record_publish_merged_global:=true
+```
+
 두 bag launch는 두 재생을 wall clock으로 지연시키므로 `use_sim_time:=true`를 추가하지 않습니다. bag 하나를 먼저 단독으로 검증한 다음 두 bag 정렬을 실행합니다.
 
 ```bash
@@ -185,9 +228,27 @@ rviz2 -d "$(ros2 pkg prefix --share co_3dto2d_mapping)/rviz/two_robot_mapping.rv
 
 Bag 안의 source topic 이름이 `/livox/lidar` 또는 `/livox/imu`와 다르면 launch remap 인자만으로는 바꿀 수 없습니다. 먼저 bag을 변환하거나 `launch/bag_mid360.launch.py`의 source topic을 수정해야 합니다.
 
-## 주요 Parameter
+## Hyperparameters
 
-mapper와 Python node의 선언값, YAML 기본값, launch override, 단위, validation은 [`docs/parameters.md`](docs/parameters.md)에 정리되어 있습니다.
+아래 값은 occupancy map 생성에 직접 영향을 주는 hyperparameter입니다. 기본값은 `config/occupancy.yaml`에 있으며, 필요하면 파일을 복사해 수정한 뒤 실행 시 `occupancy_config_file:=/absolute/path/to/occupancy.yaml`로 지정합니다.
+
+```yaml
+/**:
+  ros__parameters:
+    grid_resolution: 0.10
+    local_map_size_m: 20.0
+    z_min: 0.4
+    z_max: 1.2
+    invert_z_slice: true
+    center_box_filter_half_extent_m: 0.80
+    range_min_m: 0.80
+    range_max_m: 12.0
+    enable_raycast_free_space: true
+    raycast_min_range_m: 0.80
+    raycast_max_range_m: 12.0
+    raycast_clear_occupied: false
+    occupied_threshold_points: 1
+```
 
 특히 다음 두 범위는 서로 다릅니다.
 
@@ -195,6 +256,8 @@ mapper와 Python node의 선언값, YAML 기본값, launch override, 단위, val
 - `raycast_min_range_m` / `raycast_max_range_m`: sensor origin에서 빈 공간을 추적하는 raycast 범위
 
 occupancy 값은 미관측 `-1`, free `0`, occupied `100`입니다. 미관측 영역을 free로 바꾸지 않습니다.
+
+전체 parameter 목록과 기본값, validation은 [`docs/parameters.md`](docs/parameters.md)를 참고하세요.
 
 ## 주요 토픽과 frame
 
