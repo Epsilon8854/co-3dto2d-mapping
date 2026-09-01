@@ -205,19 +205,33 @@ def launch_setup(context, *args, **kwargs):
 
     enable_rear_lidar_filter = _bool_value(context, "enable_rear_lidar_filter")
     enable_record_republisher = _bool_value(context, "enable_record_republisher")
+    enable_robot0_pipeline = _bool_value(context, "enable_robot0_pipeline")
+    enable_robot1_pipeline = _bool_value(context, "enable_robot1_pipeline")
+    enable_fusion = _bool_value(context, "enable_fusion")
+    if not (enable_robot0_pipeline or enable_robot1_pipeline or enable_fusion):
+        raise RuntimeError(
+            "at least one robot pipeline or the fusion pipeline must be enabled"
+        )
 
-    robot0_republisher, robot0_pipeline, robot0_scan_topic = _robot_actions(
-        context,
-        0,
-        live_launch_path,
-        enable_rear_lidar_filter,
-    )
-    robot1_republisher, robot1_pipeline, robot1_scan_topic = _robot_actions(
-        context,
-        1,
-        live_launch_path,
-        enable_rear_lidar_filter,
-    )
+    robot0_scan_topic = "/r0/mapping/lidar"
+    robot1_scan_topic = "/r1/mapping/lidar"
+    actions = []
+    if enable_robot0_pipeline:
+        robot0_republisher, robot0_pipeline, robot0_scan_topic = _robot_actions(
+            context,
+            0,
+            live_launch_path,
+            enable_rear_lidar_filter,
+        )
+        actions.extend([robot0_pipeline, robot0_republisher])
+    if enable_robot1_pipeline:
+        robot1_republisher, robot1_pipeline, robot1_scan_topic = _robot_actions(
+            context,
+            1,
+            live_launch_path,
+            enable_rear_lidar_filter,
+        )
+        actions.extend([robot1_pipeline, robot1_republisher])
 
     alignment_topic = _value(context, "alignment_topic")
     common_frame_id = _value(context, "common_frame_id")
@@ -272,14 +286,9 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
-    actions = [
-        alignment_node,
-        robot0_pipeline,
-        robot1_pipeline,
-        robot0_republisher,
-        robot1_republisher,
-    ]
-    if enable_record_republisher:
+    if enable_fusion:
+        actions.insert(0, alignment_node)
+    if enable_fusion and enable_record_republisher:
         actions.insert(
             1,
             Node(
@@ -313,6 +322,9 @@ def generate_launch_description():
     package_share = get_package_share_directory("co_3dto2d_mapping")
     return LaunchDescription(
         [
+            DeclareLaunchArgument("enable_robot0_pipeline", default_value="true"),
+            DeclareLaunchArgument("enable_robot1_pipeline", default_value="true"),
+            DeclareLaunchArgument("enable_fusion", default_value="true"),
             DeclareLaunchArgument(
                 "robot0_lidar_topic",
                 default_value="/r0/livox/lidar",

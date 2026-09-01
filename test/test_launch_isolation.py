@@ -71,8 +71,26 @@ def test_two_live_mapping_isolates_robot_topics_and_frames():
         "record_republisher.py",
         '"publish_tf_odom": "false"',
         "reserved_internal_topics",
+        "enable_robot0_pipeline",
+        "enable_robot1_pipeline",
+        "enable_fusion",
     )
     missing = [token for token in required if token not in text]
+    assert missing == []
+
+
+def test_two_live_laptop_runner_starts_only_its_local_mapping_pipeline():
+    text = (PACKAGE / "scripts" / "run_two_mid360_2d_mapping.sh").read_text()
+    required = (
+        'ENABLE_ROBOT0_PIPELINE="true"',
+        'ENABLE_ROBOT1_PIPELINE="true"',
+        '"enable_robot0_pipeline:=${ENABLE_ROBOT0_PIPELINE}"',
+        '"enable_robot1_pipeline:=${ENABLE_ROBOT1_PIPELINE}"',
+        '"enable_fusion:=${RUN_FUSION}"',
+        'RUN_LOCAL_MAPPING="${TWO_LIVE_LOCAL_MAPPING:-true}"',
+        'EXPECTED_UPDATE_RATE="${EXPECTED_UPDATE_RATE:-11.0}"',
+    )
+    missing = [fragment for fragment in required if fragment not in text]
     assert missing == []
 
 

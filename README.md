@@ -123,7 +123,7 @@ ros2 launch co_3dto2d_mapping live_mapping.launch.py
 
 ### 2.2 두 로봇 live mode
 
-`two_live_mapping.launch.py`는 기존 두 bag mode와 같은 `/r0`, `/r1` mapping pipeline, 초기 XY ICP 정렬, `/toy_record` 재게시와 merged occupancy 구성을 실시간 LiDAR·IMU 입력에 연결합니다.
+`two_live_mapping.launch.py`는 기존 두 bag mode와 같은 `/r0`, `/r1` mapping pipeline, 초기 XY ICP 정렬, `/toy_record` 재게시와 merged occupancy 구성을 실시간 LiDAR·IMU 입력에 연결합니다. 분산 실행에서는 각 노트북이 자기 pipeline 하나만 실행하고, 한 노트북만 정렬·병합을 담당합니다.
 
 #### 센서 토픽 준비
 
@@ -163,7 +163,9 @@ ros2 run co_3dto2d_mapping run_livox_robot.sh 2  # 물리 로봇 2
 
 기본 경로와 다른 환경만 `ROS_SETUP`, `LIVOX_SETUP`, `LIVOX_CONFIG` 환경 변수로 덮어씁니다. 위치 인자로는 로봇 번호 외의 값을 받지 않습니다.
 
-두 driver가 올라온 뒤 mapping PC에서 실행:
+두 driver와 mapping을 별도 중앙 PC에서 모두 처리하는 경우에만 다음 명령을
+사용합니다. 아래 중앙집중 방식은 뒤의 노트북별 분산 스크립트와 동시에
+실행하면 mapping publisher가 중복되므로 함께 사용하지 않습니다.
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -176,22 +178,26 @@ ros2 launch co_3dto2d_mapping two_live_mapping.launch.py
 ```
 
 두 로봇이 서로 다른 노트북에 연결된 경우 두 노트북에서 같은 스크립트를
-실행합니다. 각 스크립트는 해당 노트북의 Livox driver만 시작하며, 두 노트북
-중 정확히 한 곳에만 `--mapping-host`를 지정해 공통 mapping과 RViz도 함께
-실행합니다.
+실행합니다. 각 스크립트는 해당 노트북의 Livox driver와 로컬 mapping pipeline
+하나만 시작하므로 `--mapping-host` 없이도 자기 `/rN/odom`을 publish합니다.
+두 노트북 중 정확히 한 곳에만 `--mapping-host`를 지정하면 그 노트북이 양쪽
+odom·occupancy를 구독해 정렬, `/toy_record` 재게시, merged occupancy와 RViz를
+추가로 실행합니다.
 
 ```bash
-# 물리 로봇 1 노트북: r0 driver
+# 물리 로봇 1 노트북: r0 driver + r0 odom/mapping
 cd ~/co_3dto2d_mapping
 bash scripts/run_two_mid360_2d_mapping.sh --robot-number 1
 
-# 물리 로봇 2 노트북: r1 driver + 두 로봇 mapping + RViz
+# 물리 로봇 2 노트북: r1 driver/odom + 두 로봇 fusion + RViz
 cd ~/co_3dto2d_mapping
 bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
 ```
 
 `--mapping-host`는 어느 노트북에 지정해도 되지만 두 곳에서 동시에 지정하면
-같은 mapping node와 출력 토픽이 중복되므로 한 곳에서만 사용합니다.
+정렬·병합 node와 출력 토픽이 중복되므로 한 곳에서만 사용합니다. DDS graph에는
+양쪽 raw topic이 모두 보이지만 각 노트북의 local pipeline은 자기 `/rN/livox/*`
+입력만 구독합니다.
 기존 배포 구조의 `aibot/bash/mid360.env`가 있으면 `ROBOT_ID`를 자동으로
 읽으므로 `--robot-number`를 생략할 수 있으며, 다른 환경 파일은
 `MID360_ENV_FILE=/path/to/mid360.env`로 지정할 수 있습니다.

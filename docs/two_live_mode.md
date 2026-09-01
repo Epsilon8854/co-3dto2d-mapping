@@ -1,6 +1,6 @@
 # 두 로봇 Live Mapping
 
-`two_live_mapping.launch.py`는 기존 `two_bag_mapping.launch.py`의 두 로봇 정렬 및 `/toy_record` 재게시 구성을 실시간 센서 입력에 연결합니다. 현재 구현 범위는 bag 모드와 동일한 **2대(r0, r1)** 입니다.
+`two_live_mapping.launch.py`는 기존 `two_bag_mapping.launch.py`의 두 로봇 정렬 및 `/toy_record` 재게시 구성을 실시간 센서 입력에 연결합니다. 현재 구현 범위는 bag 모드와 동일한 **2대(r0, r1)** 입니다. 분산 실행에서는 각 로봇 노트북이 자기 mapping pipeline만 실행하고 한 노트북이 fusion도 담당합니다.
 
 ## 전제 조건
 
@@ -24,7 +24,35 @@ colcon build --symlink-install --packages-select co_3dto2d_mapping
 source install/local_setup.bash
 ```
 
-## 실행
+## 권장 실행: 로봇별 분산 mapping
+
+두 노트북 모두 같은 저장소와 Livox workspace를 빌드한 뒤 같은 스크립트를
+실행합니다. `--mapping-host`가 없어도 각 노트북에서 자기 odom과 occupancy가
+생성됩니다.
+
+물리 로봇 1 노트북:
+
+```bash
+bash scripts/run_two_mid360_2d_mapping.sh --robot-number 1
+```
+
+물리 로봇 2 노트북을 fusion host로 사용할 때:
+
+```bash
+bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
+```
+
+내부적으로 로봇 1은 `enable_robot0_pipeline:=true`, 로봇 2는
+`enable_robot1_pipeline:=true`만 사용합니다. fusion host는 추가로
+`enable_fusion:=true`를 사용하지만 다른 로봇의 sensor pipeline을 중복 실행하지
+않습니다. 따라서 DDS graph에서 양쪽 raw topic을 발견하더라도 각 odometry는
+자기 로봇 입력만 처리합니다.
+
+## 중앙집중 실행
+
+다음 방식은 별도 mapping PC 한 대에서 두 sensor pipeline을 모두 처리합니다.
+위 분산 스크립트와 동시에 사용하면 publisher가 중복되므로 둘 중 한 방식만
+선택합니다.
 
 기본 토픽을 사용할 때:
 

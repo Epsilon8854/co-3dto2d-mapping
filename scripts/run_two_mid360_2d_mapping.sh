@@ -30,7 +30,8 @@ if [[ -n "${MID360_ENV_SOURCE}" ]]; then
 fi
 
 ROBOT_NUMBER="${ROBOT_NUMBER:-${ROBOT_ID:-}}"
-RUN_MAPPING="${TWO_LIVE_MAPPING_HOST:-false}"
+RUN_LOCAL_MAPPING="${TWO_LIVE_LOCAL_MAPPING:-true}"
+RUN_FUSION="${TWO_LIVE_MAPPING_HOST:-false}"
 ROS_SETUP="${ROS_SETUP:-/opt/ros/humble/setup.bash}"
 LIVOX_WORKSPACE="${LIVOX_WORKSPACE:-}"
 LIVOX_SETUP="${LIVOX_SETUP:-}"
@@ -39,6 +40,7 @@ MAPPING_WORKSPACE="${MAPPING_WORKSPACE:-${REPOSITORY_DIR}}"
 MAPPING_CONFIG="${MAPPING_CONFIG:-}"
 RVIZ_CONFIG="${RVIZ_CONFIG:-}"
 DOMAIN_ID="${ROS_DOMAIN_ID:-72}"
+EXPECTED_UPDATE_RATE="${EXPECTED_UPDATE_RATE:-11.0}"
 ROBOT0_LIDAR_TOPIC="/r0/livox/lidar"
 ROBOT0_IMU_TOPIC="/r0/livox/imu"
 ROBOT1_LIDAR_TOPIC="/r1/livox/lidar"
@@ -53,9 +55,10 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") --robot-number {1|2} [options]
 
-Run this same script on both robot laptops. Each invocation starts only that
-laptop's MID-360 driver. Add --mapping-host on exactly one laptop to also run
-the shared two-robot mapping pipeline and RViz there.
+Run this same script on both robot laptops. Each invocation starts that
+laptop's MID-360 driver and local mapping pipeline, so its /rN/odom is always
+produced. Add --mapping-host on exactly one laptop to also run cross-robot
+alignment, record republishing, merged occupancy, and RViz there.
 
 ROBOT_ID is loaded automatically from a nearby mid360.env when available.
 Set MID360_ENV_FILE=/path/to/mid360.env to select one explicitly.
@@ -66,8 +69,9 @@ Roles:
 
 Options:
   --robot-number NUMBER        Physical robot number: 1 or 2
-  --mapping-host               Also run two-robot mapping and RViz on this laptop
-  --driver-only                Run only this laptop's driver (default)
+  --mapping-host               Also run cross-robot fusion and RViz on this laptop
+  --local-mapping-only         Run driver and this robot's mapping only (default)
+  --driver-only                Run only this laptop's driver; no odom
   --domain-id ID               ROS domain shared by both laptops (default: ${DOMAIN_ID})
   --ros-setup FILE             ROS setup.bash (default: ${ROS_SETUP})
   --livox-workspace DIR        Built Livox workspace (default: auto-detect)
@@ -75,6 +79,7 @@ Options:
   --driver-config FILE         This laptop's MID360_config.json
   --mapping-workspace DIR      Built mapping workspace (default: ${MAPPING_WORKSPACE})
   --mapping-config FILE        Occupancy YAML
+  --expected-update-rate HZ    RTAB-Map input-rate ceiling (default: ${EXPECTED_UPDATE_RATE})
   --rviz-config FILE           Two-robot RViz config
   --robot0-lidar-topic TOPIC   r0 LiDAR input (default: ${ROBOT0_LIDAR_TOPIC})
   --robot0-imu-topic TOPIC     r0 IMU input (default: ${ROBOT0_IMU_TOPIC})
@@ -83,15 +88,15 @@ Options:
   --publish-sensor-static-tf BOOL
                                 Publish robot-specific sensor TF (default: true)
   --launch-arg NAME:=VALUE     Additional two_live_mapping launch argument;
-                                may be repeated and is used only by mapping host
+                                may be repeated
   --no-rviz                    Mapping host runs without RViz
   -h, --help                   Show this help
 
 Examples:
-  # Laptop connected to physical robot 1: driver r0 only
+  # Laptop connected to physical robot 1: r0 driver + r0 odom/mapping
   $(basename "$0") --robot-number 1
 
-  # Laptop connected to physical robot 2: driver r1 + shared mapping + RViz
+  # Laptop connected to physical robot 2: r1 pipeline + shared fusion + RViz
   $(basename "$0") --robot-number 2 --mapping-host
 EOF
 }
@@ -115,11 +120,18 @@ while (($# > 0)); do
       shift 2
       ;;
     --mapping-host)
-      RUN_MAPPING=true
+      RUN_LOCAL_MAPPING=true
+      RUN_FUSION=true
+      shift
+      ;;
+    --local-mapping-only)
+      RUN_LOCAL_MAPPING=true
+      RUN_FUSION=false
       shift
       ;;
     --driver-only)
-      RUN_MAPPING=false
+      RUN_LOCAL_MAPPING=false
+      RUN_FUSION=false
       shift
       ;;
     --domain-id)
@@ -155,6 +167,11 @@ while (($# > 0)); do
     --mapping-config)
       require_value "$1" "${2:-}"
       MAPPING_CONFIG=$2
+      shift 2
+      ;;
+    --expected-update-rate)
+      require_value "$1" "${2:-}"
+      EXPECTED_UPDATE_RATE=$2
       shift 2
       ;;
     --rviz-config)
@@ -209,10 +226,19 @@ done
 
 [[ "${ROBOT_NUMBER}" == "1" || "${ROBOT_NUMBER}" == "2" ]] ||
   die "--robot-number must be 1 or 2 (or set ROBOT_NUMBER/ROBOT_ID)"
-[[ "${RUN_MAPPING}" == "true" || "${RUN_MAPPING}" == "false" ]] ||
+[[ "${RUN_LOCAL_MAPPING}" == "true" || "${RUN_LOCAL_MAPPING}" == "false" ]] ||
+  die "TWO_LIVE_LOCAL_MAPPING must be true or false"
+[[ "${RUN_FUSION}" == "true" || "${RUN_FUSION}" == "false" ]] ||
   die "TWO_LIVE_MAPPING_HOST must be true or false"
+if [[ "${RUN_FUSION}" == true && "${RUN_LOCAL_MAPPING}" != true ]]; then
+  die "mapping host must also run its local mapping pipeline"
+fi
 [[ "${DOMAIN_ID}" =~ ^[0-9]+$ ]] || die "domain ID must be an integer"
 ((DOMAIN_ID >= 0 && DOMAIN_ID <= 232)) || die "domain ID must be between 0 and 232"
+[[ "${EXPECTED_UPDATE_RATE}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+  die "expected update rate must be a positive number"
+[[ "${EXPECTED_UPDATE_RATE}" != "0" && "${EXPECTED_UPDATE_RATE}" != "0.0" ]] ||
+  die "expected update rate must be greater than zero"
 if [[ "${PUBLISH_SENSOR_STATIC_TF}" != "true" && "${PUBLISH_SENSOR_STATIC_TF}" != "false" ]]; then
   die "--publish-sensor-static-tf must be true or false"
 fi
@@ -248,9 +274,9 @@ required_files=(
   "${DRIVER_CONFIG}"
   "${LOCAL_DRIVER_SCRIPT}"
 )
-if [[ "${RUN_MAPPING}" == true ]]; then
+if [[ "${RUN_LOCAL_MAPPING}" == true || "${RUN_FUSION}" == true ]]; then
   required_files+=("${MAPPING_SETUP}" "${MAPPING_CONFIG}")
-  if [[ "${START_RVIZ}" == true ]]; then
+  if [[ "${RUN_FUSION}" == true && "${START_RVIZ}" == true ]]; then
     required_files+=("${RVIZ_CONFIG}")
   fi
 fi
@@ -261,7 +287,7 @@ done
 command -v flock >/dev/null || die "flock is required"
 command -v setsid >/dev/null || die "setsid is required"
 
-if [[ "${RUN_MAPPING}" == true ]]; then
+if [[ "${RUN_LOCAL_MAPPING}" == true || "${RUN_FUSION}" == true ]]; then
   sensor_topics=(
     "${ROBOT0_LIDAR_TOPIC}"
     "${ROBOT0_IMU_TOPIC}"
@@ -353,7 +379,7 @@ else
   ROBOT_NAMESPACE="r1"
 fi
 
-if [[ "${RUN_MAPPING}" == true ]]; then
+if [[ "${RUN_FUSION}" == true ]]; then
   RVIZ_STATUS="${START_RVIZ}"
 else
   RVIZ_STATUS="disabled"
@@ -366,7 +392,9 @@ printf '%s\n' \
   "  environment file:   ${MID360_ENV_SOURCE:-not used}" \
   "  Livox workspace:     ${LIVOX_WORKSPACE}" \
   "  driver config:       ${DRIVER_CONFIG}" \
-  "  mapping host:        ${RUN_MAPPING}" \
+  "  local mapping:       ${RUN_LOCAL_MAPPING}" \
+  "  fusion host:         ${RUN_FUSION}" \
+  "  expected rate:       ${EXPECTED_UPDATE_RATE} Hz" \
   "  RViz:                ${RVIZ_STATUS}"
 
 start_process_group DRIVER_PID env \
@@ -377,20 +405,34 @@ start_process_group DRIVER_PID env \
   "ROS_LOCALHOST_ONLY=${ROS_LOCALHOST_ONLY}" \
   bash "${LOCAL_DRIVER_SCRIPT}" "${ROBOT_NUMBER}"
 
-if [[ "${RUN_MAPPING}" == true ]]; then
+if [[ "${RUN_LOCAL_MAPPING}" == true || "${RUN_FUSION}" == true ]]; then
+  if [[ "${ROBOT_NUMBER}" == "1" && "${RUN_LOCAL_MAPPING}" == true ]]; then
+    ENABLE_ROBOT0_PIPELINE="true"
+  else
+    ENABLE_ROBOT0_PIPELINE="false"
+  fi
+  if [[ "${ROBOT_NUMBER}" == "2" && "${RUN_LOCAL_MAPPING}" == true ]]; then
+    ENABLE_ROBOT1_PIPELINE="true"
+  else
+    ENABLE_ROBOT1_PIPELINE="false"
+  fi
   mapping_command=(
     ros2 launch co_3dto2d_mapping two_live_mapping.launch.py
+    "enable_robot0_pipeline:=${ENABLE_ROBOT0_PIPELINE}"
+    "enable_robot1_pipeline:=${ENABLE_ROBOT1_PIPELINE}"
+    "enable_fusion:=${RUN_FUSION}"
     "robot0_lidar_topic:=${ROBOT0_LIDAR_TOPIC}"
     "robot0_imu_topic:=${ROBOT0_IMU_TOPIC}"
     "robot1_lidar_topic:=${ROBOT1_LIDAR_TOPIC}"
     "robot1_imu_topic:=${ROBOT1_IMU_TOPIC}"
+    "expected_update_rate:=${EXPECTED_UPDATE_RATE}"
     "publish_sensor_static_tf:=${PUBLISH_SENSOR_STATIC_TF}"
     "occupancy_config_file:=${MAPPING_CONFIG}"
   )
   mapping_command+=("${EXTRA_LAUNCH_ARGS[@]}")
   start_process_group MAPPING_PID "${mapping_command[@]}"
 
-  if [[ "${START_RVIZ}" == true ]]; then
+  if [[ "${RUN_FUSION}" == true && "${START_RVIZ}" == true ]]; then
     start_process_group RVIZ_PID rviz2 -d "${RVIZ_CONFIG}"
   fi
 fi
