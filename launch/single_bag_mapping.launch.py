@@ -38,6 +38,7 @@ def launch_setup(context, *args, **kwargs):
             "sensor_tf_pitch": LaunchConfiguration("sensor_tf_pitch").perform(context),
             "sensor_tf_roll": LaunchConfiguration("sensor_tf_roll").perform(context),
             "expected_update_rate": LaunchConfiguration("expected_update_rate").perform(context),
+            "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(context),
             "bag_path": LaunchConfiguration("bag_path").perform(context),
             "rate": LaunchConfiguration("rate").perform(context),
             "storage_id": LaunchConfiguration("storage_id").perform(context),
@@ -124,6 +125,7 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_pitch", default_value="0"),
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+            DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
             DeclareLaunchArgument(
                 "bag_path",
                 default_value="",

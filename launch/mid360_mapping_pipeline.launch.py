@@ -112,7 +112,7 @@ def launch_setup(context, *args, **kwargs):
             "odom_topic": "odom",
             "scan_cloud_topic": scan_cloud_topic,
             "imu_topic": LaunchConfiguration("imu_filtered_topic").perform(context),
-            "wait_imu_to_init": "true",
+            "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(context),
             "expected_update_rate": LaunchConfiguration("expected_update_rate").perform(context),
             "publish_tf": LaunchConfiguration("publish_tf_odom").perform(context),
             "use_sim_time": LaunchConfiguration("use_sim_time").perform(context),
@@ -184,6 +184,7 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_pitch", default_value="0"),
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+            DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
             DeclareLaunchArgument(
                 "bag_path",
                 default_value="",

@@ -48,10 +48,12 @@ install(
 install(
   PROGRAMS
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
+    co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
     co_3dto2d_mapping/initial_xy_icp_alignment.py
     co_3dto2d_mapping/record_republisher.py
     co_3dto2d_mapping/rerun_mapping_node.py
+    scripts/run_livox_robot.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -83,6 +85,12 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_launch_isolation
     test/test_launch_isolation.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
+  ament_add_pytest_test(
+    test_two_live_bag_runner
+    test/test_two_live_bag_runner.py
     PYTHON_EXECUTABLE /usr/bin/python3
   )
 

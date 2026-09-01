@@ -6,6 +6,7 @@ LAUNCH_DIR = PACKAGE / "launch"
 LAUNCH_NAMES = (
     "bag_mid360.launch.py",
     "live_mapping.launch.py",
+    "two_live_mapping.launch.py",
     "rtabmap_mid360_odometry.launch.py",
     "mid360_mapping_pipeline.launch.py",
     "single_bag_mapping.launch.py",
@@ -43,6 +44,7 @@ def test_mapping_nodes_use_standalone_package_name():
     expected = (
         "mid360_mapping_pipeline.launch.py",
         "single_bag_mapping.launch.py",
+        "two_live_mapping.launch.py",
         "two_bag_mapping.launch.py",
         "rerun_mapping.launch.py",
     )
@@ -51,4 +53,59 @@ def test_mapping_nodes_use_standalone_package_name():
         path = LAUNCH_DIR / name
         if path.exists() and 'package="co_3dto2d_mapping"' not in path.read_text():
             missing.append(name)
+    assert missing == []
+
+
+def test_two_live_mapping_isolates_robot_topics_and_frames():
+    text = (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
+    required = (
+        "robot0_lidar_topic",
+        "robot1_lidar_topic",
+        "robot0_imu_topic",
+        "robot1_imu_topic",
+        "r%d/base_link",
+        "r%d/livox_frame",
+        "r%d/odom",
+        "pointcloud_frame_republisher.py",
+        "initial_xy_icp_alignment.py",
+        "record_republisher.py",
+        '"publish_tf_odom": "false"',
+        "reserved_internal_topics",
+    )
+    missing = [token for token in required if token not in text]
+    assert missing == []
+
+
+def test_two_live_pointcloud_republisher_is_installed():
+    script = PACKAGE / "co_3dto2d_mapping" / "pointcloud_frame_republisher.py"
+    cmake = (PACKAGE / "CMakeLists.txt").read_text()
+    assert script.is_file()
+    assert "co_3dto2d_mapping/pointcloud_frame_republisher.py" in cmake
+
+
+def test_two_live_forwards_wait_imu_to_init_to_icp_odometry():
+    expected_fragments = {
+        "mid360_mapping_pipeline.launch.py": (
+            'DeclareLaunchArgument("wait_imu_to_init", default_value="true")',
+            '"wait_imu_to_init": LaunchConfiguration("wait_imu_to_init")',
+        ),
+        "single_bag_mapping.launch.py": (
+            'DeclareLaunchArgument("wait_imu_to_init", default_value="true")',
+            '"wait_imu_to_init": LaunchConfiguration("wait_imu_to_init")',
+        ),
+        "live_mapping.launch.py": (
+            'DeclareLaunchArgument("wait_imu_to_init", default_value="true")',
+            '"wait_imu_to_init": LaunchConfiguration("wait_imu_to_init")',
+        ),
+        "two_live_mapping.launch.py": (
+            'DeclareLaunchArgument("wait_imu_to_init", default_value="true")',
+            '"wait_imu_to_init": _value(context, "wait_imu_to_init")',
+        ),
+    }
+    missing = []
+    for launch_name, fragments in expected_fragments.items():
+        text = (LAUNCH_DIR / launch_name).read_text()
+        missing.extend(
+            f"{launch_name}: {fragment}" for fragment in fragments if fragment not in text
+        )
     assert missing == []
