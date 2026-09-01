@@ -87,12 +87,21 @@ if ${launch_rviz}; then
   child_pids+=("$!")
 fi
 
-setsid "${bag0_command[@]}" >"${log_directory}/bag0.log" 2>&1 &
-bag0_pid=$!
-child_pids+=("${bag0_pid}")
-setsid "${bag1_command[@]}" >"${log_directory}/bag1.log" 2>&1 &
-bag1_pid=$!
-child_pids+=("${bag1_pid}")
+bag_pids=()
+bag_logs=()
+if declare -p bag_command >/dev/null 2>&1; then
+  setsid "${bag_command[@]}" >"${log_directory}/bag.log" 2>&1 &
+  bag_pids+=("$!")
+  bag_logs+=("${log_directory}/bag.log")
+else
+  setsid "${bag0_command[@]}" >"${log_directory}/bag0.log" 2>&1 &
+  bag_pids+=("$!")
+  bag_logs+=("${log_directory}/bag0.log")
+  setsid "${bag1_command[@]}" >"${log_directory}/bag1.log" 2>&1 &
+  bag_pids+=("$!")
+  bag_logs+=("${log_directory}/bag1.log")
+fi
+child_pids+=("${bag_pids[@]}")
 
 printf '%s\n' \
   "Two-live replay is running on ROS_DOMAIN_ID=${ROS_DOMAIN_ID}." \
@@ -100,11 +109,12 @@ printf '%s\n' \
   "Monitor: ROS_DOMAIN_ID=${ROS_DOMAIN_ID} ros2 topic hz /r1/odom" \
   "Press Ctrl-C to stop."
 
+bag_statuses=()
 set +e
-wait "${bag0_pid}"
-bag0_status=$?
-wait "${bag1_pid}"
-bag1_status=$?
+for bag_pid in "${bag_pids[@]}"; do
+  wait "${bag_pid}"
+  bag_statuses+=("$?")
+done
 set -e
 
 if ${loop_playback}; then
@@ -112,10 +122,19 @@ if ${loop_playback}; then
 fi
 
 sleep 2
-if ((bag0_status != 0 || bag1_status != 0)); then
-  printf 'Bag player failure: bag0=%d bag1=%d\n' "${bag0_status}" "${bag1_status}" >&2
-  tail -n 40 "${log_directory}/bag0.log" >&2
-  tail -n 40 "${log_directory}/bag1.log" >&2
+bag_failed=false
+for bag_status in "${bag_statuses[@]}"; do
+  if ((bag_status != 0)); then
+    bag_failed=true
+  fi
+done
+if ${bag_failed}; then
+  printf 'Bag player failure; statuses:' >&2
+  printf ' %s' "${bag_statuses[@]}" >&2
+  printf '\n' >&2
+  for bag_log in "${bag_logs[@]}"; do
+    tail -n 40 "${bag_log}" >&2
+  done
   exit 1
 fi
 
@@ -130,5 +149,5 @@ if ! grep -q 'Periodic map XY ICP alignment accepted' "${log_directory}/mapping.
   exit 1
 fi
 
-printf 'Both bags produced two-robot mapping and accepted XY ICP alignment. Logs: %s\n' \
+printf 'Bag replay produced two-robot mapping and accepted XY ICP alignment. Logs: %s\n' \
   "${log_directory}"
