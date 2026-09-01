@@ -37,32 +37,65 @@ def launch_setup(context, *args, **kwargs):
             "robot_id": robot_id,
             "use_bag": LaunchConfiguration("use_bag").perform(context),
             "use_sim_time": LaunchConfiguration("use_sim_time").perform(context),
-            "publish_tf_odom": LaunchConfiguration("publish_tf_odom").perform(context),
+            "publish_tf_odom": LaunchConfiguration("publish_tf_odom").perform(
+                context
+            ),
             "play_tf_static": LaunchConfiguration("play_tf_static").perform(context),
-            "publish_sensor_static_tf": LaunchConfiguration("publish_sensor_static_tf").perform(context),
-            "sensor_parent_frame": LaunchConfiguration("sensor_parent_frame").perform(context),
-            "sensor_child_frame": LaunchConfiguration("sensor_child_frame").perform(context),
+            "publish_sensor_static_tf": LaunchConfiguration(
+                "publish_sensor_static_tf"
+            ).perform(context),
+            "sensor_parent_frame": LaunchConfiguration("sensor_parent_frame").perform(
+                context
+            ),
+            "sensor_child_frame": LaunchConfiguration("sensor_child_frame").perform(
+                context
+            ),
             "sensor_tf_x": LaunchConfiguration("sensor_tf_x").perform(context),
             "sensor_tf_y": LaunchConfiguration("sensor_tf_y").perform(context),
             "sensor_tf_z": LaunchConfiguration("sensor_tf_z").perform(context),
             "sensor_tf_yaw": LaunchConfiguration("sensor_tf_yaw").perform(context),
-            "sensor_tf_pitch": LaunchConfiguration("sensor_tf_pitch").perform(context),
+            "sensor_tf_pitch": LaunchConfiguration("sensor_tf_pitch").perform(
+                context
+            ),
             "sensor_tf_roll": LaunchConfiguration("sensor_tf_roll").perform(context),
-            "expected_update_rate": LaunchConfiguration("expected_update_rate").perform(context),
-            "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(context),
+            "expected_update_rate": LaunchConfiguration(
+                "expected_update_rate"
+            ).perform(context),
+            "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(
+                context
+            ),
             "mapping_startup_delay_sec": str(mapping_startup_delay_sec),
+            "imu_input_is_filtered": LaunchConfiguration(
+                "imu_input_is_filtered"
+            ).perform(context),
             "bag_path": LaunchConfiguration("bag_path").perform(context),
             "rate": LaunchConfiguration("rate").perform(context),
             "storage_id": LaunchConfiguration("storage_id").perform(context),
-            "enable_rear_lidar_filter": LaunchConfiguration("enable_rear_lidar_filter").perform(context),
-            "rear_filter_angle_deg": LaunchConfiguration("rear_filter_angle_deg").perform(context),
-            "rear_filter_axis": LaunchConfiguration("rear_filter_axis").perform(context),
-            "rear_filter_min_xy_range_m": LaunchConfiguration("rear_filter_min_xy_range_m").perform(context),
-            "rear_filter_log_period": LaunchConfiguration("rear_filter_log_period").perform(context),
-            "bag_lidar_topic": LaunchConfiguration("bag_lidar_topic").perform(context),
-            "scan_cloud_topic": LaunchConfiguration("scan_cloud_topic").perform(context),
+            "enable_rear_lidar_filter": LaunchConfiguration(
+                "enable_rear_lidar_filter"
+            ).perform(context),
+            "rear_filter_angle_deg": LaunchConfiguration(
+                "rear_filter_angle_deg"
+            ).perform(context),
+            "rear_filter_axis": LaunchConfiguration("rear_filter_axis").perform(
+                context
+            ),
+            "rear_filter_min_xy_range_m": LaunchConfiguration(
+                "rear_filter_min_xy_range_m"
+            ).perform(context),
+            "rear_filter_log_period": LaunchConfiguration(
+                "rear_filter_log_period"
+            ).perform(context),
+            "bag_lidar_topic": LaunchConfiguration("bag_lidar_topic").perform(
+                context
+            ),
+            "scan_cloud_topic": LaunchConfiguration("scan_cloud_topic").perform(
+                context
+            ),
             "imu_raw_topic": LaunchConfiguration("imu_raw_topic").perform(context),
-            "imu_filtered_topic": LaunchConfiguration("imu_filtered_topic").perform(context),
+            "imu_filtered_topic": LaunchConfiguration(
+                "imu_filtered_topic"
+            ).perform(context),
         }.items(),
     )
 
@@ -79,19 +112,31 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             LaunchConfiguration("occupancy_config_file").perform(context),
             {
-                "scan_cloud_topic": LaunchConfiguration("scan_cloud_topic").perform(context),
+                "scan_cloud_topic": LaunchConfiguration("scan_cloud_topic").perform(
+                    context
+                ),
                 "odom_topic": "odom",
-                "local_frame_id": LaunchConfiguration("local_frame_id").perform(context),
-                "global_frame_id": LaunchConfiguration("global_frame_id").perform(context),
+                "local_frame_id": LaunchConfiguration("local_frame_id").perform(
+                    context
+                ),
+                "global_frame_id": LaunchConfiguration("global_frame_id").perform(
+                    context
+                ),
                 "use_odom_header_frame": (
-                    LaunchConfiguration("use_odom_header_frame").perform(context).lower()
+                    LaunchConfiguration("use_odom_header_frame")
+                    .perform(context)
+                    .lower()
                     == "true"
                 ),
                 "alignment_required": (
-                    LaunchConfiguration("alignment_required").perform(context).lower()
+                    LaunchConfiguration("alignment_required")
+                    .perform(context)
+                    .lower()
                     == "true"
                 ),
-                "alignment_topic": LaunchConfiguration("alignment_topic").perform(context),
+                "alignment_topic": LaunchConfiguration("alignment_topic").perform(
+                    context
+                ),
                 "transform_cloud_to_local_frame": (
                     LaunchConfiguration("transform_cloud_to_local_frame")
                     .perform(context)
@@ -99,7 +144,9 @@ def launch_setup(context, *args, **kwargs):
                     == "true"
                 ),
                 "center_box_filter_half_extent_m": float(
-                    LaunchConfiguration("center_box_filter_half_extent_m").perform(context)
+                    LaunchConfiguration("center_box_filter_half_extent_m").perform(
+                        context
+                    )
                 ),
                 "slice_z_in_cloud_frame": (
                     LaunchConfiguration("slice_z_in_cloud_frame")
@@ -144,10 +191,8 @@ def generate_launch_description():
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
             DeclareLaunchArgument("mapping_startup_delay_sec", default_value="0.0"),
-            DeclareLaunchArgument(
-                "bag_path",
-                default_value="",
-            ),
+            DeclareLaunchArgument("imu_input_is_filtered", default_value="false"),
+            DeclareLaunchArgument("bag_path", default_value=""),
             DeclareLaunchArgument("rate", default_value="1.0"),
             DeclareLaunchArgument("storage_id", default_value="sqlite3"),
             DeclareLaunchArgument("enable_rear_lidar_filter", default_value="true"),
@@ -162,9 +207,15 @@ def generate_launch_description():
                 "imu_filtered_topic", default_value="/livox/imu_filtered"
             ),
             DeclareLaunchArgument("alignment_required", default_value="false"),
-            DeclareLaunchArgument("alignment_topic", default_value="/toy/initial_xy_alignment"),
-            DeclareLaunchArgument("transform_cloud_to_local_frame", default_value="true"),
-            DeclareLaunchArgument("center_box_filter_half_extent_m", default_value="0.80"),
+            DeclareLaunchArgument(
+                "alignment_topic", default_value="/toy/initial_xy_alignment"
+            ),
+            DeclareLaunchArgument(
+                "transform_cloud_to_local_frame", default_value="true"
+            ),
+            DeclareLaunchArgument(
+                "center_box_filter_half_extent_m", default_value="0.80"
+            ),
             DeclareLaunchArgument("slice_z_in_cloud_frame", default_value="true"),
             DeclareLaunchArgument(
                 "occupancy_config_file",

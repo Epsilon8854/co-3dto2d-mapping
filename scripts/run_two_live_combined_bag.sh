@@ -12,6 +12,8 @@ playback_rate="0.5"
 domain_id="${ROS_DOMAIN_ID:-72}"
 startup_delay_seconds="5"
 sensor_warmup_seconds="10"
+alignment_warmup_seconds="3"
+alignment_period_seconds="2"
 imu_source="auto"
 dry_run=false
 check_environment=false
@@ -34,6 +36,8 @@ usage() {
     "  --domain-id ID         Isolated ROS domain (default: ROS_DOMAIN_ID or 72)" \
     "  --startup-delay SEC    Launch head start before bag playback (default: 5)" \
     "  --sensor-warmup SEC    Recorded-time warm-up before odometry starts (default: 10)" \
+    "  --alignment-warmup SEC Recorded-time map accumulation before ICP (default: 3)" \
+    "  --alignment-period SEC Recorded-time interval between ICP attempts (default: 2)" \
     "  --imu-source MODE      auto, raw, or filtered (default: auto)" \
     "  --launch-arg NAME:=VALUE" \
     "                         Additional two_live_mapping launch argument; repeatable" \
@@ -79,6 +83,16 @@ while (($# > 0)); do
     --sensor-warmup)
       (($# >= 2)) || die "--sensor-warmup requires a value"
       sensor_warmup_seconds="$2"
+      shift 2
+      ;;
+    --alignment-warmup)
+      (($# >= 2)) || die "--alignment-warmup requires a value"
+      alignment_warmup_seconds="$2"
+      shift 2
+      ;;
+    --alignment-period)
+      (($# >= 2)) || die "--alignment-period requires a value"
+      alignment_period_seconds="$2"
       shift 2
       ;;
     --imu-source)
@@ -127,6 +141,12 @@ done
   die "startup delay must be a non-negative number"
 [[ "${sensor_warmup_seconds}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
   die "sensor warm-up must be a non-negative number"
+[[ "${alignment_warmup_seconds}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+  die "alignment warm-up must be a non-negative number"
+[[ "${alignment_period_seconds}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+  die "alignment period must be a positive number"
+[[ "${alignment_period_seconds}" != "0" && "${alignment_period_seconds}" != "0.0" ]] ||
+  die "alignment period must be greater than zero"
 case "${imu_source}" in
   auto|raw|filtered) ;;
   *) die "--imu-source must be auto, raw, or filtered" ;;
@@ -220,6 +240,11 @@ r1_lidar_count="$(require_sensor_topic "${R1_LIDAR_SOURCE}" "sensor_msgs/msg/Poi
 read -r r0_imu_source r0_imu_count r0_imu_stage <<<"$(select_imu_topic 0)"
 read -r r1_imu_source r1_imu_count r1_imu_stage <<<"$(select_imu_topic 1)"
 
+r0_imu_input_is_filtered=false
+r1_imu_input_is_filtered=false
+[[ "${r0_imu_stage}" == "filtered" ]] && r0_imu_input_is_filtered=true
+[[ "${r1_imu_stage}" == "filtered" ]] && r1_imu_input_is_filtered=true
+
 storage="$(storage_identifier)"
 [[ -n "${storage}" ]] || storage="sqlite3"
 
@@ -235,15 +260,28 @@ mapping_startup_delay_seconds="$(
     -v rate="${playback_rate}" \
     'BEGIN { printf "%.3f", launch_lead + warmup / rate }'
 )"
+alignment_startup_delay_seconds="$(
+  awk -v warmup="${alignment_warmup_seconds}" -v rate="${playback_rate}" \
+    'BEGIN { printf "%.3f", warmup / rate }'
+)"
+alignment_recompute_period_seconds="$(
+  awk -v period="${alignment_period_seconds}" -v rate="${playback_rate}" \
+    'BEGIN { printf "%.3f", period / rate }'
+)"
 
 mapping_command=(
-  ros2 launch co_3dto2d_mapping two_live_mapping.launch.py
+  ros2 launch co_3dto2d_mapping two_live_combined_bag_mapping.launch.py
   "robot0_lidar_topic:=${R0_LIDAR_TOPIC}"
   "robot0_imu_topic:=${R0_IMU_TOPIC}"
   "robot1_lidar_topic:=${R1_LIDAR_TOPIC}"
   "robot1_imu_topic:=${R1_IMU_TOPIC}"
+  "robot0_imu_input_is_filtered:=${r0_imu_input_is_filtered}"
+  "robot1_imu_input_is_filtered:=${r1_imu_input_is_filtered}"
   "wait_imu_to_init:=false"
+  "expected_update_rate:=0.0"
   "mapping_startup_delay_sec:=${mapping_startup_delay_seconds}"
+  "alignment_startup_delay_sec:=${alignment_startup_delay_seconds}"
+  "alignment_recompute_period_sec:=${alignment_recompute_period_seconds}"
 )
 mapping_command+=("${extra_launch_args[@]}")
 
@@ -279,8 +317,14 @@ printf '%s\n' \
   "INPUT_R0_IMU=${r0_imu_source} (${r0_imu_count} messages, ${r0_imu_stage})" \
   "INPUT_R1_LIDAR=${R1_LIDAR_SOURCE} (${r1_lidar_count} messages)" \
   "INPUT_R1_IMU=${r1_imu_source} (${r1_imu_count} messages, ${r1_imu_stage})" \
+  "R0_FILTERED_IMU_BYPASS=${r0_imu_input_is_filtered}" \
+  "R1_FILTERED_IMU_BYPASS=${r1_imu_input_is_filtered}" \
   "RECORDED_SENSOR_WARMUP=${sensor_warmup_seconds}s" \
-  "MAPPING_STARTUP_DELAY_WALL=${mapping_startup_delay_seconds}s"
+  "MAPPING_STARTUP_DELAY_WALL=${mapping_startup_delay_seconds}s" \
+  "RECORDED_ALIGNMENT_WARMUP=${alignment_warmup_seconds}s" \
+  "ALIGNMENT_STARTUP_DELAY_WALL=${alignment_startup_delay_seconds}s" \
+  "RECORDED_ALIGNMENT_PERIOD=${alignment_period_seconds}s" \
+  "ALIGNMENT_RECOMPUTE_PERIOD_WALL=${alignment_recompute_period_seconds}s"
 print_command MAPPING "${mapping_command[@]}"
 print_command BAG_PLAYER "${bag_command[@]}"
 
