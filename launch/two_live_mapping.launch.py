@@ -106,6 +106,9 @@ def _robot_actions(
             "sensor_tf_roll": _value(context, "sensor_tf_roll_%d" % robot_id),
             "expected_update_rate": _value(context, "expected_update_rate"),
             "wait_imu_to_init": _value(context, "wait_imu_to_init"),
+            "mapping_startup_delay_sec": _value(
+                context, "mapping_startup_delay_sec"
+            ),
             "enable_rear_lidar_filter": _value(
                 context, "enable_rear_lidar_filter"
             ),
@@ -281,6 +284,25 @@ def launch_setup(context, *args, **kwargs):
                 "occupied_threshold": int(
                     _value(context, "alignment_occupied_threshold")
                 ),
+                "startup_delay_sec": float(
+                    _value(context, "alignment_startup_delay_sec")
+                ),
+                "retry_on_failure": True,
+                "lock_after_first_alignment": _bool_value(
+                    context, "alignment_lock_after_first"
+                ),
+                "required_consistent_results": int(
+                    _value(context, "alignment_required_consistent_results")
+                ),
+                "max_consistency_translation_m": float(
+                    _value(context, "alignment_max_consistency_translation_m")
+                ),
+                "max_consistency_rotation_rad": float(
+                    _value(context, "alignment_max_consistency_rotation_rad")
+                ),
+                "initialize_from_centroids": _bool_value(
+                    context, "alignment_initialize_from_centroids"
+                ),
                 "use_sim_time": False,
             }
         ],
@@ -347,6 +369,14 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
+            DeclareLaunchArgument(
+                "mapping_startup_delay_sec",
+                default_value="10.0",
+                description=(
+                    "Warm-up time before starting ICP odometry and occupancy mapping. "
+                    "The LiDAR driver and IMU filter run during this delay."
+                ),
+            ),
             DeclareLaunchArgument("publish_sensor_static_tf", default_value="true"),
             DeclareLaunchArgument("enable_rear_lidar_filter", default_value="false"),
             DeclareLaunchArgument("rear_filter_angle_deg", default_value="120.0"),
@@ -376,6 +406,14 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "alignment_topic", default_value="/toy/initial_xy_alignment"
             ),
+            DeclareLaunchArgument(
+                "alignment_startup_delay_sec",
+                default_value="3.0",
+                description=(
+                    "Extra map accumulation time after both occupancy maps first appear "
+                    "before cross-robot ICP starts."
+                ),
+            ),
             DeclareLaunchArgument("alignment_z_min", default_value="0.4"),
             DeclareLaunchArgument("alignment_z_max", default_value="0.8"),
             DeclareLaunchArgument(
@@ -398,10 +436,26 @@ def generate_launch_description():
             DeclareLaunchArgument("alignment_max_rmse", default_value="0.40"),
             DeclareLaunchArgument("alignment_max_iterations", default_value="80"),
             DeclareLaunchArgument(
-                "alignment_recompute_period_sec", default_value="5.0"
+                "alignment_recompute_period_sec", default_value="2.0"
             ),
             DeclareLaunchArgument(
                 "alignment_occupied_threshold", default_value="50"
+            ),
+            DeclareLaunchArgument(
+                "alignment_lock_after_first", default_value="true"
+            ),
+            DeclareLaunchArgument(
+                "alignment_required_consistent_results", default_value="2"
+            ),
+            DeclareLaunchArgument(
+                "alignment_max_consistency_translation_m", default_value="0.25"
+            ),
+            DeclareLaunchArgument(
+                "alignment_max_consistency_rotation_rad",
+                default_value="0.08726646259971647",
+            ),
+            DeclareLaunchArgument(
+                "alignment_initialize_from_centroids", default_value="true"
             ),
             DeclareLaunchArgument("enable_record_republisher", default_value="true"),
             DeclareLaunchArgument("record_publish_period_ms", default_value="200"),

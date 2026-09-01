@@ -3,16 +3,27 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    TimerAction,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def launch_setup(context, *args, **kwargs):
+    del args, kwargs
     package_share = get_package_share_directory("co_3dto2d_mapping")
     robot_id = LaunchConfiguration("robot_id").perform(context)
     namespace = "/r" + robot_id
+    mapping_startup_delay_sec = float(
+        LaunchConfiguration("mapping_startup_delay_sec").perform(context)
+    )
+    if mapping_startup_delay_sec < 0.0:
+        raise RuntimeError("mapping_startup_delay_sec must be non-negative")
 
     base_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -39,6 +50,7 @@ def launch_setup(context, *args, **kwargs):
             "sensor_tf_roll": LaunchConfiguration("sensor_tf_roll").perform(context),
             "expected_update_rate": LaunchConfiguration("expected_update_rate").perform(context),
             "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(context),
+            "mapping_startup_delay_sec": str(mapping_startup_delay_sec),
             "bag_path": LaunchConfiguration("bag_path").perform(context),
             "rate": LaunchConfiguration("rate").perform(context),
             "storage_id": LaunchConfiguration("storage_id").perform(context),
@@ -99,8 +111,13 @@ def launch_setup(context, *args, **kwargs):
             },
         ],
     )
+    mapper_action = (
+        TimerAction(period=mapping_startup_delay_sec, actions=[mapper_node])
+        if mapping_startup_delay_sec > 0.0
+        else mapper_node
+    )
 
-    return [base_launch, mapper_node]
+    return [base_launch, mapper_action]
 
 
 def generate_launch_description():
@@ -126,6 +143,7 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
+            DeclareLaunchArgument("mapping_startup_delay_sec", default_value="0.0"),
             DeclareLaunchArgument(
                 "bag_path",
                 default_value="",

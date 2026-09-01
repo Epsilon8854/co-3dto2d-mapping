@@ -48,6 +48,29 @@ bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
 않습니다. 따라서 DDS graph에서 양쪽 raw topic을 발견하더라도 각 odometry는
 자기 로봇 입력만 처리합니다.
 
+### 시작 순서와 기본 warm-up
+
+두 스크립트를 실행할 때 로봇은 제자리에 고정합니다. 기본 설정에서는 Livox driver와
+Madgwick IMU filter는 즉시 시작하지만, ICP odometry와 occupancy mapper는
+`mapping_startup_delay_sec:=10.0` 동안 시작하지 않습니다. 이 구간은 센서와 IMU
+자세 추정이 안정되기 전에 생기는 작은 변화가 odometry 원점과 초기 지도에 누적되는
+것을 막기 위한 warm-up입니다.
+
+두 로봇에서 스크립트를 실행한 뒤 최소 10초 동안 움직이지 말고, 각 노트북 로그에
+`mid360_icp_odometry`와 `occupancy_mapper`가 시작된 것이 보인 다음 출발하는 방식을
+권장합니다. 더 긴 안정화 시간이 필요한 장비에서는 다음처럼 값을 늘립니다.
+
+```bash
+bash scripts/run_two_mid360_2d_mapping.sh --robot-number 1 \
+  --launch-arg mapping_startup_delay_sec:=15.0
+
+bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host \
+  --launch-arg mapping_startup_delay_sec:=15.0
+```
+
+두 노트북에 같은 값을 적용합니다. `0.0`으로 설정하면 이전처럼 mapping과 odometry가
+즉시 시작됩니다.
+
 ## 중앙집중 실행
 
 다음 방식은 별도 mapping PC 한 대에서 두 sensor pipeline을 모두 처리합니다.
@@ -97,6 +120,36 @@ IMU는 기존 Madgwick filter와 IMU frame republisher를 사용합니다.
 
 TF 트리는 `map -> r0/odom -> r0/base_link -> r0/livox_frame`과 `map -> r1/odom -> r1/base_link -> r1/livox_frame`으로 구성됩니다. `r1/odom`의 `map` 정렬은 ICP가 유효한 결과를 얻은 뒤 publish됩니다.
 
+## ICP 정렬 시점과 재시도
+
+두 global occupancy가 처음 보인 직후에는 지도 면적이 작고 startup noise의 영향이
+클 수 있습니다. live 2대 모드에서는 두 지도가 모두 들어온 시점부터 추가로
+`alignment_startup_delay_sec:=3.0`을 기다린 뒤 ICP를 시작합니다.
+
+유효한 결과 한 번을 즉시 쓰지 않고 기본적으로 2회의 후보가 다음 범위 안에서
+일치해야 정렬을 publish합니다.
+
+- 평행 이동 차이: `alignment_max_consistency_translation_m:=0.25`
+- 회전 차이: `alignment_max_consistency_rotation_rad:=0.0872664626` (5도)
+
+대응점 부족이나 fitness/RMSE 기준 미달로 실패하면 다음 주기에 다시 시도합니다.
+한 번 성공한 초기 정렬은 `alignment_lock_after_first:=true`에 의해 고정되어, 이후
+각 로봇 odometry의 작은 흔들림이 공통 frame 정렬을 계속 움직이지 않게 합니다.
+또한 독립 odom 원점 사이의 평행 이동이 큰 경우를 위해 identity 초기값과 두 지도
+centroid를 맞춘 초기값을 모두 시험하고 더 나은 ICP 결과를 선택합니다.
+
+환경에 따라 더 보수적으로 설정할 수 있습니다.
+
+```bash
+bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host \
+  --launch-arg alignment_startup_delay_sec:=5.0 \
+  --launch-arg alignment_required_consistent_results:=3 \
+  --launch-arg alignment_max_consistency_translation_m:=0.15
+```
+
+정렬을 계속 갱신해야 하는 실험에서는
+`--launch-arg alignment_lock_after_first:=false`를 사용합니다.
+
 ## RViz 및 점검
 
 ```bash
@@ -143,7 +196,7 @@ ros2 launch co_3dto2d_mapping two_live_mapping.launch.py \
   alignment_voxel_size:=0.05 \
   alignment_min_fitness:=0.05 \
   alignment_max_rmse:=0.40 \
-  alignment_recompute_period_sec:=5.0
+  alignment_recompute_period_sec:=2.0
 ```
 
 ICP 정렬을 위해 두 로봇의 global occupancy에 충분한 공통 구조가 있어야 합니다. 반복적이거나 대칭적인 환경에서는 잘못된 지역 최적점에 수렴할 수 있으므로 `/toy/initial_xy_alignment`와 병합 지도를 반드시 검증합니다.

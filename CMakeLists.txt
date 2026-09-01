@@ -77,6 +77,19 @@ if(BUILD_TESTING)
   target_include_directories(test_occupancy_point_filter PRIVATE include)
 
   ament_add_pytest_test(
+    test_alignment_utils
+    test/test_alignment_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_two_live_startup_gating
+    test/test_two_live_startup_gating.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
+  ament_add_pytest_test(
     test_record_republisher
     test/test_record_republisher.py
     PYTHON_EXECUTABLE /usr/bin/python3

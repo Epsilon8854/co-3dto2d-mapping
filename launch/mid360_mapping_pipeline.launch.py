@@ -10,6 +10,7 @@ from launch_ros.actions import Node
 
 
 def launch_setup(context, *args, **kwargs):
+    del args, kwargs
     package_share = get_package_share_directory("co_3dto2d_mapping")
     robot_id = LaunchConfiguration("robot_id").perform(context)
     namespace = "/r" + robot_id
@@ -114,6 +115,7 @@ def launch_setup(context, *args, **kwargs):
             "imu_topic": LaunchConfiguration("imu_filtered_topic").perform(context),
             "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(context),
             "expected_update_rate": LaunchConfiguration("expected_update_rate").perform(context),
+            "startup_delay_sec": LaunchConfiguration("mapping_startup_delay_sec").perform(context),
             "publish_tf": LaunchConfiguration("publish_tf_odom").perform(context),
             "use_sim_time": LaunchConfiguration("use_sim_time").perform(context),
         }.items(),
@@ -185,6 +187,7 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
+            DeclareLaunchArgument("mapping_startup_delay_sec", default_value="0.0"),
             DeclareLaunchArgument(
                 "bag_path",
                 default_value="",
