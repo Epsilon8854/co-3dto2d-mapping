@@ -195,6 +195,9 @@ bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
 기존 배포 구조의 `aibot/bash/mid360.env`가 있으면 `ROBOT_ID`를 자동으로
 읽으므로 `--robot-number`를 생략할 수 있으며, 다른 환경 파일은
 `MID360_ENV_FILE=/path/to/mid360.env`로 지정할 수 있습니다.
+Livox workspace는 저장소 옆의 `ws_livox`, `~/aibot/livox_mid360/ws_livox`,
+`~/ws_livox`, `~/livox_ws` 순서로 탐색하며, 다른 위치라면
+`--livox-workspace /path/to/ws_livox`를 지정합니다.
 
 ```bash
 export ROS_DOMAIN_ID=72

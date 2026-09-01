@@ -32,7 +32,7 @@ fi
 ROBOT_NUMBER="${ROBOT_NUMBER:-${ROBOT_ID:-}}"
 RUN_MAPPING="${TWO_LIVE_MAPPING_HOST:-false}"
 ROS_SETUP="${ROS_SETUP:-/opt/ros/humble/setup.bash}"
-LIVOX_WORKSPACE="${LIVOX_WORKSPACE:-${REPOSITORY_DIR}/../ws_livox}"
+LIVOX_WORKSPACE="${LIVOX_WORKSPACE:-}"
 LIVOX_SETUP="${LIVOX_SETUP:-}"
 DRIVER_CONFIG="${LIVOX_CONFIG:-}"
 MAPPING_WORKSPACE="${MAPPING_WORKSPACE:-${REPOSITORY_DIR}}"
@@ -70,7 +70,7 @@ Options:
   --driver-only                Run only this laptop's driver (default)
   --domain-id ID               ROS domain shared by both laptops (default: ${DOMAIN_ID})
   --ros-setup FILE             ROS setup.bash (default: ${ROS_SETUP})
-  --livox-workspace DIR        Built Livox workspace (default: ${LIVOX_WORKSPACE})
+  --livox-workspace DIR        Built Livox workspace (default: auto-detect)
   --livox-setup FILE           Livox local_setup.bash
   --driver-config FILE         This laptop's MID360_config.json
   --mapping-workspace DIR      Built mapping workspace (default: ${MAPPING_WORKSPACE})
@@ -216,6 +216,24 @@ done
 if [[ "${PUBLISH_SENSOR_STATIC_TF}" != "true" && "${PUBLISH_SENSOR_STATIC_TF}" != "false" ]]; then
   die "--publish-sensor-static-tf must be true or false"
 fi
+
+if [[ -z "${LIVOX_WORKSPACE}" ]]; then
+  livox_workspace_candidates=(
+    "${REPOSITORY_DIR}/../ws_livox"
+    "${HOME}/aibot/livox_mid360/ws_livox"
+    "${HOME}/ws_livox"
+    "${HOME}/livox_ws"
+  )
+  for workspace_candidate in "${livox_workspace_candidates[@]}"; do
+    if [[ -r "${workspace_candidate}/install/local_setup.bash" &&
+          -r "${workspace_candidate}/src/livox_ros_driver2/config/MID360_config.json" ]]; then
+      LIVOX_WORKSPACE="${workspace_candidate}"
+      break
+    fi
+  done
+fi
+[[ -n "${LIVOX_WORKSPACE}" ]] ||
+  die "Livox workspace was not found; pass --livox-workspace /path/to/ws_livox"
 
 LIVOX_SETUP="${LIVOX_SETUP:-${LIVOX_WORKSPACE}/install/local_setup.bash}"
 DRIVER_CONFIG="${DRIVER_CONFIG:-${LIVOX_WORKSPACE}/src/livox_ros_driver2/config/MID360_config.json}"
