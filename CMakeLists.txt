@@ -54,6 +54,7 @@ install(
     co_3dto2d_mapping/record_republisher.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
+    scripts/run_two_mid360_2d_mapping.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 

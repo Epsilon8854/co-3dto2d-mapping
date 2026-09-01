@@ -175,7 +175,26 @@ export ROS_LOCALHOST_ONLY=0
 ros2 launch co_3dto2d_mapping two_live_mapping.launch.py
 ```
 
-mapping PC가 물리 로봇 1 또는 2와 같은 장비라면 해당 driver와 mapping launch를 서로 다른 터미널에서 실행합니다. RViz도 mapping PC의 새 터미널에서 같은 `ROS_DOMAIN_ID`로 실행합니다.
+두 로봇이 서로 다른 노트북에 연결된 경우 두 노트북에서 같은 스크립트를
+실행합니다. 각 스크립트는 해당 노트북의 Livox driver만 시작하며, 두 노트북
+중 정확히 한 곳에만 `--mapping-host`를 지정해 공통 mapping과 RViz도 함께
+실행합니다.
+
+```bash
+# 물리 로봇 1 노트북: r0 driver
+cd ~/co_3dto2d_mapping
+bash scripts/run_two_mid360_2d_mapping.sh --robot-number 1
+
+# 물리 로봇 2 노트북: r1 driver + 두 로봇 mapping + RViz
+cd ~/co_3dto2d_mapping
+bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
+```
+
+`--mapping-host`는 어느 노트북에 지정해도 되지만 두 곳에서 동시에 지정하면
+같은 mapping node와 출력 토픽이 중복되므로 한 곳에서만 사용합니다.
+기존 배포 구조의 `aibot/bash/mid360.env`가 있으면 `ROBOT_ID`를 자동으로
+읽으므로 `--robot-number`를 생략할 수 있으며, 다른 환경 파일은
+`MID360_ENV_FILE=/path/to/mid360.env`로 지정할 수 있습니다.
 
 ```bash
 export ROS_DOMAIN_ID=72
