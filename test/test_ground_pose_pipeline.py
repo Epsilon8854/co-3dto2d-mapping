@@ -27,7 +27,7 @@ def test_default_config_separates_planar_and_final_odometry_topics():
     assert 'ground_plane_z_mode: "height_above_plane"' in text
 
 
-def test_record_republisher_prefers_final_ground_fused_pose():
+def test_record_republisher_prefers_fresh_ground_fused_pose_with_raw_fallback():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     wrapper = (
         PACKAGE / "co_3dto2d_mapping" / "record_republisher_ground_fused.py"
@@ -36,4 +36,6 @@ def test_record_republisher_prefers_final_ground_fused_pose():
     assert "RENAME record_republisher.py" in cmake
     assert "/r{robot_id}/toy/corrected_odometry" in wrapper
     assert "TemporalToyRecordRepublisher" in wrapper
-    assert "raw /rN/odom remains the startup fallback" in wrapper
+    assert 'declare_parameter("ground_fused_odometry_timeout_sec", 1.0)' in wrapper
+    assert "falling back to /r%d/odom" in wrapper
+    assert "self._refresh_odometry_selection()" in wrapper
