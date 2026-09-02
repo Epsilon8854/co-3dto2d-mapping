@@ -57,11 +57,12 @@ install(
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Keep the public executable expected by all existing launch files, but run a
-# constrained wrapper that rejects physically impossible opposite-heading ICP
-# solutions. The original module remains available through the Python package.
+# Keep the public executable expected by all existing launch files.  In
+# cloud_initial mode it registers cropped XYZ clouds and projects the accepted
+# result to the planar x/y/yaw transform consumed by merged occupancy maps;
+# global_occupancy mode remains the legacy 2D fallback used by bag replay.
 install(
-  PROGRAMS co_3dto2d_mapping/constrained_initial_xy_icp_alignment.py
+  PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME initial_xy_icp_alignment.py
 )
@@ -110,6 +111,13 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_alignment_utils
     test/test_alignment_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_pointcloud_registration
+    test/test_pointcloud_registration.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )
