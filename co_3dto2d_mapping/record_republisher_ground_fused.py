@@ -29,7 +29,10 @@ class GroundFusedTemporalRecordRepublisher(TemporalToyRecordRepublisher):
             "ground_fused_odometry_topic_format",
             "/r{robot_id}/toy/corrected_odometry",
         )
-        self.declare_parameter("ground_fused_odometry_timeout_sec", 1.0)
+        # This timeout uses receipt wall/ROS time. Three seconds is long enough
+        # for deliberately slowed combined-bag replay while still preventing a
+        # dead fusion node from freezing TF indefinitely.
+        self.declare_parameter("ground_fused_odometry_timeout_sec", 3.0)
         self.prefer_ground_fused_odometry = bool(
             self.get_parameter("prefer_ground_fused_odometry").value
         )
