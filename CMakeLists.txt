@@ -76,6 +76,20 @@ if(BUILD_TESTING)
   target_compile_features(test_occupancy_point_filter PUBLIC cxx_std_17)
   target_include_directories(test_occupancy_point_filter PRIVATE include)
 
+  ament_add_gtest(
+    test_temporal_occupancy
+    test/test_temporal_occupancy.cpp
+  )
+  target_compile_features(test_temporal_occupancy PUBLIC cxx_std_17)
+  target_include_directories(test_temporal_occupancy PRIVATE include)
+
+  ament_add_gtest(
+    test_planar_icp
+    test/test_planar_icp.cpp
+  )
+  target_compile_features(test_planar_icp PUBLIC cxx_std_17)
+  target_include_directories(test_planar_icp PRIVATE include)
+
   ament_add_pytest_test(
     test_record_republisher
     test/test_record_republisher.py
