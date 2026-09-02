@@ -16,6 +16,11 @@ constexpr int8_t kFree = 0;
 constexpr int8_t kOccupied = 100;
 }  // namespace
 
+TEST(TemporalOccupancy, UsesCompactPerCellEvidenceStorage)
+{
+  EXPECT_LT(sizeof(TemporalCellEvidence), 9U);
+}
+
 TEST(TemporalOccupancy, MarksUnknownCellFreeImmediately)
 {
   TemporalCellEvidence evidence;

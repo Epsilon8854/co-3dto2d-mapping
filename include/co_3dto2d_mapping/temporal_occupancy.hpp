@@ -11,15 +11,14 @@ struct TemporalOccupancyConfig
   uint16_t free_clear_count = 4;
   uint16_t occupied_confirm_count = 3;
   uint16_t counter_decay = 1;
-  uint64_t evidence_timeout_frames = 30;
+  uint32_t evidence_timeout_frames = 30;
 };
 
 struct TemporalCellEvidence
 {
+  uint32_t last_observed_frame = 0;
   uint16_t free_observations = 0;
   uint16_t occupied_observations = 0;
-  uint64_t last_observed_frame = 0;
-  bool initialized = false;
 };
 
 inline uint16_t saturatingIncrement(uint16_t value, uint16_t limit)
@@ -38,24 +37,23 @@ inline uint16_t saturatingDecrement(uint16_t value, uint16_t amount)
 
 inline void prepareTemporalEvidence(
     TemporalCellEvidence &evidence,
-    uint64_t frame_index,
-    uint64_t evidence_timeout_frames)
+    uint32_t frame_index,
+    uint32_t evidence_timeout_frames)
 {
-  if (evidence.initialized && evidence_timeout_frames > 0 &&
+  if (evidence.last_observed_frame != 0 && evidence_timeout_frames > 0 &&
       frame_index > evidence.last_observed_frame &&
       frame_index - evidence.last_observed_frame > evidence_timeout_frames) {
     evidence.free_observations = 0;
     evidence.occupied_observations = 0;
   }
   evidence.last_observed_frame = frame_index;
-  evidence.initialized = true;
 }
 
 inline int8_t observeFreeCell(
     TemporalCellEvidence &evidence,
     int8_t current_value,
     const TemporalOccupancyConfig &config,
-    uint64_t frame_index,
+    uint32_t frame_index,
     int8_t free_value,
     int8_t occupied_value)
 {
@@ -81,7 +79,7 @@ inline int8_t observeOccupiedCell(
     TemporalCellEvidence &evidence,
     int8_t current_value,
     const TemporalOccupancyConfig &config,
-    uint64_t frame_index,
+    uint32_t frame_index,
     int8_t occupied_value)
 {
   prepareTemporalEvidence(evidence, frame_index, config.evidence_timeout_frames);

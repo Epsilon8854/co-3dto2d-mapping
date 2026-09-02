@@ -59,9 +59,16 @@
       const size_t grid_size =
           static_cast<size_t>(global_grid_.info.width) * global_grid_.info.height;
       global_grid_.data.assign(grid_size, raycast_unknown_value_);
-      global_counts_.assign(grid_size, 0);
-      global_temporal_evidence_.assign(grid_size, TemporalCellEvidence{});
-      global_frame_observations_.assign(grid_size, CellFrameObservation{});
+      if (dynamic_filter_enabled_) {
+        global_counts_.clear();
+        global_temporal_evidence_.assign(grid_size, TemporalCellEvidence{});
+      } else {
+        global_counts_.assign(grid_size, 0);
+        global_temporal_evidence_.clear();
+      }
+      global_frame_free_observed_.assign(grid_size, 0);
+      global_frame_occupied_points_.assign(grid_size, 0);
+      global_frame_observed_indices_.clear();
       global_grid_ready_ = true;
       return;
     }
@@ -86,8 +93,14 @@
         1, static_cast<uint32_t>(std::ceil((new_max_y - new_min_y) / resolution_)));
     const size_t new_size = static_cast<size_t>(new_width) * new_height;
     std::vector<int8_t> new_data(new_size, raycast_unknown_value_);
-    std::vector<int> new_counts(new_size, 0);
-    std::vector<TemporalCellEvidence> new_evidence(new_size);
+    std::vector<int> new_counts;
+    std::vector<TemporalCellEvidence> new_evidence;
+    if (!global_counts_.empty()) {
+      new_counts.assign(new_size, 0);
+    }
+    if (!global_temporal_evidence_.empty()) {
+      new_evidence.assign(new_size, TemporalCellEvidence{});
+    }
 
     const int col_offset = static_cast<int>(
         std::round((current_min_x - new_min_x) / resolution_));
@@ -100,8 +113,12 @@
         const uint32_t new_row = static_cast<uint32_t>(static_cast<int>(row) + row_offset);
         const size_t new_index = static_cast<size_t>(new_row) * new_width + new_col;
         new_data[new_index] = global_grid_.data[old_index];
-        new_counts[new_index] = global_counts_[old_index];
-        new_evidence[new_index] = global_temporal_evidence_[old_index];
+        if (!global_counts_.empty()) {
+          new_counts[new_index] = global_counts_[old_index];
+        }
+        if (!global_temporal_evidence_.empty()) {
+          new_evidence[new_index] = global_temporal_evidence_[old_index];
+        }
       }
     }
 
@@ -112,7 +129,9 @@
     global_grid_.data.swap(new_data);
     global_counts_.swap(new_counts);
     global_temporal_evidence_.swap(new_evidence);
-    global_frame_observations_.assign(new_size, CellFrameObservation{});
+    global_frame_free_observed_.assign(new_size, 0);
+    global_frame_occupied_points_.assign(new_size, 0);
+    global_frame_observed_indices_.clear();
   }
 
   void updateGlobalGrid(
@@ -129,6 +148,12 @@
     global_grid_.header.stamp = stamp;
     global_grid_.header.frame_id = global_frame_id_;
     ++global_frame_index_;
+    if (global_frame_index_ == 0) {
+      global_frame_index_ = 1;
+      std::fill(
+          global_temporal_evidence_.begin(), global_temporal_evidence_.end(),
+          TemporalCellEvidence{});
+    }
 
     using co_3dto2d_mapping::occupancy::Cell;
     const auto to_cell = [&](double x, double y) {
@@ -148,17 +173,15 @@
           static_cast<size_t>(cell.col);
     };
 
-    std::vector<size_t> observed_indices;
-    observed_indices.reserve(free_ray_hits.size() + occupied_hits.size());
-    const auto observation_for = [&](size_t index) -> CellFrameObservation & {
-      CellFrameObservation &observation = global_frame_observations_[index];
-      if (observation.frame_index != global_frame_index_) {
-        observation.frame_index = global_frame_index_;
-        observation.free_observed = false;
-        observation.occupied_points = 0;
+    auto &observed_indices = global_frame_observed_indices_;
+    observed_indices.clear();
+    observed_indices.reserve(std::min(
+        global_grid_.data.size(), free_ray_hits.size() + occupied_hits.size()));
+    const auto touch_observation = [&](size_t index) {
+      if (global_frame_free_observed_[index] == 0 &&
+          global_frame_occupied_points_[index] == 0) {
         observed_indices.push_back(index);
       }
-      return observation;
     };
 
     if (enable_raycast_free_space_) {
@@ -188,7 +211,8 @@
           }
           const auto index = cell_index(cell);
           if (index) {
-            observation_for(*index).free_observed = true;
+            touch_observation(*index);
+            global_frame_free_observed_[*index] = 1;
           }
         }
       }
@@ -197,16 +221,24 @@
     for (const auto &[x, y] : occupied_hits) {
       const auto index = cell_index(to_cell(x, y));
       if (index) {
-        observation_for(*index).occupied_points += 1;
+        touch_observation(*index);
+        if (global_frame_occupied_points_[*index] <
+            std::numeric_limits<uint32_t>::max()) {
+          ++global_frame_occupied_points_[*index];
+        }
       }
     }
 
     size_t cleared_cells = 0;
     size_t delayed_occupied_cells = 0;
     for (const size_t index : observed_indices) {
-      const CellFrameObservation &observation = global_frame_observations_[index];
-      const bool occupied_observed =
-          observation.occupied_points >= occupied_threshold_points_;
+      const bool free_observed = global_frame_free_observed_[index] != 0;
+      const uint32_t occupied_points = global_frame_occupied_points_[index];
+      global_frame_free_observed_[index] = 0;
+      global_frame_occupied_points_[index] = 0;
+
+      const bool occupied_observed = occupied_points >=
+          static_cast<uint32_t>(occupied_threshold_points_);
       if (occupied_observed) {
         if (dynamic_filter_enabled_) {
           const int8_t old_value = global_grid_.data[index];
@@ -219,7 +251,7 @@
             ++delayed_occupied_cells;
           }
         } else {
-          global_counts_[index] += observation.occupied_points;
+          global_counts_[index] += static_cast<int>(occupied_points);
           if (global_counts_[index] >= occupied_threshold_points_) {
             global_grid_.data[index] = raycast_occupied_value_;
           }
@@ -227,7 +259,7 @@
         continue;
       }
 
-      if (!observation.free_observed) {
+      if (!free_observed) {
         continue;
       }
       if (dynamic_filter_enabled_) {
@@ -237,7 +269,6 @@
             global_frame_index_, raycast_free_value_, raycast_occupied_value_);
         if (old_value == raycast_occupied_value_ &&
             global_grid_.data[index] == raycast_free_value_) {
-          global_counts_[index] = 0;
           ++cleared_cells;
         }
       } else if (raycast_clear_occupied_ ||
@@ -245,6 +276,8 @@
         global_grid_.data[index] = raycast_free_value_;
       }
     }
+
+    observed_indices.clear();
 
     if (dynamic_filter_enabled_ && (cleared_cells > 0 || delayed_occupied_cells > 0)) {
       dynamic_cells_cleared_total_ += cleared_cells;

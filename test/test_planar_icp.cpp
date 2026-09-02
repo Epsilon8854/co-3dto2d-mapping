@@ -115,6 +115,45 @@ TEST(PlanarIcp, TrimmingToleratesMovingObjectOutliers)
   EXPECT_NEAR(normalizeAngle(result.pose.yaw - truth.yaw), 0.0, 0.03);
 }
 
+TEST(PlanarIcp, IgnoresInitialRmseWhenInitialOverlapIsInvalid)
+{
+  std::vector<Point2> source;
+  for (int i = 0; i < 60; ++i) {
+    source.push_back({
+      0.42 * static_cast<double>(i),
+      0.63 * static_cast<double>(i % 7) + 0.017 * static_cast<double>(i)});
+  }
+
+  std::vector<Point2> target;
+  target.reserve(source.size() + 3);
+  for (int i = 0; i < static_cast<int>(source.size()); ++i) {
+    target.push_back({
+      source[static_cast<std::size_t>(i)].x + 0.012 * std::sin(0.7 * i),
+      source[static_cast<std::size_t>(i)].y + 0.012 * std::cos(0.9 * i)});
+  }
+
+  const Pose2 initial_pose{0.25, 0.25, 0.0};
+  // Create three exact but insufficient accidental matches at the initial pose.
+  for (int i = 0; i < 3; ++i) {
+    target.push_back(transformPoint(initial_pose, source[static_cast<std::size_t>(i)]));
+  }
+
+  IcpOptions options;
+  options.min_correspondences = 30;
+  options.max_correspondence_distance = 0.05;
+  options.min_overlap_ratio = 0.5;
+  options.trim_ratio = 0.8;
+  options.coarse_translation_range = 0.26;
+  options.coarse_translation_step = 0.05;
+
+  const auto result = alignPointToPoint(source, target, initial_pose, options);
+
+  ASSERT_TRUE(result.success);
+  EXPECT_EQ(std::isinf(result.initial_rmse), true);
+  EXPECT_NEAR(result.pose.x, 0.0, 0.03);
+  EXPECT_NEAR(result.pose.y, 0.0, 0.03);
+}
+
 TEST(PlanarIcp, RejectsInsufficientCorrespondences)
 {
   const std::vector<Point2> source{{0.0, 0.0}, {1.0, 0.0}};

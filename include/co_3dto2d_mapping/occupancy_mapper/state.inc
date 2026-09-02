@@ -35,7 +35,7 @@
 
   bool dynamic_filter_enabled_ = true;
   TemporalOccupancyConfig temporal_config_;
-  uint64_t global_frame_index_ = 0;
+  uint32_t global_frame_index_ = 0;
   size_t dynamic_cells_cleared_total_ = 0;
 
   bool enable_local_window_icp_ = true;
@@ -90,6 +90,8 @@
   nav_msgs::msg::OccupancyGrid global_grid_;
   std::vector<int> global_counts_;
   std::vector<TemporalCellEvidence> global_temporal_evidence_;
-  std::vector<CellFrameObservation> global_frame_observations_;
+  std::vector<uint8_t> global_frame_free_observed_;
+  std::vector<uint32_t> global_frame_occupied_points_;
+  std::vector<size_t> global_frame_observed_indices_;
   bool global_grid_ready_ = false;
   bool global_frame_from_odom_ = false;

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -135,13 +136,6 @@ private:
   {
     Pose2 pose;
     std::vector<Point2> scan_points;
-  };
-
-  struct CellFrameObservation
-  {
-    uint64_t frame_index = 0;
-    bool free_observed = false;
-    int occupied_points = 0;
   };
 
 

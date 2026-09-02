@@ -17,7 +17,10 @@ window and one evidence grid for each robot.
 Free-space and occupied evidence is counted at most once per grid cell per
 mapping frame. This is important because a dense LiDAR scan can send hundreds
 of rays through the same cell; those rays must still count as one temporal
-observation rather than clearing a cell immediately.
+observation rather than clearing a cell immediately. Stable evidence uses a
+compact 8-byte record per cell, while frame-local observations are reset only
+for cells touched by that frame so large global maps do not require a full-grid
+clear on every scan.
 
 The state transition uses hysteresis:
 
@@ -62,7 +65,10 @@ When any quality gate fails, the mapper uses the odometry-predicted pose for
 that frame. Mapping therefore continues without accepting an unsafe ICP jump.
 The pose actually used for mapping is also published as
 `toy/corrected_odometry` (`nav_msgs/msg/Odometry`) by default. The topic can be
-renamed or disabled without publishing a second TF tree.
+renamed or disabled without publishing a second TF tree. Its twist and
+covariance are copied from the synchronized input odometry; the corrected topic
+is therefore intended primarily for map-pose inspection unless downstream
+fusion explicitly models the ICP correction uncertainty.
 
 ### Main tuning parameters
 

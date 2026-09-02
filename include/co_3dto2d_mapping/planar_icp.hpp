@@ -415,10 +415,16 @@ inline IcpResult alignPointToPoint(
   }
 
   const SpatialHash2D target_index(target, options.max_correspondence_distance);
+  std::size_t initial_untrimmed_count = 0;
   auto initial_correspondences = findCorrespondences(
       source, target_index, initial_pose, options.max_correspondence_distance,
-      options.trim_ratio);
-  result.initial_rmse = correspondenceRmse(initial_correspondences);
+      options.trim_ratio, &initial_untrimmed_count);
+  const double initial_overlap = static_cast<double>(initial_untrimmed_count) /
+      static_cast<double>(source.size());
+  if (initial_correspondences.size() >= options.min_correspondences &&
+      initial_overlap >= options.min_overlap_ratio) {
+    result.initial_rmse = correspondenceRmse(initial_correspondences);
+  }
 
   Pose2 pose = coarsePoseSearch(source, target_index, initial_pose, options);
   for (int iteration = 0; iteration < options.max_iterations; ++iteration) {

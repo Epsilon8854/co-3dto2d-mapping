@@ -132,8 +132,10 @@
         get_parameter("dynamic_occupied_confirm_count").as_int(), 1);
     temporal_config_.counter_decay = to_uint16(
         get_parameter("dynamic_counter_decay").as_int(), 0);
-    temporal_config_.evidence_timeout_frames = static_cast<uint64_t>(
-        std::max<int64_t>(0, get_parameter("dynamic_evidence_timeout_frames").as_int()));
+    temporal_config_.evidence_timeout_frames = static_cast<uint32_t>(
+        std::clamp<int64_t>(
+            get_parameter("dynamic_evidence_timeout_frames").as_int(), 0,
+            static_cast<int64_t>(std::numeric_limits<uint32_t>::max())));
 
     enable_local_window_icp_ = get_parameter("enable_local_window_icp").as_bool();
     icp_window_size_ = static_cast<int>(get_parameter("icp_window_size").as_int());
