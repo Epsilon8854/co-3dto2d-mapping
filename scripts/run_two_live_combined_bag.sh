@@ -153,7 +153,7 @@ case "${imu_source}" in
 esac
 
 metadata="${bag}/metadata.yaml"
-[[ -r "${metadata}" ]] || die "bag metadata is not readable: ${metadata}"
+[[ -r "${metadata}" ]] || die "bag metadada is not readable: ${metadata}"
 
 topic_metadata() {
   local metadata_path="$1"
@@ -298,7 +298,7 @@ bag_command=(
   "${R1_LIDAR_SOURCE}:=${R1_LIDAR_TOPIC}"
   "${r1_imu_source}:=${R1_IMU_TOPIC}"
 )
-if ${loop_playback=; then
+if ${loop_playback}; then
   bag_command+=(--loop)
 fi
 
