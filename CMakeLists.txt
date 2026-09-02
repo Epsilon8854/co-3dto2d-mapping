@@ -59,7 +59,7 @@ install(
 )
 
 # Keep the public executable expected by all existing two-robot launch files,
-# but replace the startup-only whole-map ICP with CPU-only 2D occupancy place
+# but replace startup-only whole-map/cloud ICP with CPU-only 2D occupancy place
 # recognition.  It publishes the same TransformStamped alignment topic, so the
 # existing map compositor and TF publisher remain unchanged.
 install(
@@ -68,8 +68,13 @@ install(
   RENAME initial_xy_icp_alignment.py
 )
 
-# Preserve the previous constrained startup ICP as an explicit fallback for
-# experiments and regression comparison.
+# Preserve both previous startup aligners for regression comparison and for
+# experiments that intentionally require one-shot cloud or whole-map ICP.
+install(
+  PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME legacy_initial_xyz_icp_alignment.py
+)
 install(
   PROGRAMS co_3dto2d_mapping/constrained_initial_xy_icp_alignment.py
   DESTINATION lib/${PROJECT_NAME}
@@ -120,6 +125,13 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_alignment_utils
     test/test_alignment_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_pointcloud_registration
+    test/test_pointcloud_registration.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )
