@@ -51,11 +51,19 @@ install(
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
     co_3dto2d_mapping/initial_xy_icp_alignment.py
-    co_3dto2d_mapping/record_republisher.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Keep the public executable name used by existing launch files, while the
+# implementation extends the original republisher with temporal merged-map
+# fusion driven by current-frame local observations.
+install(
+  PROGRAMS co_3dto2d_mapping/record_republisher_temporal.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME record_republisher.py
 )
 
 if(BUILD_TESTING)
@@ -93,6 +101,20 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_record_republisher
     test/test_record_republisher.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_temporal_fusion
+    test/test_temporal_fusion.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_record_republisher_temporal
+    test/test_record_republisher_temporal.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )
