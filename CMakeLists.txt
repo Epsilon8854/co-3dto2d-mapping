@@ -50,6 +50,7 @@ install(
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
+    co_3dto2d_mapping/gravity_plane_pose_fusion.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
@@ -65,11 +66,11 @@ install(
   RENAME initial_xy_icp_alignment.py
 )
 
-# Keep the public executable name used by existing launch files, while the
-# implementation extends the original republisher with temporal merged-map
-# fusion driven by current-frame local observations.
+# Preserve temporal merged-map cleanup and prefer the final odometry composed
+# from planar x/y/yaw plus ground-plane z/roll/pitch. Raw /rN/odom remains a
+# startup fallback until the fused topic publishes.
 install(
-  PROGRAMS co_3dto2d_mapping/record_republisher_temporal.py
+  PROGRAMS co_3dto2d_mapping/record_republisher_ground_fused.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME record_republisher.py
 )
@@ -118,6 +119,19 @@ if(BUILD_TESTING)
     test/test_heading_constraint.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_gravity_plane_utils
+    test/test_gravity_plane_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_ground_pose_pipeline
+    test/test_ground_pose_pipeline.py
+    PYTHON_EXECUTABLE /usr/bin/python3
   )
 
   ament_add_pytest_test(
