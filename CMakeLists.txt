@@ -50,11 +50,19 @@ install(
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
-    co_3dto2d_mapping/initial_xy_icp_alignment.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Keep the public executable expected by all existing launch files, but run a
+# constrained wrapper that rejects physically impossible opposite-heading ICP
+# solutions. The original module remains available through the Python package.
+install(
+  PROGRAMS co_3dto2d_mapping/constrained_initial_xy_icp_alignment.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME initial_xy_icp_alignment.py
 )
 
 # Keep the public executable name used by existing launch files, while the
@@ -101,6 +109,13 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_alignment_utils
     test/test_alignment_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_heading_constraint
+    test/test_heading_constraint.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )
