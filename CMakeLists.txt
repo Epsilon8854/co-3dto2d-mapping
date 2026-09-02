@@ -10,6 +10,7 @@ find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
@@ -57,13 +58,22 @@ install(
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Keep the public executable expected by all existing launch files, but run a
-# constrained wrapper that rejects physically impossible opposite-heading ICP
-# solutions. The original module remains available through the Python package.
+# Keep the public executable expected by all existing two-robot launch files,
+# but replace the startup-only whole-map ICP with CPU-only 2D occupancy place
+# recognition.  It publishes the same TransformStamped alignment topic, so the
+# existing map compositor and TF publisher remain unchanged.
+install(
+  PROGRAMS co_3dto2d_mapping/inter_robot_place_alignment.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME initial_xy_icp_alignment.py
+)
+
+# Preserve the previous constrained startup ICP as an explicit fallback for
+# experiments and regression comparison.
 install(
   PROGRAMS co_3dto2d_mapping/constrained_initial_xy_icp_alignment.py
   DESTINATION lib/${PROJECT_NAME}
-  RENAME initial_xy_icp_alignment.py
+  RENAME legacy_initial_xy_icp_alignment.py
 )
 
 # Preserve temporal merged-map cleanup and prefer the final odometry composed
@@ -126,6 +136,19 @@ if(BUILD_TESTING)
     test/test_gravity_plane_utils.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_occupancy_place_recognition
+    test/test_occupancy_place_recognition.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_place_alignment_wiring
+    test/test_place_alignment_wiring.py
+    PYTHON_EXECUTABLE /usr/bin/python3
   )
 
   ament_add_pytest_test(
