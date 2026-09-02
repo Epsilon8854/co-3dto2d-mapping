@@ -36,6 +36,6 @@ def test_record_republisher_prefers_fresh_ground_fused_pose_with_raw_fallback():
     assert "RENAME record_republisher.py" in cmake
     assert "/r{robot_id}/toy/corrected_odometry" in wrapper
     assert "TemporalToyRecordRepublisher" in wrapper
-    assert 'declare_parameter("ground_fused_odometry_timeout_sec", 1.0)' in wrapper
+    assert 'declare_parameter("ground_fused_odometry_timeout_sec", 3.0)' in wrapper
     assert "falling back to /r%d/odom" in wrapper
     assert "self._refresh_odometry_selection()" in wrapper
