@@ -69,6 +69,9 @@
     declare_parameter<double>("icp_coarse_rotation_range_deg", 3.0);
     declare_parameter<double>("icp_coarse_rotation_step_deg", 1.0);
     declare_parameter<int>("icp_log_period_ms", 2000);
+    declare_parameter<bool>("publish_corrected_odometry", true);
+    declare_parameter<std::string>(
+        "corrected_odometry_topic", "toy/corrected_odometry");
   }
 
   void readParameters()
@@ -171,6 +174,10 @@
         get_parameter("icp_coarse_rotation_step_deg").as_double());
     icp_log_period_ms_ = static_cast<int>(
         std::max<int64_t>(1, get_parameter("icp_log_period_ms").as_int()));
+    publish_corrected_odometry_ =
+        get_parameter("publish_corrected_odometry").as_bool();
+    corrected_odometry_topic_ =
+        get_parameter("corrected_odometry_topic").as_string();
   }
 
   void validateParameters() const
@@ -228,6 +235,10 @@
         icp_max_correction_yaw_rad_ < 0.0 ||
         icp_reset_translation_jump_m_ <= 0.0 || icp_reset_yaw_jump_rad_ <= 0.0) {
       throw std::runtime_error("ICP quality gate parameters are invalid.");
+    }
+    if (publish_corrected_odometry_ && corrected_odometry_topic_.empty()) {
+      throw std::runtime_error(
+              "corrected_odometry_topic must not be empty when publishing is enabled.");
     }
     if ((icp_coarse_translation_range_m_ > 0.0 &&
          icp_coarse_translation_step_m_ <= 0.0) ||

@@ -60,6 +60,9 @@ The matcher uses:
 
 When any quality gate fails, the mapper uses the odometry-predicted pose for
 that frame. Mapping therefore continues without accepting an unsafe ICP jump.
+The pose actually used for mapping is also published as
+`toy/corrected_odometry` (`nav_msgs/msg/Odometry`) by default. The topic can be
+renamed or disabled without publishing a second TF tree.
 
 ### Main tuning parameters
 

@@ -181,6 +181,20 @@
     const Quaternion aligned_q = applyAlignment(corrected_q);
     const Vec3 aligned_t = applyAlignment(corrected_t);
 
+    if (corrected_odom_pub_) {
+      nav_msgs::msg::Odometry corrected_odom = *odom;
+      corrected_odom.header.stamp = cloud->header.stamp;
+      corrected_odom.header.frame_id = global_frame_id_;
+      corrected_odom.pose.pose.position.x = aligned_t.x;
+      corrected_odom.pose.pose.position.y = aligned_t.y;
+      corrected_odom.pose.pose.position.z = aligned_t.z;
+      corrected_odom.pose.pose.orientation.x = aligned_q.x;
+      corrected_odom.pose.pose.orientation.y = aligned_q.y;
+      corrected_odom.pose.pose.orientation.z = aligned_q.z;
+      corrected_odom.pose.pose.orientation.w = aligned_q.w;
+      corrected_odom_pub_->publish(corrected_odom);
+    }
+
     const auto to_global = [&](const Vec3 &local_point) {
       const Vec3 rotated = rotatePoint(corrected_q, local_point);
       return applyAlignment(Vec3{

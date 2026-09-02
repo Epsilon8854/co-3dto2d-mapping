@@ -51,6 +51,10 @@ public:
         create_publisher<sensor_msgs::msg::PointCloud2>("toy/slice_kept_points", 10);
     rejected_points_pub_ =
         create_publisher<sensor_msgs::msg::PointCloud2>("toy/slice_rejected_points", 10);
+    if (publish_corrected_odometry_) {
+      corrected_odom_pub_ = create_publisher<nav_msgs::msg::Odometry>(
+          corrected_odometry_topic_, 10);
+    }
 
     cloud_sub_.subscribe(this, scan_cloud_topic_, rmw_qos_profile_sensor_data);
     odom_sub_.subscribe(this, odom_topic_, rmw_qos_profile_sensor_data);

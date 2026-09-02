@@ -62,6 +62,8 @@
   double icp_coarse_rotation_range_rad_ = degreesToRadians(3.0);
   double icp_coarse_rotation_step_rad_ = degreesToRadians(1.0);
   int icp_log_period_ms_ = 2000;
+  bool publish_corrected_odometry_ = true;
+  std::string corrected_odometry_topic_ = "toy/corrected_odometry";
   std::deque<IcpFrame> icp_window_;
   Pose2 last_raw_pose_;
   Pose2 last_corrected_pose_;
@@ -79,6 +81,7 @@
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr global_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr kept_points_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr rejected_points_pub_;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr corrected_odom_pub_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   builtin_interfaces::msg::Time latest_stamp_;
