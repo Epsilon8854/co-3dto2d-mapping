@@ -25,6 +25,19 @@ def launch_setup(context, *args, **kwargs):
     if mapping_startup_delay_sec < 0.0:
         raise RuntimeError("mapping_startup_delay_sec must be non-negative")
 
+    scan_cloud_topic = LaunchConfiguration("scan_cloud_topic").perform(context)
+    imu_filtered_topic = LaunchConfiguration("imu_filtered_topic").perform(context)
+    local_frame_id = LaunchConfiguration("local_frame_id").perform(context)
+    occupancy_config_file = LaunchConfiguration("occupancy_config_file").perform(
+        context
+    )
+    planar_odometry_topic = LaunchConfiguration("planar_odometry_topic").perform(
+        context
+    )
+    corrected_odometry_topic = LaunchConfiguration(
+        "corrected_odometry_topic"
+    ).perform(context)
+
     base_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -89,13 +102,9 @@ def launch_setup(context, *args, **kwargs):
             "bag_lidar_topic": LaunchConfiguration("bag_lidar_topic").perform(
                 context
             ),
-            "scan_cloud_topic": LaunchConfiguration("scan_cloud_topic").perform(
-                context
-            ),
+            "scan_cloud_topic": scan_cloud_topic,
             "imu_raw_topic": LaunchConfiguration("imu_raw_topic").perform(context),
-            "imu_filtered_topic": LaunchConfiguration(
-                "imu_filtered_topic"
-            ).perform(context),
+            "imu_filtered_topic": imu_filtered_topic,
         }.items(),
     )
 
@@ -110,15 +119,11 @@ def launch_setup(context, *args, **kwargs):
         namespace=namespace,
         output="screen",
         parameters=[
-            LaunchConfiguration("occupancy_config_file").perform(context),
+            occupancy_config_file,
             {
-                "scan_cloud_topic": LaunchConfiguration("scan_cloud_topic").perform(
-                    context
-                ),
+                "scan_cloud_topic": scan_cloud_topic,
                 "odom_topic": "odom",
-                "local_frame_id": LaunchConfiguration("local_frame_id").perform(
-                    context
-                ),
+                "local_frame_id": local_frame_id,
                 "global_frame_id": LaunchConfiguration("global_frame_id").perform(
                     context
                 ),
@@ -154,17 +159,42 @@ def launch_setup(context, *args, **kwargs):
                     .lower()
                     == "true"
                 ),
+                "publish_corrected_odometry": True,
+                "corrected_odometry_topic": planar_odometry_topic,
                 "use_sim_time": use_sim_time,
             },
         ],
     )
-    mapper_action = (
-        TimerAction(period=mapping_startup_delay_sec, actions=[mapper_node])
-        if mapping_startup_delay_sec > 0.0
-        else mapper_node
+
+    ground_plane_pose_node = Node(
+        package="co_3dto2d_mapping",
+        executable="gravity_plane_pose_fusion.py",
+        name="gravity_plane_pose_fusion",
+        namespace=namespace,
+        output="screen",
+        parameters=[
+            occupancy_config_file,
+            {
+                "ground_plane_pointcloud_topic": scan_cloud_topic,
+                "ground_plane_imu_topic": imu_filtered_topic,
+                "ground_plane_planar_odometry_topic": planar_odometry_topic,
+                "ground_plane_output_odometry_topic": corrected_odometry_topic,
+                "ground_plane_local_frame_id": local_frame_id,
+                "use_sim_time": use_sim_time,
+            },
+        ],
     )
 
-    return [base_launch, mapper_action]
+    mapping_actions = [mapper_node, ground_plane_pose_node]
+    if mapping_startup_delay_sec > 0.0:
+        return [
+            base_launch,
+            TimerAction(
+                period=mapping_startup_delay_sec,
+                actions=mapping_actions,
+            ),
+        ]
+    return [base_launch, *mapping_actions]
 
 
 def generate_launch_description():
@@ -217,6 +247,12 @@ def generate_launch_description():
                 "center_box_filter_half_extent_m", default_value="0.80"
             ),
             DeclareLaunchArgument("slice_z_in_cloud_frame", default_value="true"),
+            DeclareLaunchArgument(
+                "planar_odometry_topic", default_value="toy/planar_odometry"
+            ),
+            DeclareLaunchArgument(
+                "corrected_odometry_topic", default_value="toy/corrected_odometry"
+            ),
             DeclareLaunchArgument(
                 "occupancy_config_file",
                 default_value=os.path.join(package_share, "config", "occupancy.yaml"),
