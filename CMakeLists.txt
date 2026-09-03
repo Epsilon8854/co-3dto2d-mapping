@@ -45,19 +45,40 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+# Preserve the original two-live implementation under an internal name, then
+# expose the plane-height wrapper through the existing public launch name.
+install(
+  FILES launch/two_live_mapping.launch.py
+  DESTINATION share/${PROJECT_NAME}/launch
+  RENAME two_live_mapping_base.launch.py
+)
+install(
+  FILES launch/two_live_plane_height_mapping.launch.py
+  DESTINATION share/${PROJECT_NAME}/launch
+  RENAME two_live_mapping.launch.py
+)
+
 install(
   PROGRAMS
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
-    co_3dto2d_mapping/gravity_plane_pose_fusion.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Keep the public executable expected by all existing launch files.  In
+# Keep the public pose-fusion executable name, while the installed wrapper also
+# publishes a cloud selected by signed height above the detected ground plane.
+# The implementation module remains importable through the Python package.
+install(
+  PROGRAMS co_3dto2d_mapping/gravity_plane_height_cloud.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME gravity_plane_pose_fusion.py
+)
+
+# Keep the public executable expected by all existing launch files. In
 # cloud_initial mode it registers cropped XYZ clouds and projects the accepted
 # result to the planar x/y/yaw transform consumed by merged occupancy maps;
 # global_occupancy mode remains the legacy 2D fallback used by bag replay.
@@ -132,6 +153,13 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_gravity_plane_utils
     test/test_gravity_plane_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_plane_height_filter
+    test/test_plane_height_filter.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )
