@@ -4,7 +4,7 @@ from pathlib import Path
 PACKAGE = Path(__file__).resolve().parents[1]
 
 
-def test_public_alignment_executable_is_odom_aware():
+def test_legacy_alignment_executable_remains_odom_aware():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     implementation = (
         PACKAGE
@@ -33,12 +33,25 @@ def test_public_record_republisher_outputs_stable_common_frame_odometry():
     assert "output.header.frame_id = self.common_frame_id" in implementation
 
 
-def test_remote_and_local_alignment_use_the_same_filtered_cloud_type():
+def test_two_live_public_launch_selects_occupancy_place_recognition():
     wrapper = (
         PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
     ).read_text()
+    cmake = (PACKAGE / "CMakeLists.txt").read_text()
 
-    assert "_plane_height_node" in wrapper
-    assert 'parameter_set["robot0_cloud_topic"] = "/r0%s"' in wrapper
-    assert 'parameter_set["robot1_cloud_topic"] = "/r1%s"' in wrapper
-    assert "_BASE.Node = _plane_height_node" in wrapper
+    assert "_place_recognition_node" in wrapper
+    assert 'rewritten["executable"] = "inter_robot_place_alignment.py"' in wrapper
+    assert '"config", "place_recognition.yaml"' in wrapper
+    assert '"robot0_odom_topic": "/r0/toy/planar_odometry"' in wrapper
+    assert '"robot1_odom_topic": "/r1/toy/planar_odometry"' in wrapper
+    assert "_BASE.Node = _place_recognition_node" in wrapper
+    assert "co_3dto2d_mapping/inter_robot_place_alignment.py" in cmake
+
+
+def test_place_recognition_defaults_require_consensus_and_lock():
+    config = (PACKAGE / "config" / "place_recognition.yaml").read_text()
+
+    assert "consensus_min_measurements: 3" in config
+    assert "consensus_min_distinct_keyframes: 2" in config
+    assert "lock_after_consensus: true" in config
+    assert "stop_processing_after_lock: true" in config
