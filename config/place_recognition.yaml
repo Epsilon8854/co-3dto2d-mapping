@@ -1,0 +1,88 @@
+/**:
+  ros__parameters:
+    # Centralized, CPU-only two-robot place-recognition front-end.
+    robot0_map_topic: "/r0/toy/global_occupancy"
+    robot1_map_topic: "/r1/toy/global_occupancy"
+    robot0_odom_topic: "/r0/toy/planar_odometry"
+    robot1_odom_topic: "/r1/toy/planar_odometry"
+    robot_odom_frame_format: "r{robot_id}/odom"
+    alignment_topic: "/toy/initial_xy_alignment"
+    status_topic: "/toy/place_recognition/status"
+    target_frame_id: "map"
+    source_frame_id: "r1/odom"
+    strict_frame_validation: true
+
+    processing_period_sec: 1.0
+    startup_delay_sec: 3.0
+    map_timeout_sec: 5.0
+    odom_history_sec: 12.0
+    max_map_odom_stamp_delta_sec: 0.40
+    status_publish_period_sec: 1.0
+
+    # New keyframes are created by motion. While the robots remain stationary
+    # during startup, periodic frozen snapshots provide independent consensus
+    # support as the occupancy maps settle.
+    keyframe_translation_m: 1.0
+    keyframe_rotation_rad: 0.17453292519943295  # 10 deg
+    keyframe_min_interval_sec: 1.0
+    stationary_keyframe_period_sec: 2.0
+    max_keyframes_per_robot: 40
+    submap_radius_m: 15.0
+    submap_resolution_m: 0.10
+    occupied_threshold: 50
+    min_known_ratio: 0.12
+    min_boundary_points: 120
+
+    descriptor_num_rings: 20
+    descriptor_num_sectors: 60
+    descriptor_recenter_on_occupied_centroid: false
+    descriptor_top_k: 8
+    descriptor_max_distance: 0.45
+    # 1.0 disables ratio rejection. Repeated stationary keyframes are valid
+    # near-duplicates and are separated by geometric verification instead.
+    descriptor_ratio_test: 1.0
+    require_mutual_best_match: false
+    geometric_candidates_per_keyframe: 2
+    use_descriptor_yaw_hypothesis: true
+    use_odometry_yaw_hypothesis: true
+    # Side-by-side, same-heading deployment has zero initial map yaw.
+    expected_map_yaw_rad: 0.0
+    yaw_hypothesis_duplicate_rad: 0.05235987755982989  # 3 deg
+    try_opposite_descriptor_yaw: false
+
+    registration_coarse_translation_range_m: 2.5
+    registration_coarse_translation_step_m: 0.25
+    registration_coarse_yaw_range_rad: 0.20943951023931956  # 12 deg
+    registration_coarse_yaw_step_rad: 0.03490658503988659   # 2 deg
+    registration_fine_translation_range_m: 0.35
+    registration_fine_translation_step_m: 0.05
+    registration_fine_yaw_range_rad: 0.03490658503988659    # 2 deg
+    registration_fine_yaw_step_rad: 0.008726646259971648    # 0.5 deg
+    registration_search_max_points: 700
+    registration_search_batch_size: 256
+    registration_distance_clip_m: 0.80
+    registration_overlap_distance_m: 0.25
+    registration_overlap_penalty_weight: 0.20
+    registration_icp_max_iterations: 35
+    registration_icp_max_correspondence_m: 0.50
+    registration_icp_trim_ratio: 0.75
+    registration_icp_max_points: 2500
+    registration_free_conflict_clearance_m: 0.15
+    registration_max_free_samples: 1200
+    registration_min_correspondences: 80
+    registration_min_symmetric_overlap: 0.30
+    registration_max_symmetric_rmse_m: 0.25
+    registration_max_free_conflict_ratio: 0.14
+
+    measurement_descriptor_sigma: 0.25
+    measurement_rmse_sigma_m: 0.15
+    measurement_history_sec: 180.0
+    max_measurements: 80
+    consensus_translation_cluster_m: 0.40
+    consensus_yaw_cluster_rad: 0.06981317007977318  # 4 deg
+    consensus_min_measurements: 3
+    consensus_min_distinct_keyframes: 2
+    consensus_max_translation_rms_m: 0.18
+    consensus_max_yaw_rms_rad: 0.03490658503988659  # 2 deg
+    lock_after_consensus: true
+    stop_processing_after_lock: true
