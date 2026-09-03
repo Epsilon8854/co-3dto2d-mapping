@@ -1,8 +1,10 @@
-"""Runtime wrapper for two_live_mapping using plane-height-filtered clouds.
+"""Public two-live launch wrapper with occupancy place recognition.
 
-The large base launch remains unchanged for source compatibility. CMake installs
-it as ``two_live_mapping_base.launch.py`` and installs this file under the public
-``two_live_mapping.launch.py`` name.
+The base launch still owns both robot pipelines and the world/merged-map
+republisher. This wrapper keeps the ground-height cloud wiring and replaces the
+one-shot startup-cloud aligner with the CPU-only 2-D occupancy place-recognition
+front-end. The published alignment topic and downstream frame contract remain
+unchanged.
 """
 
 import importlib.util
@@ -43,49 +45,69 @@ def _plane_filtered_robot_actions(
         live_launch_path,
         enable_rear_lidar_filter,
     )
-    # gravity_plane_height_cloud.py publishes this topic in each robot's
-    # namespace before occupancy/local ICP and initial inter-robot alignment.
+    # Retain the symmetric ground-height-filtered topic contract for diagnostics
+    # and for users selecting the legacy cropped-cloud aligner manually.
     filtered_topic = "/r%d%s" % (robot_id, _FILTERED_SUFFIX)
     return republisher, pipeline, filtered_topic
 
 
 def _plane_height_bool_value(context, name):
     if name == "alignment_use_z_filter":
-        # The input has already been selected by signed distance from the ground
-        # plane. A second sensor-frame z_min/z_max/invert_z pass would undo it.
         return False
     return _ORIGINAL_BOOL_VALUE(context, name)
 
 
-def _plane_height_node(*args, **kwargs):
-    """Force symmetric filtered ICP inputs, including remote-only pipelines.
+def _place_recognition_node(*args, **kwargs):
+    """Replace only the base launch's inter-robot alignment node."""
 
-    The base launch only receives the topic returned by ``_robot_actions`` for a
-    pipeline started in the current process. On the fusion laptop, the remote
-    robot pipeline is disabled, so its fallback used to remain
-    ``/rN/mapping/lidar`` while the local robot used the plane-filtered topic.
-    That asymmetric preprocessing made startup ICP estimates unstable.
-    """
-
-    if (
+    if not (
         kwargs.get("package") == "co_3dto2d_mapping"
         and kwargs.get("executable") == "initial_xy_icp_alignment.py"
     ):
-        rewritten_parameters = []
-        for parameter_set in kwargs.get("parameters", []):
-            if isinstance(parameter_set, dict):
-                parameter_set = dict(parameter_set)
-                parameter_set["robot0_cloud_topic"] = "/r0%s" % _FILTERED_SUFFIX
-                parameter_set["robot1_cloud_topic"] = "/r1%s" % _FILTERED_SUFFIX
-            rewritten_parameters.append(parameter_set)
-        kwargs = dict(kwargs)
-        kwargs["parameters"] = rewritten_parameters
-    return _ORIGINAL_NODE(*args, **kwargs)
+        return _ORIGINAL_NODE(*args, **kwargs)
+
+    forwarded = {}
+    for parameter_set in kwargs.get("parameters", []):
+        if isinstance(parameter_set, dict):
+            forwarded.update(parameter_set)
+
+    package_share = get_package_share_directory("co_3dto2d_mapping")
+    place_config = os.path.join(package_share, "config", "place_recognition.yaml")
+    overrides = {
+        "robot0_map_topic": forwarded.get(
+            "robot0_map_topic", "/r0/toy/global_occupancy"
+        ),
+        "robot1_map_topic": forwarded.get(
+            "robot1_map_topic", "/r1/toy/global_occupancy"
+        ),
+        "robot0_odom_topic": "/r0/toy/planar_odometry",
+        "robot1_odom_topic": "/r1/toy/planar_odometry",
+        "alignment_topic": forwarded.get(
+            "alignment_topic", "/toy/initial_xy_alignment"
+        ),
+        "target_frame_id": forwarded.get("target_frame_id", "map"),
+        "source_frame_id": forwarded.get("source_frame_id", "r1/odom"),
+        "startup_delay_sec": forwarded.get("startup_delay_sec", 3.0),
+        "occupied_threshold": forwarded.get("occupied_threshold", 50),
+        "lock_after_consensus": forwarded.get(
+            "lock_after_first_alignment", True
+        ),
+        "stop_processing_after_lock": forwarded.get(
+            "lock_after_first_alignment", True
+        ),
+        "use_sim_time": forwarded.get("use_sim_time", False),
+    }
+
+    rewritten = dict(kwargs)
+    rewritten["executable"] = "inter_robot_place_alignment.py"
+    rewritten["name"] = "inter_robot_place_alignment"
+    rewritten["parameters"] = [place_config, overrides]
+    return _ORIGINAL_NODE(*args, **rewritten)
 
 
 _BASE._robot_actions = _plane_filtered_robot_actions
 _BASE._bool_value = _plane_height_bool_value
-_BASE.Node = _plane_height_node
+_BASE.Node = _place_recognition_node
 
 
 def generate_launch_description():
