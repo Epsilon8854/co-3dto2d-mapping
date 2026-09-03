@@ -78,21 +78,29 @@ install(
   RENAME gravity_plane_pose_fusion.py
 )
 
-# Keep the public executable expected by all existing launch files. In
-# cloud_initial mode it registers cropped XYZ clouds and projects the accepted
-# result to the planar x/y/yaw transform consumed by merged occupancy maps;
-# global_occupancy mode remains the legacy 2D fallback used by bag replay.
+# Keep the previous cropped-XYZ implementation executable for diagnostics, but
+# expose the odom-aware wrapper through the public name used by launch files.
+# The wrapper composes r0/base<-r1/base ICP with both planar odometry poses so
+# its published transform is actually map(r0/odom)<-r1/odom.
 install(
   PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(
+  PROGRAMS co_3dto2d_mapping/odom_aware_cropped_xyz_alignment.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME initial_xy_icp_alignment.py
 )
 
-# Preserve temporal merged-map cleanup and prefer the final odometry composed
-# from planar x/y/yaw plus ground-plane z/roll/pitch. Raw /rN/odom remains a
-# startup fallback until the fused topic publishes.
+# Preserve the ground-fused selector under its implementation name.  The public
+# record_republisher executable adds stable alignment latching and publishes
+# /toy_record/rN/odom directly in the shared common/world frame.
 install(
   PROGRAMS co_3dto2d_mapping/record_republisher_ground_fused.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(
+  PROGRAMS co_3dto2d_mapping/record_republisher_world.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME record_republisher.py
 )
@@ -134,6 +142,19 @@ if(BUILD_TESTING)
     test/test_alignment_utils.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_planar_transform_utils
+    test/test_planar_transform_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_world_frame_fusion_wiring
+    test/test_world_frame_fusion_wiring.py
+    PYTHON_EXECUTABLE /usr/bin/python3
   )
 
   ament_add_pytest_test(
