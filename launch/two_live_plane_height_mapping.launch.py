@@ -1,8 +1,10 @@
-"""Runtime wrapper for two_live_mapping using plane-height-filtered clouds.
+"""Public two-live wrapper with shared-floor mapping and fixed 2-D alignment.
 
-The large base launch remains unchanged for source compatibility. CMake installs
-it as ``two_live_mapping_base.launch.py`` and installs this file under the public
-``two_live_mapping.launch.py`` name.
+The base launch owns both robot pipelines and the record/merged-map outputs. This
+wrapper keeps the plane-height topic contract and replaces the legacy startup
+cloud aligner with CPU-only occupancy place recognition. The result is one fixed
+``map <- r1/odom`` transform; no pose graph or submap optimization is introduced
+at this stage.
 """
 
 import importlib.util
@@ -28,6 +30,7 @@ def _load_base_module():
 _BASE = _load_base_module()
 _ORIGINAL_ROBOT_ACTIONS = _BASE._robot_actions
 _ORIGINAL_BOOL_VALUE = _BASE._bool_value
+_ORIGINAL_NODE = _BASE.Node
 
 
 def _plane_filtered_robot_actions(
@@ -42,22 +45,67 @@ def _plane_filtered_robot_actions(
         live_launch_path,
         enable_rear_lidar_filter,
     )
-    # gravity_plane_height_cloud.py publishes this topic in each robot's
-    # namespace before occupancy/local ICP and initial inter-robot alignment.
     filtered_topic = "/r%d%s" % (robot_id, _FILTERED_SUFFIX)
     return republisher, pipeline, filtered_topic
 
 
 def _plane_height_bool_value(context, name):
     if name == "alignment_use_z_filter":
-        # The input has already been selected by signed distance from the ground
-        # plane. A second sensor-frame z_min/z_max/invert_z pass would undo it.
         return False
     return _ORIGINAL_BOOL_VALUE(context, name)
 
 
+def _place_recognition_node(*args, **kwargs):
+    """Replace only the base launch's inter-robot alignment node."""
+
+    if not (
+        kwargs.get("package") == "co_3dto2d_mapping"
+        and kwargs.get("executable") == "initial_xy_icp_alignment.py"
+    ):
+        return _ORIGINAL_NODE(*args, **kwargs)
+
+    forwarded = {}
+    for parameter_set in kwargs.get("parameters", []):
+        if isinstance(parameter_set, dict):
+            forwarded.update(parameter_set)
+
+    package_share = get_package_share_directory("co_3dto2d_mapping")
+    place_config = os.path.join(package_share, "config", "place_recognition.yaml")
+    overrides = {
+        "robot0_map_topic": forwarded.get(
+            "robot0_map_topic", "/r0/toy/global_occupancy"
+        ),
+        "robot1_map_topic": forwarded.get(
+            "robot1_map_topic", "/r1/toy/global_occupancy"
+        ),
+        "robot0_odom_topic": "/r0/toy/corrected_odometry",
+        "robot1_odom_topic": "/r1/toy/corrected_odometry",
+        "alignment_topic": forwarded.get(
+            "alignment_topic", "/toy/initial_xy_alignment"
+        ),
+        "target_frame_id": forwarded.get("target_frame_id", "map"),
+        "source_frame_id": forwarded.get("source_frame_id", "r1/odom"),
+        "startup_delay_sec": forwarded.get("startup_delay_sec", 3.0),
+        "occupied_threshold": forwarded.get("occupied_threshold", 50),
+        "lock_after_consensus": forwarded.get(
+            "lock_after_first_alignment", True
+        ),
+        "stop_processing_after_lock": forwarded.get(
+            "lock_after_first_alignment", True
+        ),
+        "use_sim_time": forwarded.get("use_sim_time", False),
+    }
+
+    rewritten = dict(kwargs)
+    rewritten["executable"] = "inter_robot_place_alignment.py"
+    rewritten["name"] = "inter_robot_place_alignment"
+    rewritten["parameters"] = [place_config, overrides]
+    return _ORIGINAL_NODE(*args, **rewritten)
+
+
 _BASE._robot_actions = _plane_filtered_robot_actions
 _BASE._bool_value = _plane_height_bool_value
+_BASE.Node = _place_recognition_node
 
 
 def generate_launch_description():

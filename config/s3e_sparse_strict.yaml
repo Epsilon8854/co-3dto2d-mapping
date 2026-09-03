@@ -1,18 +1,15 @@
-# S3Ev1 profile: conservative cross-robot acceptance with sparse-scan support.
-#
-# Sparse evidence is accommodated before acceptance by accumulating a larger
-# local submap, using a 10 cm grid, and allowing a wider correspondence search.
-# A place match is still published only when fitness/RMSE pass strict gates and
-# four consecutive estimates agree within 12 cm and 2 degrees.
+# S3Ev1 profile: sparse Velodyne support with conservative fixed-map alignment.
+# The environment is treated as one approximately horizontal floor. Each raw
+# cloud generates one shared floor state used by both map projection and the
+# plane-height obstacle filter.
 
 /**:
   ros__parameters:
     scan_cloud_topic: "/livox/lidar"
-    odom_topic: "odom"
+    odom_topic: "mapping/floor_odometry"
     local_frame_id: "base_link"
     global_frame_id: "odom"
 
-    # Coarser cells turn isolated Velodyne returns into a more connected map.
     grid_resolution: 0.10
     local_map_size_m: 30.0
     z_min: -1000.0
@@ -36,14 +33,14 @@
     raycast_clear_occupied: false
     occupied_threshold_points: 1
 
-    # Two observations retain sparse structure while rejecting one-frame noise.
+    # Frame-count evidence is retained for this integration stage. Sparse S3E
+    # scans use two occupied frames and five contradictory free frames.
     dynamic_filter_enabled: true
     dynamic_free_clear_count: 5
     dynamic_occupied_confirm_count: 2
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 50
 
-    # Longer scan-to-submap history compensates for low spatial density.
     enable_local_window_icp: true
     icp_window_size: 15
     icp_min_window_frames: 4
@@ -69,13 +66,15 @@
     icp_coarse_rotation_step_deg: 1.0
     icp_log_period_ms: 2000
     publish_corrected_odometry: true
-    corrected_odometry_topic: "toy/planar_odometry"
+    corrected_odometry_topic: "toy/corrected_odometry"
 
+    # Same-state floor integration. Disable only ground_plane_pose_enabled for a
+    # raw-odometry projection ablation; the filtered cloud remains unchanged.
     ground_plane_pose_enabled: true
     ground_plane_pointcloud_topic: "/livox/lidar"
     ground_plane_imu_topic: "/livox/imu_filtered"
-    ground_plane_planar_odometry_topic: "toy/planar_odometry"
-    ground_plane_output_odometry_topic: "toy/corrected_odometry"
+    ground_plane_planar_odometry_topic: "odom"
+    ground_plane_output_odometry_topic: "mapping/floor_odometry"
     ground_plane_local_frame_id: "base_link"
     ground_plane_height_filter_enabled: true
     ground_plane_filtered_cloud_topic: "mapping/plane_height_filtered"
@@ -83,6 +82,11 @@
     ground_plane_filter_max_height_m: 1.00
     ground_plane_filtered_cloud_min_points: 15
     ground_plane_filtered_cloud_log_period_ms: 2000
+
+    ground_plane_estimation_mode: "single_floor"
+    ground_plane_single_floor_bin_size_m: 0.04
+    ground_plane_single_floor_lowest_support_ratio: 0.45
+    ground_plane_single_floor_prior_tolerance_m: 0.20
 
     ground_plane_gravity_source: "orientation_then_acceleration"
     ground_plane_imu_timeout_sec: 0.50
@@ -97,9 +101,11 @@
     ground_plane_candidate_height_max_m: -0.05
     ground_plane_candidate_center_exclusion_m: 0.25
     ground_plane_max_points: 5000
-    ground_plane_ransac_iterations: 160
+
+    # RANSAC fallback/ablation parameters.
+    ground_plane_ransac_iterations: 100
     ground_plane_distance_threshold_m: 0.05
-    ground_plane_max_normal_deviation_deg: 15.0
+    ground_plane_max_normal_deviation_deg: 8.0
     ground_plane_min_inliers: 60
     ground_plane_min_inlier_ratio: 0.05
     ground_plane_min_height_m: 0.05
@@ -108,7 +114,7 @@
     ground_plane_random_seed: 7
     ground_plane_filter_gain: 0.25
     ground_plane_max_height_jump_m: 0.20
-    ground_plane_max_tilt_jump_deg: 10.0
+    ground_plane_max_tilt_jump_deg: 7.0
     ground_plane_hold_timeout_sec: 1.50
     ground_plane_state_reset_timeout_sec: 5.0
     ground_plane_z_mode: "height_above_plane"
@@ -122,9 +128,71 @@
     global_map_padding_m: 8.0
     sync_queue_size: 120
 
+# CPU-only occupancy place recognition used by the S3E combined-bag launch.
+# Transform clustering is PCM-style: only mutually consistent SE(2) estimates
+# enter the winning cluster. Stationary duplicate snapshots are practically
+# disabled, so distinct keyframe IDs correspond to motion-separated evidence.
+/inter_robot_place_alignment:
+  ros__parameters:
+    robot0_odom_topic: "/r0/toy/corrected_odometry"
+    robot1_odom_topic: "/r1/toy/corrected_odometry"
+    processing_period_sec: 1.0
+    startup_delay_sec: 4.0
+    map_timeout_sec: 8.0
+    odom_history_sec: 20.0
+    max_map_odom_stamp_delta_sec: 0.60
+
+    keyframe_translation_m: 1.0
+    keyframe_rotation_rad: 0.17453292519943295
+    keyframe_min_interval_sec: 1.0
+    stationary_keyframe_period_sec: 3600.0
+    max_keyframes_per_robot: 60
+    submap_radius_m: 20.0
+    submap_resolution_m: 0.10
+    min_known_ratio: 0.05
+    min_boundary_points: 60
+
+    descriptor_num_rings: 24
+    descriptor_num_sectors: 72
+    descriptor_top_k: 10
+    descriptor_max_distance: 0.55
+    descriptor_ratio_test: 0.98
+    require_mutual_best_match: true
+    geometric_candidates_per_keyframe: 3
+    use_descriptor_yaw_hypothesis: true
+    use_odometry_yaw_hypothesis: false
+    try_opposite_descriptor_yaw: true
+
+    registration_coarse_translation_range_m: 4.0
+    registration_coarse_translation_step_m: 0.30
+    registration_coarse_yaw_range_rad: 0.2617993877991494
+    registration_coarse_yaw_step_rad: 0.05235987755982989
+    registration_fine_translation_range_m: 0.45
+    registration_fine_translation_step_m: 0.05
+    registration_fine_yaw_range_rad: 0.05235987755982989
+    registration_fine_yaw_step_rad: 0.008726646259971648
+    registration_search_max_points: 600
+    registration_icp_max_iterations: 40
+    registration_icp_max_correspondence_m: 0.70
+    registration_icp_trim_ratio: 0.70
+    registration_icp_max_points: 2200
+    registration_min_correspondences: 45
+    registration_min_symmetric_overlap: 0.22
+    registration_max_symmetric_rmse_m: 0.30
+    registration_max_free_conflict_ratio: 0.20
+
+    consensus_translation_cluster_m: 0.25
+    consensus_yaw_cluster_rad: 0.05235987755982989
+    consensus_min_measurements: 4
+    consensus_min_distinct_keyframes: 2
+    consensus_max_translation_rms_m: 0.12
+    consensus_max_yaw_rms_rad: 0.02617993877991494
+    lock_after_consensus: true
+    stop_processing_after_lock: true
+
+# Legacy cropped-cloud/global-grid aligner retained as a fallback and baseline.
 /initial_xy_icp_alignment:
   ros__parameters:
-    # Sparse support: retain broad evidence before applying strict gates.
     voxel_size: 0.10
     max_points: 20000
     max_correspondence_distance: 0.90
@@ -132,8 +200,6 @@
     max_iterations: 100
     occupied_threshold: 50
     initialize_from_centroids: true
-
-    # Strict place-match acceptance.
     min_fitness: 0.30
     max_rmse: 0.25
     required_consistent_results: 4

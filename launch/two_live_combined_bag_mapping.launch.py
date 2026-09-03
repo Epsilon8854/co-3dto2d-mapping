@@ -113,70 +113,66 @@ def launch_setup(context, *args, **kwargs):
     alignment_topic = value(context, "alignment_topic")
     common_frame = value(context, "common_frame_id")
     alignment_config_file = value(context, "alignment_config_file")
-    alignment = Node(
-        package="co_3dto2d_mapping",
-        executable="initial_xy_icp_alignment.py",
-        name="initial_xy_icp_alignment",
-        output="screen",
-        parameters=[{
-            "robot0_cloud_topic": "/r0/mapping/lidar",
-            "robot1_cloud_topic": "/r1/mapping/lidar",
-            "robot0_map_topic": "/r0/toy/global_occupancy",
-            "robot1_map_topic": "/r1/toy/global_occupancy",
-            "input_mode": "global_occupancy",
-            "alignment_topic": alignment_topic,
-            "target_frame_id": common_frame,
-            "source_frame_id": "r1/odom",
-            "local_frame_id": "r0/base_link",
-            "transform_cloud_to_local_frame": False,
-            "z_min": float(value(context, "alignment_z_min")),
-            "z_max": float(value(context, "alignment_z_max")),
-            "invert_z_slice": boolean(context, "alignment_invert_z_slice"),
-            "frame_count": int(value(context, "alignment_frame_count")),
-            "invert_result": boolean(context, "alignment_invert_result"),
-            "center_box_half_extent_m": float(
-                value(context, "alignment_center_box_half_extent_m")
-            ),
-            "voxel_size": float(value(context, "alignment_voxel_size")),
-            "max_points": int(value(context, "alignment_max_points")),
-            "max_correspondence_distance": float(
-                value(context, "alignment_max_correspondence_distance")
-            ),
-            "min_correspondences": int(
-                value(context, "alignment_min_correspondences")
-            ),
-            "min_fitness": float(value(context, "alignment_min_fitness")),
-            "max_rmse": float(value(context, "alignment_max_rmse")),
-            "max_iterations": int(value(context, "alignment_max_iterations")),
-            "recompute_period_sec": float(
-                value(context, "alignment_recompute_period_sec")
-            ),
-            "occupied_threshold": int(
-                value(context, "alignment_occupied_threshold")
-            ),
-            "startup_delay_sec": float(
-                value(context, "alignment_startup_delay_sec")
-            ),
-            "retry_on_failure": True,
-            "lock_after_first_alignment": boolean(
-                context, "alignment_lock_after_first"
-            ),
-            "required_consistent_results": int(
-                value(context, "alignment_required_consistent_results")
-            ),
-            "max_consistency_translation_m": float(
-                value(context, "alignment_max_consistency_translation_m")
-            ),
-            "max_consistency_rotation_rad": float(
-                value(context, "alignment_max_consistency_rotation_rad")
-            ),
-            "initialize_from_centroids": boolean(
-                context, "alignment_initialize_from_centroids"
-            ),
-            "use_sim_time": False,
-        }] + ([alignment_config_file] if alignment_config_file else []),
+    place_config_file = os.path.join(
+        package_share, "config", "place_recognition.yaml"
     )
-    actions.insert(0, alignment)
+    alignment_overrides = {
+        "robot0_map_topic": "/r0/toy/global_occupancy",
+        "robot1_map_topic": "/r1/toy/global_occupancy",
+        "robot0_odom_topic": "/r0/toy/corrected_odometry",
+        "robot1_odom_topic": "/r1/toy/corrected_odometry",
+        "alignment_topic": alignment_topic,
+        "target_frame_id": common_frame,
+        "source_frame_id": "r1/odom",
+        "startup_delay_sec": float(
+            value(context, "alignment_startup_delay_sec")
+        ),
+        # Preserve replay-rate scaling from the existing runner.
+        "processing_period_sec": float(
+            value(context, "alignment_recompute_period_sec")
+        ),
+        "occupied_threshold": int(
+            value(context, "alignment_occupied_threshold")
+        ),
+        "lock_after_consensus": boolean(
+            context, "alignment_lock_after_first"
+        ),
+        "stop_processing_after_lock": boolean(
+            context, "alignment_lock_after_first"
+        ),
+        "use_sim_time": False,
+    }
+    if not alignment_config_file:
+        # Legacy CLI thresholds remain useful when no dedicated profile is
+        # supplied. A profile such as s3e_sparse_strict.yaml takes precedence.
+        alignment_overrides.update(
+            {
+                "consensus_min_measurements": int(
+                    value(context, "alignment_required_consistent_results")
+                ),
+                "consensus_translation_cluster_m": float(
+                    value(context, "alignment_max_consistency_translation_m")
+                ),
+                "consensus_yaw_cluster_rad": float(
+                    value(context, "alignment_max_consistency_rotation_rad")
+                ),
+            }
+        )
+
+    alignment_parameters = [place_config_file]
+    if alignment_config_file:
+        alignment_parameters.append(alignment_config_file)
+    alignment_parameters.append(alignment_overrides)
+    actions.insert(
+        0,
+        Node(
+            package="co_3dto2d_mapping",
+            executable="inter_robot_place_alignment.py",
+            name="inter_robot_place_alignment",
+            output="screen",
+            parameters=alignment_parameters,
+        ),
+    )
 
     if boolean(context, "enable_record_republisher"):
         actions.insert(1, Node(
@@ -240,7 +236,7 @@ DEFAULTS = {
     "alignment_recompute_period_sec": "2.0",
     "alignment_occupied_threshold": "50",
     "alignment_lock_after_first": "true",
-    "alignment_required_consistent_results": "2",
+    "alignment_required_consistent_results": "3",
     "alignment_max_consistency_translation_m": "0.25",
     "alignment_max_consistency_rotation_rad": "0.08726646259971647",
     "alignment_initialize_from_centroids": "true",
