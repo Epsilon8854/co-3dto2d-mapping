@@ -73,13 +73,8 @@ class RegistrationConfig:
             self.overlap_penalty_weight,
             self.free_conflict_clearance_m,
         )
-        if not all(
-            np.isfinite(value) and value >= 0.0
-            for value in non_negative
-        ):
-            raise ValueError(
-                "registration ranges and penalties must be non-negative"
-            )
+        if not all(np.isfinite(value) and value >= 0.0 for value in non_negative):
+            raise ValueError("registration ranges and penalties must be non-negative")
         integer_positive = {
             "search_max_points": self.search_max_points,
             "search_batch_size": self.search_batch_size,
@@ -93,13 +88,8 @@ class RegistrationConfig:
                 raise ValueError(f"{name} must be positive")
         if not 0.0 < self.icp_trim_ratio <= 1.0:
             raise ValueError("icp_trim_ratio must be in (0, 1]")
-        if (
-            not np.isfinite(self.max_symmetric_rmse_m)
-            or self.max_symmetric_rmse_m <= 0.0
-        ):
-            raise ValueError(
-                "max_symmetric_rmse_m must be positive and finite"
-            )
+        if not np.isfinite(self.max_symmetric_rmse_m) or self.max_symmetric_rmse_m <= 0.0:
+            raise ValueError("max_symmetric_rmse_m must be positive and finite")
         if not 0.0 <= self.min_symmetric_overlap <= 1.0:
             raise ValueError("min_symmetric_overlap must be in [0, 1]")
         if not 0.0 <= self.max_free_conflict_ratio <= 1.0:
@@ -126,24 +116,18 @@ class RegistrationResult:
     reason: str
 
 
-def transform_points(
-    points: np.ndarray, transform: PlanarTransform
-) -> np.ndarray:
+def transform_points(points: np.ndarray, transform: PlanarTransform) -> np.ndarray:
     values = np.asarray(points, dtype=np.float64)
     if values.ndim != 2 or values.shape[1:] != (2,):
         raise ValueError("points must have shape (N, 2)")
     x, y, yaw = transform
     cosine = math.cos(yaw)
     sine = math.sin(yaw)
-    rotation = np.asarray(
-        [[cosine, -sine], [sine, cosine]], dtype=np.float64
-    )
+    rotation = np.asarray([[cosine, -sine], [sine, cosine]], dtype=np.float64)
     return values @ rotation.T + np.asarray([x, y], dtype=np.float64)
 
 
-def _estimate_rigid(
-    source: np.ndarray, target: np.ndarray
-) -> PlanarTransform:
+def _estimate_rigid(source: np.ndarray, target: np.ndarray) -> PlanarTransform:
     source_mean = np.mean(source, axis=0)
     target_mean = np.mean(target, axis=0)
     centered_source = source - source_mean
@@ -158,9 +142,7 @@ def _estimate_rigid(
     return float(translation[0]), float(translation[1]), float(yaw)
 
 
-def _compose(
-    left: PlanarTransform, right: PlanarTransform
-) -> PlanarTransform:
+def _compose(left: PlanarTransform, right: PlanarTransform) -> PlanarTransform:
     lx, ly, lyaw = left
     rx, ry, ryaw = right
     cosine = math.cos(lyaw)
@@ -172,9 +154,7 @@ def _compose(
     )
 
 
-def _boundary_distance_field(
-    patch: LocalOccupancyPatch,
-) -> np.ndarray:
+def _boundary_distance_field(patch: LocalOccupancyPatch) -> np.ndarray:
     boundary = occupied_boundary_mask(patch.grid)
     if not np.any(boundary):
         raise ValueError("occupancy patch has no occupied boundary")
@@ -199,18 +179,14 @@ def _grid_indices(
     return rows, columns, valid
 
 
-def _grid_values(
-    patch: LocalOccupancyPatch, points: np.ndarray
-) -> np.ndarray:
+def _grid_values(patch: LocalOccupancyPatch, points: np.ndarray) -> np.ndarray:
     rows, columns, valid = _grid_indices(patch, points)
     values = np.full(points.shape[:-1], -1, dtype=np.int16)
     values[valid] = patch.grid[rows[valid], columns[valid]]
     return values
 
 
-def _range_values(
-    center: float, half_range: float, step: float
-) -> np.ndarray:
+def _range_values(center: float, half_range: float, step: float) -> np.ndarray:
     if half_range <= 0.0:
         return np.asarray([center], dtype=np.float64)
     count = max(1, int(math.ceil(half_range / step)))
@@ -218,9 +194,7 @@ def _range_values(
     return center + offsets
 
 
-def _translation_offsets(
-    half_range: float, step: float
-) -> np.ndarray:
+def _translation_offsets(half_range: float, step: float) -> np.ndarray:
     values = _range_values(0.0, half_range, step)
     x, y = np.meshgrid(values, values, indexing="xy")
     return np.column_stack((x.reshape(-1), y.reshape(-1)))
@@ -240,30 +214,22 @@ def _best_raster_score_for_yaw(
 ) -> Tuple[PlanarTransform, float]:
     cosine = math.cos(yaw)
     sine = math.sin(yaw)
-    rotation = np.asarray(
-        [[cosine, -sine], [sine, cosine]], dtype=np.float64
-    )
+    rotation = np.asarray([[cosine, -sine], [sine, cosine]], dtype=np.float64)
     rotated = source_points @ rotation.T
     translations = translation_center[None, :] + translation_offsets
-    best_transform = (
-        float(translations[0, 0]),
-        float(translations[0, 1]),
-        yaw,
-    )
+    best_transform = (float(translations[0, 0]), float(translations[0, 1]), yaw)
     best_score = float("inf")
 
     for start in range(0, len(translations), config.search_batch_size):
         batch = translations[start : start + config.search_batch_size]
         transformed = rotated[None, :, :] + batch[:, None, :]
         rows, columns, valid = _grid_indices(target, transformed)
-        forward = np.full(
-            valid.shape, config.distance_clip_m, dtype=np.float64
-        )
+        forward = np.full(valid.shape, config.distance_clip_m, dtype=np.float64)
         forward[valid] = target_field[rows[valid], columns[valid]]
         forward = np.minimum(forward, config.distance_clip_m)
 
-        # Symmetric scoring prevents a small fragment from being rewarded for
-        # matching only one repeated wall in the target map.
+        # Symmetric coarse scoring prevents a small source fragment from being
+        # rewarded for matching only one repeated wall in the target map.
         inverse_transformed = (
             target_points[None, :, :] - batch[:, None, :]
         ) @ rotation
@@ -271,9 +237,7 @@ def _best_raster_score_for_yaw(
             source, inverse_transformed
         )
         reverse = np.full(
-            reverse_valid.shape,
-            config.distance_clip_m,
-            dtype=np.float64,
+            reverse_valid.shape, config.distance_clip_m, dtype=np.float64
         )
         reverse[reverse_valid] = source_field[
             reverse_rows[reverse_valid], reverse_columns[reverse_valid]
@@ -291,19 +255,13 @@ def _best_raster_score_for_yaw(
             np.mean(forward * forward, axis=1)
             + np.mean(reverse * reverse, axis=1)
         )
-        scores = mean_square + config.overlap_penalty_weight * np.square(
-            1.0 - overlap
-        )
+        scores = mean_square + config.overlap_penalty_weight * np.square(1.0 - overlap)
         index = int(np.argmin(scores))
         score = float(scores[index])
         if score < best_score:
             best_score = score
             best = batch[index]
-            best_transform = (
-                float(best[0]),
-                float(best[1]),
-                float(yaw),
-            )
+            best_transform = (float(best[0]), float(best[1]), float(yaw))
     return best_transform, best_score
 
 
@@ -313,12 +271,8 @@ def _search_transform(
     initial_yaw: float,
     config: RegistrationConfig,
 ) -> Tuple[PlanarTransform, float]:
-    target_points = sample_points(
-        target.boundary_points, config.search_max_points
-    )
-    source_points = sample_points(
-        source.boundary_points, config.search_max_points
-    )
+    target_points = sample_points(target.boundary_points, config.search_max_points)
+    source_points = sample_points(source.boundary_points, config.search_max_points)
     target_field = _boundary_distance_field(target)
     source_field = _boundary_distance_field(source)
     target_centroid = np.mean(target_points, axis=0)
@@ -327,24 +281,16 @@ def _search_transform(
     best_transform: Optional[PlanarTransform] = None
     best_score = float("inf")
     coarse_offsets = _translation_offsets(
-        config.coarse_translation_range_m,
-        config.coarse_translation_step_m,
+        config.coarse_translation_range_m, config.coarse_translation_step_m
     )
     for yaw in _range_values(
-        initial_yaw,
-        config.coarse_yaw_range_rad,
-        config.coarse_yaw_step_rad,
+        initial_yaw, config.coarse_yaw_range_rad, config.coarse_yaw_step_rad
     ):
         cosine = math.cos(yaw)
         sine = math.sin(yaw)
         rotation = np.asarray([[cosine, -sine], [sine, cosine]])
-        centroid_translation = (
-            target_centroid - source_centroid @ rotation.T
-        )
-        translation_centers = [
-            centroid_translation,
-            np.zeros(2, dtype=np.float64),
-        ]
+        centroid_translation = target_centroid - source_centroid @ rotation.T
+        translation_centers = [centroid_translation, np.zeros(2, dtype=np.float64)]
         for translation_center in translation_centers:
             transform, score = _best_raster_score_for_yaw(
                 target,
@@ -365,15 +311,12 @@ def _search_transform(
         raise ValueError("coarse registration produced no candidate")
 
     fine_offsets = _translation_offsets(
-        config.fine_translation_range_m,
-        config.fine_translation_step_m,
+        config.fine_translation_range_m, config.fine_translation_step_m
     )
     fine_center = np.asarray(best_transform[:2], dtype=np.float64)
     coarse_yaw = best_transform[2]
     for yaw in _range_values(
-        coarse_yaw,
-        config.fine_yaw_range_rad,
-        config.fine_yaw_step_rad,
+        coarse_yaw, config.fine_yaw_range_rad, config.fine_yaw_step_rad
     ):
         transform, score = _best_raster_score_for_yaw(
             target,
@@ -416,17 +359,14 @@ def _trimmed_icp(
             int(math.floor(count * config.icp_trim_ratio)),
         )
         if keep_count < count:
-            order = np.argpartition(
-                distances[valid_indices], keep_count - 1
-            )
+            order = np.argpartition(distances[valid_indices], keep_count - 1)
             valid_indices = valid_indices[order[:keep_count]]
         delta = _estimate_rigid(
             transformed[valid_indices], target[indices[valid_indices]]
         )
         transform = _compose(delta, transform)
         if (
-            math.hypot(delta[0], delta[1])
-            <= config.convergence_translation_m
+            math.hypot(delta[0], delta[1]) <= config.convergence_translation_m
             and abs(delta[2]) <= config.convergence_rotation_rad
         ):
             break
@@ -440,12 +380,8 @@ def _direction_metrics(
     config: RegistrationConfig,
 ) -> Tuple[np.ndarray, float, int]:
     tree = cKDTree(target_points)
-    distances, _ = tree.query(
-        transform_points(source_points, target_from_source), k=1
-    )
-    overlap = float(
-        np.mean(distances <= config.overlap_distance_m)
-    )
+    distances, _ = tree.query(transform_points(source_points, target_from_source), k=1)
+    overlap = float(np.mean(distances <= config.overlap_distance_m))
     valid = distances <= config.icp_max_correspondence_m
     return distances[valid], overlap, int(np.count_nonzero(valid))
 
@@ -460,10 +396,7 @@ def _interior_free_points(
     field = _boundary_distance_field(patch)
     rows, columns, valid = _grid_indices(patch, points)
     keep = np.zeros(len(points), dtype=bool)
-    keep[valid] = (
-        field[rows[valid], columns[valid]]
-        >= config.free_conflict_clearance_m
-    )
+    keep[valid] = field[rows[valid], columns[valid]] >= config.free_conflict_clearance_m
     return points[keep]
 
 
@@ -477,12 +410,8 @@ def _free_conflict_ratio(
     conflict = 0
     comparable = 0
 
-    source_boundary = sample_points(
-        source.boundary_points, config.max_free_samples
-    )
-    target_boundary = sample_points(
-        target.boundary_points, config.max_free_samples
-    )
+    source_boundary = sample_points(source.boundary_points, config.max_free_samples)
+    target_boundary = sample_points(target.boundary_points, config.max_free_samples)
     for patch, points in (
         (target, transform_points(source_boundary, target_from_source)),
         (source, transform_points(target_boundary, inverse)),
@@ -503,9 +432,7 @@ def _free_conflict_ratio(
         comparable += int(np.count_nonzero(known))
         conflict += int(np.count_nonzero(known & (values > 50)))
 
-    return (
-        float(conflict) / float(comparable) if comparable else 1.0
-    )
+    return float(conflict) / float(comparable) if comparable else 1.0
 
 
 def register_submaps(
@@ -522,11 +449,7 @@ def register_submaps(
         or source.occupied_boundary_count < config.min_correspondences
     ):
         return RegistrationResult(
-            transform=(
-                0.0,
-                0.0,
-                normalize_angle(initial_yaw_rad),
-            ),
+            transform=(0.0, 0.0, normalize_angle(initial_yaw_rad)),
             search_score=float("inf"),
             symmetric_rmse_m=float("inf"),
             symmetric_overlap=0.0,
@@ -540,32 +463,18 @@ def register_submaps(
 
     try:
         initial, search_score = _search_transform(
-            target,
-            source,
-            normalize_angle(initial_yaw_rad),
-            config,
+            target, source, normalize_angle(initial_yaw_rad), config
         )
         refined = _trimmed_icp(
-            target.boundary_points,
-            source.boundary_points,
-            initial,
-            config,
+            target.boundary_points, source.boundary_points, initial, config
         )
-        (
-            forward_distances,
-            forward_overlap,
-            forward_count,
-        ) = _direction_metrics(
+        forward_distances, forward_overlap, forward_count = _direction_metrics(
             target.boundary_points,
             source.boundary_points,
             refined,
             config,
         )
-        (
-            reverse_distances,
-            reverse_overlap,
-            reverse_count,
-        ) = _direction_metrics(
+        reverse_distances, reverse_overlap, reverse_count = _direction_metrics(
             source.boundary_points,
             target.boundary_points,
             invert_planar(refined),
@@ -573,11 +482,7 @@ def register_submaps(
         )
     except (ValueError, np.linalg.LinAlgError):
         return RegistrationResult(
-            transform=(
-                0.0,
-                0.0,
-                normalize_angle(initial_yaw_rad),
-            ),
+            transform=(0.0, 0.0, normalize_angle(initial_yaw_rad)),
             search_score=float("inf"),
             symmetric_rmse_m=float("inf"),
             symmetric_overlap=0.0,
@@ -589,9 +494,7 @@ def register_submaps(
             reason="registration_failed",
         )
 
-    distances = np.concatenate(
-        (forward_distances, reverse_distances)
-    )
+    distances = np.concatenate((forward_distances, reverse_distances))
     rmse = (
         float(np.sqrt(np.mean(distances * distances)))
         if distances.size
@@ -599,9 +502,7 @@ def register_submaps(
     )
     overlap = min(forward_overlap, reverse_overlap)
     correspondences = min(forward_count, reverse_count)
-    conflict = _free_conflict_ratio(
-        target, source, refined, config
-    )
+    conflict = _free_conflict_ratio(target, source, refined, config)
 
     if correspondences < config.min_correspondences:
         accepted, reason = False, "insufficient_correspondences"
