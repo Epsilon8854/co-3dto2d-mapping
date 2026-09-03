@@ -47,6 +47,16 @@ def test_shared_floor_wrapper_has_one_fit_callback_per_cloud_odom_pair():
     assert "_fused_mapping_odometry(" in wrapper
 
 
+def test_shared_floor_state_resets_on_a_replayed_earlier_timestamp():
+    wrapper = (
+        PACKAGE / "co_3dto2d_mapping" / "gravity_plane_height_cloud.py"
+    ).read_text()
+    assert "stamp_ns < self._last_plane_stamp_ns" in wrapper
+    assert "non-monotonic cloud timestamp" in wrapper
+    assert "self._clear_plane_state()" in wrapper
+    assert "super()._accept_or_hold_plane(" in wrapper
+
+
 def test_projection_ablation_keeps_filtered_cloud_but_passes_raw_pose():
     wrapper = (
         PACKAGE / "co_3dto2d_mapping" / "gravity_plane_height_cloud.py"
