@@ -54,30 +54,16 @@ def _weighted_mean(
 
     for _ in range(8):
         total = sum(weights)
-        x = sum(
-            weight * item.transform[0]
-            for weight, item in zip(weights, measurements)
-        ) / total
-        y = sum(
-            weight * item.transform[1]
-            for weight, item in zip(weights, measurements)
-        ) / total
-        sin_yaw = sum(
-            weight * math.sin(item.transform[2])
-            for weight, item in zip(weights, measurements)
-        )
-        cos_yaw = sum(
-            weight * math.cos(item.transform[2])
-            for weight, item in zip(weights, measurements)
-        )
+        x = sum(weight * item.transform[0] for weight, item in zip(weights, measurements)) / total
+        y = sum(weight * item.transform[1] for weight, item in zip(weights, measurements)) / total
+        sin_yaw = sum(weight * math.sin(item.transform[2]) for weight, item in zip(weights, measurements))
+        cos_yaw = sum(weight * math.cos(item.transform[2]) for weight, item in zip(weights, measurements))
         yaw = math.atan2(sin_yaw, cos_yaw)
         updated = (x, y, yaw)
 
         robust = []
         for base, item in zip(base_weights, measurements):
-            translation = math.hypot(
-                item.transform[0] - x, item.transform[1] - y
-            )
+            translation = math.hypot(item.transform[0] - x, item.transform[1] - y)
             angular = _angle_distance(item.transform[2], yaw)
             normalized = math.sqrt(
                 (translation / max(translation_scale, 1e-9)) ** 2
@@ -86,8 +72,7 @@ def _weighted_mean(
             huber = 1.0 if normalized <= 1.0 else 1.0 / normalized
             robust.append(base * huber)
         if (
-            math.hypot(updated[0] - estimate[0], updated[1] - estimate[1])
-            < 1e-6
+            math.hypot(updated[0] - estimate[0], updated[1] - estimate[1]) < 1e-6
             and _angle_distance(updated[2], estimate[2]) < 1e-6
         ):
             estimate = updated
@@ -132,6 +117,7 @@ def estimate_alignment_consensus(
         estimate, robust_weights = _weighted_mean(
             cluster, translation_cluster_m, yaw_cluster_rad
         )
+        # Re-evaluate around the robust mean to remove seed-edge inclusions.
         cluster = [
             item
             for item in cluster
