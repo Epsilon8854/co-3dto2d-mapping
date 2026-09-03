@@ -66,13 +66,7 @@ def stationarity_metrics(
     max_angular_speed_rps: float,
     minimum_samples: int = 5,
 ) -> StationarityMetrics:
-    """Measure robust pose/twist stability over a receipt-time window.
-
-    Receipt time is used instead of message time so two computers with imperfect
-    clock synchronisation cannot make the local stationarity gate oscillate.
-    The center is a median/circular mean and spans are measured about it, which
-    makes one timestamp or odometry spike much less influential.
-    """
+    """Measure robust pose/twist stability over a receipt-time window."""
 
     window_ns = int(max(0.0, float(window_sec)) * 1e9)
     selected = [
@@ -83,17 +77,8 @@ def stationarity_metrics(
     selected.sort(key=lambda sample: sample.receipt_ns)
     if not selected:
         return StationarityMetrics(
-            False,
-            False,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            math.inf,
-            math.inf,
-            math.inf,
-            math.inf,
-            0,
+            False, False, 0.0, 0.0, 0.0, 0.0,
+            math.inf, math.inf, math.inf, math.inf, 0,
         )
 
     duration_sec = max(
@@ -150,12 +135,7 @@ def motion_keyframe_allowed(
     yaw_threshold_rad: float,
     large_motion_factor: float = 1.75,
 ) -> bool:
-    """Reject odometry-only keyframes while the independent motion gate is stable.
-
-    A large displacement still passes even when twist fields are stuck at zero;
-    this preserves slow-motion operation on odometry sources that do not report
-    twist while blocking small stationary random walk.
-    """
+    """Reject odometry-only keyframes while the motion gate is stable."""
 
     translation = math.hypot(current_x - previous_x, current_y - previous_y)
     yaw = angular_distance(current_yaw, previous_yaw)
@@ -182,18 +162,18 @@ def choose_fusion_reference(
 ) -> Optional[int]:
     """Choose the common-frame anchor without publishing a phantom r0 frame.
 
-    Once an inter-robot alignment exists, robot 0 is the canonical map frame.
-    Before that, the previous usable reference is retained to prevent repeated
-    frame jumps.  If only robot 1 is running, robot 1 becomes an identity anchor.
+    Robot 0 is always the canonical map frame when usable. Robot 1 becomes a
+    temporary identity anchor only while robot 0 is absent, and yields as soon
+    as robot 0 appears so pre-lock visualization remains in the canonical frame.
     """
 
     if alignment_available:
         return 0
     usable = {0: bool(robot0_usable), 1: bool(robot1_usable)}
-    if previous_reference in usable and usable[previous_reference]:
-        return previous_reference
     if usable[0]:
         return 0
+    if previous_reference == 1 and usable[1]:
+        return 1
     if allow_robot1_single_fallback and usable[1]:
         return 1
     return None
