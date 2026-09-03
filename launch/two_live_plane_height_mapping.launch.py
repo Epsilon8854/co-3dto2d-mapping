@@ -28,6 +28,7 @@ def _load_base_module():
 _BASE = _load_base_module()
 _ORIGINAL_ROBOT_ACTIONS = _BASE._robot_actions
 _ORIGINAL_BOOL_VALUE = _BASE._bool_value
+_ORIGINAL_NODE = _BASE.Node
 
 
 def _plane_filtered_robot_actions(
@@ -56,8 +57,35 @@ def _plane_height_bool_value(context, name):
     return _ORIGINAL_BOOL_VALUE(context, name)
 
 
+def _plane_height_node(*args, **kwargs):
+    """Force symmetric filtered ICP inputs, including remote-only pipelines.
+
+    The base launch only receives the topic returned by ``_robot_actions`` for a
+    pipeline started in the current process. On the fusion laptop, the remote
+    robot pipeline is disabled, so its fallback used to remain
+    ``/rN/mapping/lidar`` while the local robot used the plane-filtered topic.
+    That asymmetric preprocessing made startup ICP estimates unstable.
+    """
+
+    if (
+        kwargs.get("package") == "co_3dto2d_mapping"
+        and kwargs.get("executable") == "initial_xy_icp_alignment.py"
+    ):
+        rewritten_parameters = []
+        for parameter_set in kwargs.get("parameters", []):
+            if isinstance(parameter_set, dict):
+                parameter_set = dict(parameter_set)
+                parameter_set["robot0_cloud_topic"] = "/r0%s" % _FILTERED_SUFFIX
+                parameter_set["robot1_cloud_topic"] = "/r1%s" % _FILTERED_SUFFIX
+            rewritten_parameters.append(parameter_set)
+        kwargs = dict(kwargs)
+        kwargs["parameters"] = rewritten_parameters
+    return _ORIGINAL_NODE(*args, **kwargs)
+
+
 _BASE._robot_actions = _plane_filtered_robot_actions
 _BASE._bool_value = _plane_height_bool_value
+_BASE.Node = _plane_height_node
 
 
 def generate_launch_description():
