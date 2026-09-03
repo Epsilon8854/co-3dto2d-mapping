@@ -34,9 +34,9 @@
     # Temporal occupancy evidence. A cell is cleared only after free space is
     # observed in this many different mapping frames. A previously free cell
     # also needs repeated occupied frames before a new obstacle is committed.
-    dynamic_filter_enabled: true
-    dynamic_free_clear_count: 4
-    dynamic_occupied_confirm_count: 3
+    dynamic_filter_enabled: False
+    dynamic_free_clear_count: 10
+    dynamic_occupied_confirm_count: 1
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 30
 

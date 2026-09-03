@@ -190,3 +190,44 @@ def test_combined_replay_rejects_missing_robot_lidar(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "missing or empty topic /r0/livox/lidar" in result.stderr
+
+
+def test_custom_source_topics_are_remapped_into_the_two_robot_pipeline(
+    tmp_path: Path,
+) -> None:
+    # Given: a combined bag using S3E robot topic names.
+    bag = tmp_path / "S3E_Laboratory_1"
+    _write_metadata(
+        bag,
+        {
+            "/Alpha/velodyne_points": ("sensor_msgs/msg/PointCloud2", 100),
+            "/Alpha/imu/data": ("sensor_msgs/msg/Imu", 1000),
+            "/Carol/velodyne_points": ("sensor_msgs/msg/PointCloud2", 101),
+            "/Carol/imu/data": ("sensor_msgs/msg/Imu", 1001),
+        },
+    )
+
+    # When: exact source topics are selected for r0 and r1.
+    result = _dry_run(
+        bag,
+        "--robot0-lidar-source",
+        "/Alpha/velodyne_points",
+        "--robot0-imu-source",
+        "/Alpha/imu/data",
+        "--robot1-lidar-source",
+        "/Carol/velodyne_points",
+        "--robot1-imu-source",
+        "/Carol/imu/data",
+    )
+
+    # Then: only those streams are replayed into the isolated mapping topics.
+    assert result.returncode == 0, result.stderr
+    player = next(
+        line for line in result.stdout.splitlines() if line.startswith("BAG_PLAYER=")
+    )
+    assert "--topics /Alpha/velodyne_points /Alpha/imu/data" in player
+    assert "/Carol/velodyne_points /Carol/imu/data" in player
+    assert "/Alpha/velodyne_points:=/co_3dto2d_replay/r0/lidar" in player
+    assert "/Carol/velodyne_points:=/co_3dto2d_replay/r1/lidar" in player
+    assert "robot0_imu_input_is_filtered:=false" in result.stdout
+    assert "robot1_imu_input_is_filtered:=false" in result.stdout

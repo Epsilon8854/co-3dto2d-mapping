@@ -15,6 +15,10 @@ sensor_warmup_seconds="10"
 alignment_warmup_seconds="3"
 alignment_period_seconds="2"
 imu_source="auto"
+robot0_lidar_source="/r0/livox/lidar"
+robot0_imu_source=""
+robot1_lidar_source="/r1/livox/lidar"
+robot1_imu_source=""
 dry_run=false
 check_environment=false
 loop_playback=false
@@ -39,6 +43,14 @@ usage() {
     "  --alignment-warmup SEC Recorded-time map accumulation before ICP (default: 3)" \
     "  --alignment-period SEC Recorded-time interval between ICP attempts (default: 2)" \
     "  --imu-source MODE      auto, raw, or filtered (default: auto)" \
+    "  --robot0-lidar-source TOPIC" \
+    "                         Recorded PointCloud2 topic for r0" \
+    "  --robot0-imu-source TOPIC" \
+    "                         Recorded raw Imu topic for r0" \
+    "  --robot1-lidar-source TOPIC" \
+    "                         Recorded PointCloud2 topic for r1" \
+    "  --robot1-imu-source TOPIC" \
+    "                         Recorded raw Imu topic for r1" \
     "  --launch-arg NAME:=VALUE" \
     "                         Additional two_live_mapping launch argument; repeatable" \
     "  --loop                 Replay continuously until Ctrl-C" \
@@ -100,6 +112,26 @@ while (($# > 0)); do
       imu_source="$2"
       shift 2
       ;;
+    --robot0-lidar-source)
+      (($# >= 2)) || die "--robot0-lidar-source requires a topic"
+      robot0_lidar_source="$2"
+      shift 2
+      ;;
+    --robot0-imu-source)
+      (($# >= 2)) || die "--robot0-imu-source requires a topic"
+      robot0_imu_source="$2"
+      shift 2
+      ;;
+    --robot1-lidar-source)
+      (($# >= 2)) || die "--robot1-lidar-source requires a topic"
+      robot1_lidar_source="$2"
+      shift 2
+      ;;
+    --robot1-imu-source)
+      (($# >= 2)) || die "--robot1-imu-source requires a topic"
+      robot1_imu_source="$2"
+      shift 2
+      ;;
     --launch-arg)
       (($# >= 2)) || die "--launch-arg requires NAME:=VALUE"
       [[ "$2" == *:=* ]] || die "--launch-arg must use NAME:=VALUE syntax"
@@ -151,6 +183,14 @@ case "${imu_source}" in
   auto|raw|filtered) ;;
   *) die "--imu-source must be auto, raw, or filtered" ;;
 esac
+for source_topic in \
+  "${robot0_lidar_source}" \
+  "${robot0_imu_source}" \
+  "${robot1_lidar_source}" \
+  "${robot1_imu_source}"; do
+  [[ -z "${source_topic}" || "${source_topic}" == /* ]] ||
+    die "source topics must be absolute: ${source_topic}"
+done
 
 metadata="${bag}/metadata.yaml"
 [[ -r "${metadata}" ]] || die "bag metadada is not readable: ${metadata}"
@@ -159,11 +199,37 @@ topic_metadata() {
   local metadata_path="$1"
   local wanted_topic="$2"
   awk -v wanted_topic="${wanted_topic}" '
-    $1 == "name:" { current_topic = $2 }
-    $1 == "type:" && current_topic == wanted_topic { message_type = $2 }
-    $1 == "message_count:" && current_topic == wanted_topic {
-      print message_type, $2
-      exit
+    function emit_if_complete() {
+      if (current_topic == wanted_topic && message_type != "" && message_count != "") {
+        print message_type, message_count
+        exit
+      }
+    }
+    $1 == "-" && $2 == "topic_metadata:" {
+      current_topic = ""
+      message_type = ""
+      message_count = ""
+      next
+    }
+    $1 == "-" && $2 == "message_count:" {
+      current_topic = ""
+      message_type = ""
+      message_count = $3
+      next
+    }
+    $1 == "name:" {
+      current_topic = $2
+      emit_if_complete()
+      next
+    }
+    $1 == "type:" {
+      message_type = $2
+      emit_if_complete()
+      next
+    }
+    $1 == "message_count:" {
+      message_count = $2
+      emit_if_complete()
     }
   ' "${metadata_path}"
 }
@@ -233,12 +299,24 @@ storage_identifier() {
   awk '$1 == "storage_identifier:" { print $2; exit }' "${metadata}"
 }
 
-readonly R0_LIDAR_SOURCE="/r0/livox/lidar"
-readonly R1_LIDAR_SOURCE="/r1/livox/lidar"
+readonly R0_LIDAR_SOURCE="${robot0_lidar_source}"
+readonly R1_LIDAR_SOURCE="${robot1_lidar_source}"
 r0_lidar_count="$(require_sensor_topic "${R0_LIDAR_SOURCE}" "sensor_msgs/msg/PointCloud2")"
 r1_lidar_count="$(require_sensor_topic "${R1_LIDAR_SOURCE}" "sensor_msgs/msg/PointCloud2")"
-read -r r0_imu_source r0_imu_count r0_imu_stage <<<"$(select_imu_topic 0)"
-read -r r1_imu_source r1_imu_count r1_imu_stage <<<"$(select_imu_topic 1)"
+if [[ -n "${robot0_imu_source}" ]]; then
+  r0_imu_source="${robot0_imu_source}"
+  r0_imu_count="$(require_sensor_topic "${r0_imu_source}" "sensor_msgs/msg/Imu")"
+  r0_imu_stage="raw"
+else
+  read -r r0_imu_source r0_imu_count r0_imu_stage <<<"$(select_imu_topic 0)"
+fi
+if [[ -n "${robot1_imu_source}" ]]; then
+  r1_imu_source="${robot1_imu_source}"
+  r1_imu_count="$(require_sensor_topic "${r1_imu_source}" "sensor_msgs/msg/Imu")"
+  r1_imu_stage="raw"
+else
+  read -r r1_imu_source r1_imu_count r1_imu_stage <<<"$(select_imu_topic 1)"
+fi
 
 r0_imu_input_is_filtered=false
 r1_imu_input_is_filtered=false

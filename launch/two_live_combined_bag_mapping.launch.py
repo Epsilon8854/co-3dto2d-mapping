@@ -112,6 +112,7 @@ def launch_setup(context, *args, **kwargs):
 
     alignment_topic = value(context, "alignment_topic")
     common_frame = value(context, "common_frame_id")
+    alignment_config_file = value(context, "alignment_config_file")
     alignment = Node(
         package="co_3dto2d_mapping",
         executable="initial_xy_icp_alignment.py",
@@ -173,7 +174,7 @@ def launch_setup(context, *args, **kwargs):
                 context, "alignment_initialize_from_centroids"
             ),
             "use_sim_time": False,
-        }],
+        }] + ([alignment_config_file] if alignment_config_file else []),
     )
     actions.insert(0, alignment)
 
@@ -221,6 +222,7 @@ DEFAULTS = {
     "slice_z_in_cloud_frame": "true",
     "common_frame_id": "map",
     "alignment_topic": "/toy/initial_xy_alignment",
+    "alignment_config_file": "",
     "alignment_startup_delay_sec": "3.0",
     "alignment_z_min": "0.4",
     "alignment_z_max": "0.8",
@@ -248,22 +250,15 @@ DEFAULTS = {
     "record_publish_merged_global": "true",
 }
 for robot_id in (0, 1):
-    DEFAULTS.update({
-        f"sensor_tf_x_{robot_id}": "0",
-        f"sensor_tf_y_{robot_id}": "0",
-        f"sensor_tf_z_{robot_id}": "0",
-        f"sensor_tf_yaw_{robot_id}": "0",
-        f"sensor_tf_pitch_{robot_id}": "0",
-        f"sensor_tf_roll_{robot_id}": "3.141592653589793",
-    })
+    for component in ("x", "y", "z", "yaw", "pitch"):
+        DEFAULTS[f"sensor_tf_{component}_{robot_id}"] = "0"
+    DEFAULTS[f"sensor_tf_roll_{robot_id}"] = "3.141592653589793"
 
 
 def generate_launch_description():
     package_share = get_package_share_directory("co_3dto2d_mapping")
     defaults = dict(DEFAULTS)
-    defaults["occupancy_config_file"] = os.path.join(
-        package_share, "config", "occupancy.yaml"
-    )
+    defaults["occupancy_config_file"] = os.path.join(package_share, "config", "occupancy.yaml")
     return LaunchDescription(
         [DeclareLaunchArgument(name, default_value=default) for name, default in defaults.items()]
         + [OpaqueFunction(function=launch_setup)]

@@ -1,0 +1,142 @@
+# S3Ev1 profile: conservative cross-robot acceptance with sparse-scan support.
+#
+# Sparse evidence is accommodated before acceptance by accumulating a larger
+# local submap, using a 10 cm grid, and allowing a wider correspondence search.
+# A place match is still published only when fitness/RMSE pass strict gates and
+# four consecutive estimates agree within 12 cm and 2 degrees.
+
+/**:
+  ros__parameters:
+    scan_cloud_topic: "/livox/lidar"
+    odom_topic: "odom"
+    local_frame_id: "base_link"
+    global_frame_id: "odom"
+
+    # Coarser cells turn isolated Velodyne returns into a more connected map.
+    grid_resolution: 0.10
+    local_map_size_m: 30.0
+    z_min: -1000.0
+    z_max: 1000.0
+    slice_in_global_frame: false
+    slice_z_in_cloud_frame: true
+    invert_z_slice: false
+    log_z_slice_stats: false
+    publish_slice_debug_points: true
+    slice_debug_points_max_points: 80000
+    transform_cloud_to_local_frame: true
+    center_box_filter_half_extent_m: 0.80
+    range_min_m: 0.80
+    range_max_m: 20.0
+    enable_raycast_free_space: true
+    raycast_free_value: 0
+    raycast_occupied_value: 100
+    raycast_unknown_value: -1
+    raycast_max_range_m: 20.0
+    raycast_min_range_m: 0.80
+    raycast_clear_occupied: false
+    occupied_threshold_points: 1
+
+    # Two observations retain sparse structure while rejecting one-frame noise.
+    dynamic_filter_enabled: true
+    dynamic_free_clear_count: 5
+    dynamic_occupied_confirm_count: 2
+    dynamic_counter_decay: 1
+    dynamic_evidence_timeout_frames: 50
+
+    # Longer scan-to-submap history compensates for low spatial density.
+    enable_local_window_icp: true
+    icp_window_size: 15
+    icp_min_window_frames: 4
+    icp_voxel_size_m: 0.15
+    icp_min_source_points: 50
+    icp_max_source_points: 1600
+    icp_max_submap_points: 10000
+    icp_max_iterations: 16
+    icp_max_correspondence_distance_m: 0.60
+    icp_min_correspondences: 35
+    icp_min_overlap_ratio: 0.15
+    icp_trim_ratio: 0.70
+    icp_max_rmse_m: 0.16
+    icp_max_rmse_increase_m: 0.005
+    icp_correction_gain: 0.60
+    icp_max_correction_translation_m: 0.25
+    icp_max_correction_yaw_deg: 5.0
+    icp_reset_translation_jump_m: 1.50
+    icp_reset_yaw_jump_deg: 35.0
+    icp_coarse_translation_range_m: 0.15
+    icp_coarse_translation_step_m: 0.05
+    icp_coarse_rotation_range_deg: 3.0
+    icp_coarse_rotation_step_deg: 1.0
+    icp_log_period_ms: 2000
+    publish_corrected_odometry: true
+    corrected_odometry_topic: "toy/planar_odometry"
+
+    ground_plane_pose_enabled: true
+    ground_plane_pointcloud_topic: "/livox/lidar"
+    ground_plane_imu_topic: "/livox/imu_filtered"
+    ground_plane_planar_odometry_topic: "toy/planar_odometry"
+    ground_plane_output_odometry_topic: "toy/corrected_odometry"
+    ground_plane_local_frame_id: "base_link"
+    ground_plane_height_filter_enabled: true
+    ground_plane_filtered_cloud_topic: "mapping/plane_height_filtered"
+    ground_plane_filter_min_height_m: 0.05
+    ground_plane_filter_max_height_m: 1.00
+    ground_plane_filtered_cloud_min_points: 15
+    ground_plane_filtered_cloud_log_period_ms: 2000
+
+    ground_plane_gravity_source: "orientation_then_acceleration"
+    ground_plane_imu_timeout_sec: 0.50
+    ground_plane_acceleration_min_mps2: 6.0
+    ground_plane_acceleration_max_mps2: 13.0
+    ground_plane_acceleration_blend: 0.15
+    ground_plane_sync_queue_size: 40
+    ground_plane_sync_slop_sec: 0.10
+    ground_plane_candidate_min_range_m: 0.30
+    ground_plane_candidate_max_range_m: 8.0
+    ground_plane_candidate_height_min_m: -2.5
+    ground_plane_candidate_height_max_m: -0.05
+    ground_plane_candidate_center_exclusion_m: 0.25
+    ground_plane_max_points: 5000
+    ground_plane_ransac_iterations: 160
+    ground_plane_distance_threshold_m: 0.05
+    ground_plane_max_normal_deviation_deg: 15.0
+    ground_plane_min_inliers: 60
+    ground_plane_min_inlier_ratio: 0.05
+    ground_plane_min_height_m: 0.05
+    ground_plane_max_height_m: 2.5
+    ground_plane_lowest_score_weight: 0.03
+    ground_plane_random_seed: 7
+    ground_plane_filter_gain: 0.25
+    ground_plane_max_height_jump_m: 0.20
+    ground_plane_max_tilt_jump_deg: 10.0
+    ground_plane_hold_timeout_sec: 1.50
+    ground_plane_state_reset_timeout_sec: 5.0
+    ground_plane_z_mode: "height_above_plane"
+    ground_plane_reference_z_m: 0.0
+    ground_plane_z_offset_m: 0.0
+    ground_plane_z_stddev_min_m: 0.02
+    ground_plane_orientation_stddev_rad: 0.03
+    ground_plane_log_period_ms: 2000
+
+    publish_period_ms: 200
+    global_map_padding_m: 8.0
+    sync_queue_size: 120
+
+/initial_xy_icp_alignment:
+  ros__parameters:
+    # Sparse support: retain broad evidence before applying strict gates.
+    voxel_size: 0.10
+    max_points: 20000
+    max_correspondence_distance: 0.90
+    min_correspondences: 60
+    max_iterations: 100
+    occupied_threshold: 50
+    initialize_from_centroids: true
+
+    # Strict place-match acceptance.
+    min_fitness: 0.30
+    max_rmse: 0.25
+    required_consistent_results: 4
+    max_consistency_translation_m: 0.12
+    max_consistency_rotation_rad: 0.03490658503988659
+    lock_after_first_alignment: true

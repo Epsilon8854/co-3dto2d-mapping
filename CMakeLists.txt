@@ -216,6 +216,12 @@ if(BUILD_TESTING)
   )
 
   ament_add_pytest_test(
+    test_s3ev1_runner
+    test/test_s3ev1_runner.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
+  ament_add_pytest_test(
     test_visualization_utils
     test/test_visualization_utils.py
     PYTHON_EXECUTABLE /usr/bin/python3

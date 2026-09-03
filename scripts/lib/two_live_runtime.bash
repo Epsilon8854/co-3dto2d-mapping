@@ -1,5 +1,5 @@
 ros_setup="${ROS_SETUP:-}"
-if [[ -z "${ros_setup}" && -n "${ROS_DISTRO:-}" && -r "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
+if [[ -z "${ros_setup}" && "${ROS_VERSION:-}" == "2" && -n "${ROS_DISTRO:-}" && -r "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
   ros_setup="/opt/ros/${ROS_DISTRO}/setup.bash"
 fi
 if [[ -z "${ros_setup}" ]]; then
