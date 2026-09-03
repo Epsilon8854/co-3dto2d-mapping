@@ -163,6 +163,31 @@ class GravityPlaneHeightCloudFusion(GravityPlanePoseFusion):
                 "non-negative"
             )
 
+    def _accept_or_hold_plane(
+        self,
+        result: Optional[PlaneFitResult],
+        stamp_ns: int,
+        input_pose_z_m: float,
+    ) -> Tuple[Optional[np.ndarray], Optional[float], str]:
+        # rosbag replay can restart or seek to an earlier epoch. A negative
+        # timestamp delta must never satisfy the parent's hold-time condition,
+        # otherwise a stale floor from the previous replay can leak into the
+        # new map. Reset before delegating to the common temporal gate.
+        if (
+            self._last_plane_stamp_ns is not None
+            and stamp_ns > 0
+            and stamp_ns < self._last_plane_stamp_ns
+        ):
+            self.get_logger().warn(
+                "Resetting shared floor state after a non-monotonic cloud timestamp."
+            )
+            self._clear_plane_state()
+        return super()._accept_or_hold_plane(
+            result,
+            stamp_ns,
+            input_pose_z_m,
+        )
+
     def _fit_current_floor(
         self,
         local_points: np.ndarray,
