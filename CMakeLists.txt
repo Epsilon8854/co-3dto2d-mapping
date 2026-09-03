@@ -10,6 +10,7 @@ find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
@@ -46,7 +47,7 @@ install(
 )
 
 # Preserve the original two-live implementation under an internal name, then
-# expose the plane-height wrapper through the existing public launch name.
+# expose the shared-floor/place-recognition wrapper through the public launch.
 install(
   FILES launch/two_live_mapping.launch.py
   DESTINATION share/${PROJECT_NAME}/launch
@@ -63,36 +64,38 @@ install(
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
+    co_3dto2d_mapping/inter_robot_place_alignment.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Keep the public pose-fusion executable name, while the installed wrapper also
-# publishes a cloud selected by signed height above the detected ground plane.
-# The implementation module remains importable through the Python package.
+# One installed node now publishes both the shared plane-height cloud and the
+# raw-or-floor-fused mapping odometry. The Python modules remain importable.
 install(
   PROGRAMS co_3dto2d_mapping/gravity_plane_height_cloud.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME gravity_plane_pose_fusion.py
 )
 
-# Keep the public executable expected by all existing launch files. In
-# cloud_initial mode it registers cropped XYZ clouds and projects the accepted
-# result to the planar x/y/yaw transform consumed by merged occupancy maps;
-# global_occupancy mode remains the legacy 2D fallback used by bag replay.
+# Retain the cropped-cloud aligner as a legacy fallback/baseline. Public live
+# and combined-bag paths select inter_robot_place_alignment.py instead.
 install(
   PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME initial_xy_icp_alignment.py
 )
 
-# Preserve temporal merged-map cleanup and prefer the final odometry composed
-# from planar x/y/yaw plus ground-plane z/roll/pitch. Raw /rN/odom remains a
-# startup fallback until the fused topic publishes.
+# Preserve the temporal selector under its implementation name. The public
+# record republisher additionally publishes both robots directly in the common
+# world frame and latches the accepted fixed alignment.
 install(
   PROGRAMS co_3dto2d_mapping/record_republisher_ground_fused.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(
+  PROGRAMS co_3dto2d_mapping/record_republisher_world.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME record_republisher.py
 )
@@ -134,6 +137,40 @@ if(BUILD_TESTING)
     test/test_alignment_utils.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_planar_transform_utils
+    test/test_planar_transform_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_occupancy_place_recognition
+    test/test_occupancy_place_recognition.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_alignment_consensus
+    test/test_alignment_consensus.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_single_floor_plane
+    test/test_single_floor_plane.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_world_frame_fusion_wiring
+    test/test_world_frame_fusion_wiring.py
+    PYTHON_EXECUTABLE /usr/bin/python3
   )
 
   ament_add_pytest_test(
