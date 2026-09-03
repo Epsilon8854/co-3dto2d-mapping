@@ -25,7 +25,10 @@ def launch_setup(context, *args, **kwargs):
     if mapping_startup_delay_sec < 0.0:
         raise RuntimeError("mapping_startup_delay_sec must be non-negative")
 
-    scan_cloud_topic = LaunchConfiguration("scan_cloud_topic").perform(context)
+    raw_scan_cloud_topic = LaunchConfiguration("scan_cloud_topic").perform(context)
+    plane_filtered_cloud_topic = LaunchConfiguration(
+        "plane_filtered_cloud_topic"
+    ).perform(context)
     imu_filtered_topic = LaunchConfiguration("imu_filtered_topic").perform(context)
     local_frame_id = LaunchConfiguration("local_frame_id").perform(context)
     occupancy_config_file = LaunchConfiguration("occupancy_config_file").perform(
@@ -37,6 +40,11 @@ def launch_setup(context, *args, **kwargs):
     corrected_odometry_topic = LaunchConfiguration(
         "corrected_odometry_topic"
     ).perform(context)
+    if raw_scan_cloud_topic == plane_filtered_cloud_topic:
+        raise RuntimeError(
+            "scan_cloud_topic and plane_filtered_cloud_topic must differ to avoid "
+            "a point-cloud feedback loop"
+        )
 
     base_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -102,7 +110,7 @@ def launch_setup(context, *args, **kwargs):
             "bag_lidar_topic": LaunchConfiguration("bag_lidar_topic").perform(
                 context
             ),
-            "scan_cloud_topic": scan_cloud_topic,
+            "scan_cloud_topic": raw_scan_cloud_topic,
             "imu_raw_topic": LaunchConfiguration("imu_raw_topic").perform(context),
             "imu_filtered_topic": imu_filtered_topic,
         }.items(),
@@ -112,6 +120,33 @@ def launch_setup(context, *args, **kwargs):
         LaunchConfiguration("use_sim_time").perform(context).lower() == "true"
     )
 
+    # Plane fitting consumes the uncut 3-D cloud and publishes a local-frame
+    # cloud containing only points 0.05-1.00 m above the detected ground plane
+    # (defaults are configurable in occupancy.yaml). It does not wait for
+    # planar odometry to publish this cloud, avoiding a dependency cycle.
+    ground_plane_pose_node = Node(
+        package="co_3dto2d_mapping",
+        executable="gravity_plane_pose_fusion.py",
+        name="gravity_plane_pose_fusion",
+        namespace=namespace,
+        output="screen",
+        parameters=[
+            occupancy_config_file,
+            {
+                "ground_plane_pointcloud_topic": raw_scan_cloud_topic,
+                "ground_plane_filtered_cloud_topic": plane_filtered_cloud_topic,
+                "ground_plane_imu_topic": imu_filtered_topic,
+                "ground_plane_planar_odometry_topic": planar_odometry_topic,
+                "ground_plane_output_odometry_topic": corrected_odometry_topic,
+                "ground_plane_local_frame_id": local_frame_id,
+                "use_sim_time": use_sim_time,
+            },
+        ],
+    )
+
+    # The mapper receives an already plane-relative cloud. The old fixed
+    # z_min/z_max/invert_z slice is explicitly opened to a pass-through band so
+    # it cannot remove points according to sensor-frame height.
     mapper_node = Node(
         package="co_3dto2d_mapping",
         executable="occupancy_mapper",
@@ -121,7 +156,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             occupancy_config_file,
             {
-                "scan_cloud_topic": scan_cloud_topic,
+                "scan_cloud_topic": plane_filtered_cloud_topic,
                 "odom_topic": "odom",
                 "local_frame_id": local_frame_id,
                 "global_frame_id": LaunchConfiguration("global_frame_id").perform(
@@ -142,23 +177,18 @@ def launch_setup(context, *args, **kwargs):
                 "alignment_topic": LaunchConfiguration("alignment_topic").perform(
                     context
                 ),
-                "transform_cloud_to_local_frame": (
-                    LaunchConfiguration("transform_cloud_to_local_frame")
-                    .perform(context)
-                    .lower()
-                    == "true"
-                ),
+                "transform_cloud_to_local_frame": True,
                 "center_box_filter_half_extent_m": float(
                     LaunchConfiguration("center_box_filter_half_extent_m").perform(
                         context
                     )
                 ),
-                "slice_z_in_cloud_frame": (
-                    LaunchConfiguration("slice_z_in_cloud_frame")
-                    .perform(context)
-                    .lower()
-                    == "true"
-                ),
+                "slice_in_global_frame": False,
+                "slice_z_in_cloud_frame": True,
+                "invert_z_slice": False,
+                "z_min": -1000.0,
+                "z_max": 1000.0,
+                "log_z_slice_stats": False,
                 "publish_corrected_odometry": True,
                 "corrected_odometry_topic": planar_odometry_topic,
                 "use_sim_time": use_sim_time,
@@ -166,26 +196,7 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
-    ground_plane_pose_node = Node(
-        package="co_3dto2d_mapping",
-        executable="gravity_plane_pose_fusion.py",
-        name="gravity_plane_pose_fusion",
-        namespace=namespace,
-        output="screen",
-        parameters=[
-            occupancy_config_file,
-            {
-                "ground_plane_pointcloud_topic": scan_cloud_topic,
-                "ground_plane_imu_topic": imu_filtered_topic,
-                "ground_plane_planar_odometry_topic": planar_odometry_topic,
-                "ground_plane_output_odometry_topic": corrected_odometry_topic,
-                "ground_plane_local_frame_id": local_frame_id,
-                "use_sim_time": use_sim_time,
-            },
-        ],
-    )
-
-    mapping_actions = [mapper_node, ground_plane_pose_node]
+    mapping_actions = [ground_plane_pose_node, mapper_node]
     if mapping_startup_delay_sec > 0.0:
         return [
             base_launch,
@@ -246,7 +257,13 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "center_box_filter_half_extent_m", default_value="0.80"
             ),
+            # Kept only for CLI compatibility. The active mapper receives an
+            # already plane-filtered cloud and no longer uses this fixed-Z mode.
             DeclareLaunchArgument("slice_z_in_cloud_frame", default_value="true"),
+            DeclareLaunchArgument(
+                "plane_filtered_cloud_topic",
+                default_value="mapping/plane_height_filtered",
+            ),
             DeclareLaunchArgument(
                 "planar_odometry_topic", default_value="toy/planar_odometry"
             ),
