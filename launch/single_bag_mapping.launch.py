@@ -34,9 +34,9 @@ def launch_setup(context, *args, **kwargs):
     occupancy_config_file = LaunchConfiguration("occupancy_config_file").perform(
         context
     )
-    planar_odometry_topic = LaunchConfiguration("planar_odometry_topic").perform(
-        context
-    )
+    mapping_odometry_topic = LaunchConfiguration(
+        "mapping_odometry_topic"
+    ).perform(context)
     corrected_odometry_topic = LaunchConfiguration(
         "corrected_odometry_topic"
     ).perform(context)
@@ -44,6 +44,11 @@ def launch_setup(context, *args, **kwargs):
         raise RuntimeError(
             "scan_cloud_topic and plane_filtered_cloud_topic must differ to avoid "
             "a point-cloud feedback loop"
+        )
+    if mapping_odometry_topic in {"odom", corrected_odometry_topic}:
+        raise RuntimeError(
+            "mapping_odometry_topic must differ from raw odom and the mapper's "
+            "corrected_odometry_topic"
         )
 
     base_launch = IncludeLaunchDescription(
@@ -120,10 +125,10 @@ def launch_setup(context, *args, **kwargs):
         LaunchConfiguration("use_sim_time").perform(context).lower() == "true"
     )
 
-    # Plane fitting consumes the uncut 3-D cloud and publishes a local-frame
-    # cloud containing only points 0.05-1.00 m above the detected ground plane
-    # (defaults are configurable in occupancy.yaml). It does not wait for
-    # planar odometry to publish this cloud, avoiding a dependency cycle.
+    # The shared floor node consumes raw RTAB-Map odometry and the uncut cloud.
+    # It publishes a plane-filtered cloud and a time-matched mapping odometry.
+    # ground_plane_pose_enabled controls whether z/roll/pitch are replaced; when
+    # disabled, raw odometry is republished on the same topic for a clean ablation.
     ground_plane_pose_node = Node(
         package="co_3dto2d_mapping",
         executable="gravity_plane_pose_fusion.py",
@@ -137,17 +142,17 @@ def launch_setup(context, *args, **kwargs):
                 "ground_plane_pointcloud_topic": raw_scan_cloud_topic,
                 "ground_plane_filtered_cloud_topic": plane_filtered_cloud_topic,
                 "ground_plane_imu_topic": imu_filtered_topic,
-                "ground_plane_planar_odometry_topic": planar_odometry_topic,
-                "ground_plane_output_odometry_topic": corrected_odometry_topic,
+                "ground_plane_planar_odometry_topic": "odom",
+                "ground_plane_output_odometry_topic": mapping_odometry_topic,
                 "ground_plane_local_frame_id": local_frame_id,
                 "use_sim_time": use_sim_time,
             },
         ],
     )
 
-    # The mapper receives an already plane-relative cloud. The old fixed
-    # z_min/z_max/invert_z slice is explicitly opened to a pass-through band so
-    # it cannot remove points according to sensor-frame height.
+    # The mapper now receives the exact odometry state produced from the same
+    # plane observation as the filtered cloud. Local-window ICP only refines
+    # x/y/yaw and publishes the final mapping pose directly.
     mapper_node = Node(
         package="co_3dto2d_mapping",
         executable="occupancy_mapper",
@@ -158,7 +163,7 @@ def launch_setup(context, *args, **kwargs):
             occupancy_config_file,
             {
                 "scan_cloud_topic": plane_filtered_cloud_topic,
-                "odom_topic": "odom",
+                "odom_topic": mapping_odometry_topic,
                 "local_frame_id": local_frame_id,
                 "global_frame_id": LaunchConfiguration("global_frame_id").perform(
                     context
@@ -191,7 +196,7 @@ def launch_setup(context, *args, **kwargs):
                 "z_max": 1000.0,
                 "log_z_slice_stats": False,
                 "publish_corrected_odometry": True,
-                "corrected_odometry_topic": planar_odometry_topic,
+                "corrected_odometry_topic": corrected_odometry_topic,
                 "use_sim_time": use_sim_time,
             },
         ],
@@ -265,6 +270,12 @@ def generate_launch_description():
                 "plane_filtered_cloud_topic",
                 default_value="mapping/plane_height_filtered",
             ),
+            DeclareLaunchArgument(
+                "mapping_odometry_topic",
+                default_value="mapping/floor_odometry",
+            ),
+            # Deprecated compatibility argument. The mapper now publishes the
+            # final pose directly on corrected_odometry_topic.
             DeclareLaunchArgument(
                 "planar_odometry_topic", default_value="toy/planar_odometry"
             ),
