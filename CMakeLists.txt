@@ -10,6 +10,7 @@ find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
@@ -46,7 +47,7 @@ install(
 )
 
 # Preserve the original two-live implementation under an internal name, then
-# expose the plane-height wrapper through the existing public launch name.
+# expose the plane-height/place-recognition wrapper through the public launch.
 install(
   FILES launch/two_live_mapping.launch.py
   DESTINATION share/${PROJECT_NAME}/launch
@@ -63,6 +64,7 @@ install(
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
+    co_3dto2d_mapping/inter_robot_place_alignment.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
@@ -79,9 +81,9 @@ install(
 )
 
 # Keep the previous cropped-XYZ implementation executable for diagnostics, but
-# expose the odom-aware wrapper through the public name used by launch files.
-# The wrapper composes r0/base<-r1/base ICP with both planar odometry poses so
-# its published transform is actually map(r0/odom)<-r1/odom.
+# expose the odom-aware wrapper through the legacy public name. The two-live
+# public launch now selects inter_robot_place_alignment.py instead; bag and
+# diagnostic launch paths can continue to use this fallback.
 install(
   PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
   DESTINATION lib/${PROJECT_NAME}
@@ -92,7 +94,7 @@ install(
   RENAME initial_xy_icp_alignment.py
 )
 
-# Preserve the ground-fused selector under its implementation name.  The public
+# Preserve the ground-fused selector under its implementation name. The public
 # record_republisher executable adds stable alignment latching and publishes
 # /toy_record/rN/odom directly in the shared common/world frame.
 install(
@@ -147,6 +149,20 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_planar_transform_utils
     test/test_planar_transform_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_occupancy_place_recognition
+    test/test_occupancy_place_recognition.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_alignment_consensus
+    test/test_alignment_consensus.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )
