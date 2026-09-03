@@ -65,7 +65,7 @@ def test_record_republisher_prefers_fresh_ground_fused_pose_with_raw_fallback():
     assert "self._refresh_odometry_selection()" in wrapper
 
 
-def test_two_live_public_launch_aligns_plane_filtered_clouds():
+def test_two_live_public_launch_keeps_plane_filter_and_uses_occupancy_alignment():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     wrapper = (
         PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
@@ -73,5 +73,6 @@ def test_two_live_public_launch_aligns_plane_filtered_clouds():
     assert "RENAME two_live_mapping_base.launch.py" in cmake
     assert "RENAME two_live_mapping.launch.py" in cmake
     assert 'filtered_topic = "/r%d%s"' in wrapper
-    assert 'name == "alignment_use_z_filter"' in wrapper
-    assert "return False" in wrapper
+    assert 'rewritten["executable"] = "inter_robot_place_alignment.py"' in wrapper
+    assert '"config", "place_recognition.yaml"' in wrapper
+    assert "_BASE.Node = _place_recognition_node" in wrapper
