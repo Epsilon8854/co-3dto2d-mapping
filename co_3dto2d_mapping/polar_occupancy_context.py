@@ -1,8 +1,8 @@
 """Rotation-aware polar place descriptors for 2-D occupancy submaps.
 
-This is a CPU-only adaptation of the Scan Context retrieval idea. Instead of
+This is a CPU-only adaptation of the Scan Context retrieval idea.  Instead of
 maximum point height, each ring-sector bin stores occupied-boundary density,
-free-space ratio and observed-area ratio. The ring key is rotation invariant;
+free-space ratio and observed-area ratio.  The ring key is rotation invariant;
 the full descriptor is circularly shifted to estimate relative yaw.
 """
 
@@ -37,9 +37,7 @@ class PolarContextConfig:
         if not np.isfinite(max_radius_m) or max_radius_m <= 0.0:
             raise ValueError("max_radius_m must be positive and finite")
         if num_rings < 2 or num_sectors < 8:
-            raise ValueError(
-                "polar descriptor needs at least 2 rings and 8 sectors"
-            )
+            raise ValueError("polar descriptor needs at least 2 rings and 8 sectors")
         weights = (
             self.occupied_channel_weight,
             self.free_channel_weight,
@@ -47,12 +45,8 @@ class PolarContextConfig:
             self.valid_difference_weight,
             self.common_area_penalty_weight,
         )
-        if not all(
-            np.isfinite(value) and value >= 0.0 for value in weights
-        ):
-            raise ValueError(
-                "descriptor weights must be finite and non-negative"
-            )
+        if not all(np.isfinite(value) and value >= 0.0 for value in weights):
+            raise ValueError("descriptor weights must be finite and non-negative")
         return PolarContextConfig(
             max_radius_m=max_radius_m,
             num_rings=num_rings,
@@ -61,12 +55,8 @@ class PolarContextConfig:
             free_channel_weight=float(self.free_channel_weight),
             minimum_common_weight=float(self.minimum_common_weight),
             valid_difference_weight=float(self.valid_difference_weight),
-            common_area_penalty_weight=float(
-                self.common_area_penalty_weight
-            ),
-            recenter_on_occupied_centroid=bool(
-                self.recenter_on_occupied_centroid
-            ),
+            common_area_penalty_weight=float(self.common_area_penalty_weight),
+            recenter_on_occupied_centroid=bool(self.recenter_on_occupied_centroid),
         )
 
 
@@ -98,23 +88,19 @@ def _polar_bins(
         empty = np.empty(0, dtype=np.int64)
         return empty, empty.copy()
     radius = np.hypot(values[:, 0], values[:, 1])
-    angle = np.mod(
-        np.arctan2(values[:, 1], values[:, 0]), 2.0 * math.pi
-    )
+    angle = np.mod(np.arctan2(values[:, 1], values[:, 0]), 2.0 * math.pi)
     valid = (radius >= 0.0) & (radius < config.max_radius_m)
-    ring = np.floor(
-        radius[valid] / config.max_radius_m * config.num_rings
-    ).astype(np.int64)
-    sector = np.floor(
-        angle[valid] / (2.0 * math.pi) * config.num_sectors
-    ).astype(np.int64)
+    ring = np.floor(radius[valid] / config.max_radius_m * config.num_rings).astype(
+        np.int64
+    )
+    sector = np.floor(angle[valid] / (2.0 * math.pi) * config.num_sectors).astype(
+        np.int64
+    )
     return ring, sector
 
 
 def _counts(points: np.ndarray, config: PolarContextConfig) -> np.ndarray:
-    result = np.zeros(
-        (config.num_rings, config.num_sectors), dtype=np.float64
-    )
+    result = np.zeros((config.num_rings, config.num_sectors), dtype=np.float64)
     ring, sector = _polar_bins(points, config)
     if ring.size:
         np.add.at(result, (ring, sector), 1.0)
@@ -132,18 +118,12 @@ def build_polar_context(
     center = np.zeros(2, dtype=np.float64)
     if config.recenter_on_occupied_centroid and len(patch.boundary_points):
         center = np.median(np.asarray(patch.boundary_points), axis=0)
-    occupied_counts = _counts(
-        np.asarray(patch.boundary_points) - center, config
-    )
+    occupied_counts = _counts(np.asarray(patch.boundary_points) - center, config)
     free_counts = _counts(np.asarray(patch.free_points) - center, config)
     known_counts = _counts(np.asarray(patch.known_points) - center, config)
 
-    ring_edges = np.linspace(
-        0.0, config.max_radius_m, config.num_rings + 1
-    )
-    ring_area = math.pi * (
-        ring_edges[1:] ** 2 - ring_edges[:-1] ** 2
-    )
+    ring_edges = np.linspace(0.0, config.max_radius_m, config.num_rings + 1)
+    ring_area = math.pi * (ring_edges[1:] ** 2 - ring_edges[:-1] ** 2)
     expected_cells = (
         ring_area[:, None]
         / float(config.num_sectors)
@@ -151,9 +131,7 @@ def build_polar_context(
     )
     expected_cells = np.maximum(expected_cells, 1.0)
 
-    occupied_density = np.log1p(occupied_counts) / np.log1p(
-        expected_cells
-    )
+    occupied_density = np.log1p(occupied_counts) / np.log1p(expected_cells)
     occupied_density = np.clip(occupied_density, 0.0, 1.0)
     free_ratio = np.divide(
         free_counts,
@@ -180,9 +158,7 @@ def build_polar_context(
         where=valid_sum > 0.0,
     )
     observed_ring = np.mean(valid_ratio, axis=1)
-    ring_key = np.stack(
-        (occupied_ring, free_ring, observed_ring), axis=-1
-    )
+    ring_key = np.stack((occupied_ring, free_ring, observed_ring), axis=-1)
     return PolarContext(
         descriptor=descriptor,
         ring_key=ring_key.astype(np.float32).reshape(-1),
@@ -190,14 +166,11 @@ def build_polar_context(
 
 
 def ring_key_distance(left: PolarContext, right: PolarContext) -> float:
-    left_key = np.asarray(left.ring_key, dtype=np.float64).reshape(-1)
-    right_key = np.asarray(right.ring_key, dtype=np.float64).reshape(-1)
-    if left_key.shape != right_key.shape:
+    a = np.asarray(left.ring_key, dtype=np.float64).reshape(-1)
+    b = np.asarray(right.ring_key, dtype=np.float64).reshape(-1)
+    if a.shape != b.shape:
         raise ValueError("ring keys must have the same shape")
-    return float(
-        np.linalg.norm(left_key - right_key)
-        / math.sqrt(max(1, left_key.size))
-    )
+    return float(np.linalg.norm(a - b) / math.sqrt(max(1, a.size)))
 
 
 def match_polar_context(
@@ -217,9 +190,7 @@ def match_polar_context(
         config.num_sectors,
         3,
     ):
-        raise ValueError(
-            "descriptor shape does not match the supplied config"
-        )
+        raise ValueError("descriptor shape does not match the supplied config")
 
     channel_scale = np.asarray(
         [config.occupied_channel_weight, config.free_channel_weight],
@@ -228,10 +199,7 @@ def match_polar_context(
     target_features = target_descriptor[..., :2] * channel_scale
     target_valid = target_descriptor[..., 2]
     best = ContextMatch(
-        distance=float("inf"),
-        yaw_rad=0.0,
-        sector_shift=0,
-        common_weight=0.0,
+        distance=float("inf"), yaw_rad=0.0, sector_shift=0, common_weight=0.0
     )
 
     for shift in range(config.num_sectors):
@@ -244,44 +212,26 @@ def match_polar_context(
             continue
 
         numerator = float(
-            np.sum(
-                weights[..., None]
-                * target_features
-                * source_features
-            )
+            np.sum(weights[..., None] * target_features * source_features)
         )
         target_energy = float(
-            np.sum(
-                weights[..., None]
-                * target_features
-                * target_features
-            )
+            np.sum(weights[..., None] * target_features * target_features)
         )
         source_energy = float(
-            np.sum(
-                weights[..., None]
-                * source_features
-                * source_features
-            )
+            np.sum(weights[..., None] * source_features * source_features)
         )
-        denominator = math.sqrt(
-            max(0.0, target_energy * source_energy)
-        )
+        denominator = math.sqrt(max(0.0, target_energy * source_energy))
         cosine = numerator / denominator if denominator > 1e-12 else 0.0
         cosine = min(1.0, max(-1.0, cosine))
         valid_difference = float(
-            np.sum(weights * np.abs(target_valid - source_valid))
-            / common_weight
+            np.sum(weights * np.abs(target_valid - source_valid)) / common_weight
         )
-        common_fraction = common_weight / float(
-            config.num_rings * config.num_sectors
-        )
+        common_fraction = common_weight / float(config.num_rings * config.num_sectors)
         distance = (
             1.0
             - cosine
             + config.valid_difference_weight * valid_difference
-            + config.common_area_penalty_weight
-            * (1.0 - min(1.0, common_fraction))
+            + config.common_area_penalty_weight * (1.0 - min(1.0, common_fraction))
         )
         if distance < best.distance:
             yaw = normalize_angle(
