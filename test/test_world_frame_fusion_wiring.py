@@ -31,3 +31,14 @@ def test_public_record_republisher_outputs_stable_common_frame_odometry():
     assert "suppress_unaligned_world_odometry" in implementation
     assert "lock_world_alignment" in implementation
     assert "output.header.frame_id = self.common_frame_id" in implementation
+
+
+def test_remote_and_local_alignment_use_the_same_filtered_cloud_type():
+    wrapper = (
+        PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
+    ).read_text()
+
+    assert "_plane_height_node" in wrapper
+    assert 'parameter_set["robot0_cloud_topic"] = "/r0%s"' in wrapper
+    assert 'parameter_set["robot1_cloud_topic"] = "/r1%s"' in wrapper
+    assert "_BASE.Node = _plane_height_node" in wrapper
