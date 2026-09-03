@@ -6,12 +6,16 @@
     global_frame_id: "odom"
     grid_resolution: 0.05
     local_map_size_m: 20.0
-    z_min: 0.4
-    z_max: 0.8
+
+    # Legacy fixed-Z slicing is intentionally pass-through in the default
+    # pipeline. gravity_plane_pose_fusion.py publishes an already filtered
+    # cloud using signed height above the detected ground plane.
+    z_min: -1000.0
+    z_max: 1000.0
     slice_in_global_frame: false
     slice_z_in_cloud_frame: true
-    invert_z_slice: true
-    log_z_slice_stats: true
+    invert_z_slice: false
+    log_z_slice_stats: false
     publish_slice_debug_points: true
     slice_debug_points_max_points: 80000
     transform_cloud_to_local_frame: true
@@ -36,9 +40,9 @@
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 30
 
-    # Scan-to-submap ICP. The current scan is matched against a submap made
-    # from the most recent corrected frames; raw odometry supplies the initial
-    # motion estimate and remains the fallback whenever quality gates fail.
+    # Scan-to-submap ICP. The current plane-filtered scan is matched against a
+    # submap made from the most recent corrected frames; raw odometry supplies
+    # the initial motion estimate and remains the fallback on quality failure.
     enable_local_window_icp: true
     icp_window_size: 10
     icp_min_window_frames: 3
@@ -80,6 +84,16 @@
     ground_plane_output_odometry_topic: "toy/corrected_odometry"
     ground_plane_local_frame_id: "base_link"
 
+    # This is the active mapping-height filter. The output contains points
+    # between 5 cm and exactly 1.00 m above the detected plane. No fixed sensor
+    # Z interval and no invert_z logic is used by the default mapper path.
+    ground_plane_height_filter_enabled: true
+    ground_plane_filtered_cloud_topic: "mapping/plane_height_filtered"
+    ground_plane_filter_min_height_m: 0.05
+    ground_plane_filter_max_height_m: 1.00
+    ground_plane_filtered_cloud_min_points: 20
+    ground_plane_filtered_cloud_log_period_ms: 2000
+
     # orientation: world-up from the filtered IMU quaternion
     # acceleration: normalized accelerometer specific force (+g at rest)
     # orientation_then_acceleration: preferred default with acceleration fallback
@@ -112,7 +126,8 @@
     ground_plane_random_seed: 7
 
     # Temporal gates prevent a table top, a sparse frame, or an IMU spike from
-    # abruptly changing z/roll/pitch. A short hold bridges temporary dropouts.
+    # abruptly changing z/roll/pitch or the mapping-height filter. A short hold
+    # bridges temporary plane-fitting dropouts.
     ground_plane_filter_gain: 0.25
     ground_plane_max_height_jump_m: 0.20
     ground_plane_max_tilt_jump_deg: 10.0
