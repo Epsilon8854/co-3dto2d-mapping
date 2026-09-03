@@ -19,6 +19,8 @@ import message_filters
 import numpy as np
 import rclpy
 from nav_msgs.msg import Odometry
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rclpy.time import Time
@@ -30,6 +32,7 @@ from co_3dto2d_mapping.gravity_plane_utils import (
     PlaneFitResult,
     blend_unit_vectors,
     estimate_gravity_constrained_plane,
+    imu_timestamp_is_usable,
     normalize_vector,
     pose_z_from_plane,
     quaternion_from_rpy,
@@ -54,11 +57,13 @@ class GravityPlanePoseFusion(Node):
         )
         self._imu_lock = threading.Lock()
         self._latest_imu: Optional[Imu] = None
+        self._imu_callback_group = MutuallyExclusiveCallbackGroup()
         self._imu_subscription = self.create_subscription(
             Imu,
             self.imu_topic,
             self._imu_callback,
             qos_profile_sensor_data,
+            callback_group=self._imu_callback_group,
         )
 
         self._tf_buffer = Buffer()
@@ -355,12 +360,10 @@ class GravityPlanePoseFusion(Node):
 
         cloud_stamp_ns = self._stamp_ns(cloud_stamp)
         imu_stamp_ns = self._stamp_ns(imu.header.stamp)
-        if (
-            self.imu_timeout_sec > 0.0
-            and cloud_stamp_ns > 0
-            and imu_stamp_ns > 0
-            and abs(cloud_stamp_ns - imu_stamp_ns)
-            > int(self.imu_timeout_sec * 1e9)
+        if not imu_timestamp_is_usable(
+            cloud_stamp_ns,
+            imu_stamp_ns,
+            self.imu_timeout_sec,
         ):
             return None
 
@@ -690,9 +693,12 @@ class GravityPlanePoseFusion(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = GravityPlanePoseFusion()
+    executor = MultiThreadedExecutor(num_threads=2)
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     finally:
+        executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()
 

@@ -21,6 +21,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 import rclpy
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import PointCloud2, PointField
 
@@ -361,9 +362,12 @@ class GravityPlaneHeightCloudFusion(GravityPlanePoseFusion):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = GravityPlaneHeightCloudFusion()
+    executor = MultiThreadedExecutor(num_threads=2)
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     finally:
+        executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()
 

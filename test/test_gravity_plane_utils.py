@@ -7,6 +7,7 @@ from co_3dto2d_mapping.gravity_plane_utils import (
     PlaneFitConfig,
     blend_unit_vectors,
     estimate_gravity_constrained_plane,
+    imu_timestamp_is_usable,
     pose_z_from_plane,
     quaternion_from_rpy,
     roll_pitch_from_up,
@@ -28,6 +29,14 @@ def test_imu_orientation_recovers_world_up_in_sensor_frame() -> None:
     expected = _world_from_body(roll, pitch, yaw).T @ np.asarray([0.0, 0.0, 1.0])
     measured = up_from_world_orientation(orientation)
     assert np.allclose(measured, expected, atol=1e-9)
+
+
+def test_newer_imu_sample_remains_usable_when_cloud_processing_lags() -> None:
+    assert imu_timestamp_is_usable(1_000_000_000, 3_000_000_000, 0.3)
+
+
+def test_older_imu_sample_is_rejected_after_timeout() -> None:
+    assert not imu_timestamp_is_usable(3_000_000_000, 1_000_000_000, 0.3)
 
 
 def test_roll_pitch_are_recovered_from_plane_normal_independent_of_yaw() -> None:

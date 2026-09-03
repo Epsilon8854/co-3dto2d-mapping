@@ -64,6 +64,18 @@ def vector_angle(left: Sequence[float], right: Sequence[float]) -> float:
     return math.acos(cosine)
 
 
+def imu_timestamp_is_usable(
+    cloud_stamp_ns: int,
+    imu_stamp_ns: int,
+    timeout_sec: float,
+) -> bool:
+    """Reject only IMU samples that are older than the cloud beyond timeout."""
+
+    if timeout_sec <= 0.0 or cloud_stamp_ns <= 0 or imu_stamp_ns <= 0:
+        return True
+    return cloud_stamp_ns - imu_stamp_ns <= int(timeout_sec * 1e9)
+
+
 def normalize_quaternion(quaternion_xyzw: Sequence[float]) -> np.ndarray:
     q = np.asarray(quaternion_xyzw, dtype=np.float64).reshape(4)
     norm = float(np.linalg.norm(q))

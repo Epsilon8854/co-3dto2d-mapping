@@ -130,6 +130,7 @@ def launch_setup(context, *args, **kwargs):
         name="gravity_plane_pose_fusion",
         namespace=namespace,
         output="screen",
+        remappings=[("tf", "/tf"), ("tf_static", "/tf_static")],
         parameters=[
             occupancy_config_file,
             {

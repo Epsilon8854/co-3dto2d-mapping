@@ -25,6 +25,11 @@ def test_single_mapping_uses_plane_filtered_cloud_for_mapper():
     assert missing == []
 
 
+def test_namespaced_ground_plane_node_uses_global_tf_topics():
+    text = (PACKAGE / "launch" / "single_bag_mapping.launch.py").read_text()
+    assert 'remappings=[("tf", "/tf"), ("tf_static", "/tf_static")]' in text
+
+
 def test_default_config_uses_one_meter_plane_height_band():
     text = (PACKAGE / "config" / "occupancy.yaml").read_text()
     assert 'corrected_odometry_topic: "toy/planar_odometry"' in text
