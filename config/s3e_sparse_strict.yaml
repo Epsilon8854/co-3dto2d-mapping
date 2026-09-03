@@ -38,8 +38,8 @@
 
     # Two observations retain sparse structure while rejecting one-frame noise.
     dynamic_filter_enabled: true
-    dynamic_free_clear_count: 5
-    dynamic_occupied_confirm_count: 2
+    dynamic_free_clear_count: 10
+    dynamic_occupied_confirm_count: 1
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 50
 
