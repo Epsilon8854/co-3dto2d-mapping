@@ -1,7 +1,7 @@
 """Extract frozen robot-centric 2-D occupancy submaps from growing grids.
 
 The functions in this module intentionally do not depend on ROS message types so
-that the geometry can be unit tested without a ROS runtime. A global
+that the geometry can be unit tested without a ROS runtime.  A global
 OccupancyGrid is represented by its dense data array plus ``GridGeometry``.
 """
 
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from typing import Tuple
 
 import numpy as np
 
@@ -52,7 +53,7 @@ class GridGeometry:
 
 @dataclass(frozen=True)
 class LocalOccupancyPatch:
-    """A frozen circular submap expressed in a keyframe-local frame."""
+    """A frozen circular submap expressed in a keyframe-local coordinate frame."""
 
     grid: np.ndarray
     resolution: float
@@ -73,12 +74,7 @@ class LocalOccupancyPatch:
         return int(self.known_points.shape[0])
 
 
-def _cell_centers(
-    mask: np.ndarray,
-    resolution: float,
-    origin_x: float,
-    origin_y: float,
-) -> np.ndarray:
+def _cell_centers(mask: np.ndarray, resolution: float, origin_x: float, origin_y: float) -> np.ndarray:
     rows, cols = np.nonzero(mask)
     if rows.size == 0:
         return np.empty((0, 2), dtype=np.float64)
@@ -90,10 +86,13 @@ def _cell_centers(
     )
 
 
-def occupied_boundary_mask(
-    grid: np.ndarray, occupied_threshold: int = 50
-) -> np.ndarray:
-    """Return four-connected occupied boundary cells."""
+def occupied_boundary_mask(grid: np.ndarray, occupied_threshold: int = 50) -> np.ndarray:
+    """Return four-connected occupied boundary cells.
+
+    An occupied cell is a boundary when at least one cardinal neighbor is not
+    occupied.  The padded exterior is non-occupied, so walls touching the patch
+    edge remain available for registration.
+    """
 
     values = np.asarray(grid)
     if values.ndim != 2:
@@ -122,7 +121,7 @@ def extract_local_patch(
 
     ``map_from_keyframe`` maps keyframe-local coordinates to the source map.
     The returned patch is centered at the keyframe origin and aligned with the
-    keyframe yaw. Unknown cells remain unknown and occupied observations win
+    keyframe yaw.  Unknown cells remain unknown and occupied observations win
     only when multiple input cells quantize into the same output cell.
     """
 
@@ -131,9 +130,7 @@ def extract_local_patch(
     if not np.isfinite(radius_m) or radius_m <= 0.0:
         raise ValueError("radius_m must be a positive finite value")
     resolution = (
-        geometry.resolution
-        if output_resolution is None
-        else float(output_resolution)
+        geometry.resolution if output_resolution is None else float(output_resolution)
     )
     if not np.isfinite(resolution) or resolution <= 0.0:
         raise ValueError("output_resolution must be a positive finite value")
@@ -196,12 +193,12 @@ def extract_local_patch(
         local_x = local_x[inside]
         local_y = local_y[inside]
         cell_values = values[rows[inside], cols[inside]]
-        patch_cols = np.floor(
-            (local_x - patch_origin_x) / resolution
-        ).astype(np.int64)
-        patch_rows = np.floor(
-            (local_y - patch_origin_y) / resolution
-        ).astype(np.int64)
+        patch_cols = np.floor((local_x - patch_origin_x) / resolution).astype(
+            np.int64
+        )
+        patch_rows = np.floor((local_y - patch_origin_y) / resolution).astype(
+            np.int64
+        )
         valid = (
             (patch_cols >= 0)
             & (patch_cols < size)
@@ -217,18 +214,9 @@ def extract_local_patch(
         occupied = ~free
         patch[patch_rows[occupied], patch_cols[occupied]] = OCCUPIED
 
-    center_x = (
-        patch_origin_x
-        + (np.arange(size, dtype=np.float64) + 0.5) * resolution
-    )
-    center_y = (
-        patch_origin_y
-        + (np.arange(size, dtype=np.float64) + 0.5) * resolution
-    )
-    circle = (
-        center_y[:, None] ** 2 + center_x[None, :] ** 2
-        <= radius_m * radius_m
-    )
+    center_x = patch_origin_x + (np.arange(size, dtype=np.float64) + 0.5) * resolution
+    center_y = patch_origin_y + (np.arange(size, dtype=np.float64) + 0.5) * resolution
+    circle = center_y[:, None] ** 2 + center_x[None, :] ** 2 <= radius_m * radius_m
     patch[~circle] = UNKNOWN
 
     boundary = occupied_boundary_mask(patch, occupied_threshold)
@@ -257,7 +245,7 @@ def extract_local_patch(
 
 
 def sample_points(points: np.ndarray, maximum: int) -> np.ndarray:
-    """Deterministically limit a point array without prefix bias."""
+    """Deterministically limit a point array without biasing to its prefix."""
 
     values = np.asarray(points, dtype=np.float64)
     if values.ndim != 2 or values.shape[1:] != (2,):
