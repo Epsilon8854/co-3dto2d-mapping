@@ -6,15 +6,16 @@ PACKAGE = Path(__file__).resolve().parents[1]
 
 
 def test_public_two_live_launch_uses_configured_initial_alignment():
+    base = (PACKAGE / "launch" / "two_live_mapping.launch.py").read_text()
     wrapper = (
         PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
     ).read_text()
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
 
-    assert "_configured_initial_alignment_node" in wrapper
-    assert "_config_aware_launch_setup" in wrapper
-    assert 'rewritten["parameters"] = [config_file, runtime_overrides]' in wrapper
-    assert "_ALIGNMENT_CONFIG_PARAMETERS" in wrapper
+    assert 'parameters=[\n                    occupancy_config_file,' in base
+    assert "_alignment_parameters(" in base
+    assert 'default_value=""' in base
+    assert "_load_base_module" in wrapper
     assert "_place_recognition_node" not in wrapper
     assert "inter_robot_place_alignment.py" not in wrapper
     assert "co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py" in cmake
