@@ -1,15 +1,14 @@
 /**:
   ros__parameters:
     scan_cloud_topic: "/livox/lidar"
-    odom_topic: "odom"
+    odom_topic: "mapping/floor_odometry"
     local_frame_id: "base_link"
     global_frame_id: "odom"
     grid_resolution: 0.05
     local_map_size_m: 20.0
 
-    # Legacy fixed-Z slicing is intentionally pass-through in the default
-    # pipeline. gravity_plane_pose_fusion.py publishes an already filtered
-    # cloud using signed height above the detected ground plane.
+    # The mapper receives a cloud already selected by signed height above the
+    # shared floor plane. The legacy fixed-Z slice is therefore pass-through.
     z_min: -1000.0
     z_max: 1000.0
     slice_in_global_frame: false
@@ -39,9 +38,8 @@
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 30
 
-    # Scan-to-submap ICP. The current plane-filtered scan is matched against a
-    # submap made from the most recent corrected frames; raw odometry supplies
-    # the initial motion estimate and remains the fallback on quality failure.
+    # Scan-to-submap ICP refines only x/y/yaw. The input odometry already carries
+    # the shared floor-derived z/roll/pitch when ground_plane_pose_enabled=true.
     enable_local_window_icp: true
     icp_window_size: 10
     icp_min_window_frames: 3
@@ -67,6 +65,7 @@
     icp_coarse_rotation_step_deg: 1.0
     icp_log_period_ms: 2000
     publish_corrected_odometry: true
+    corrected_odometry_topic: "toy/corrected_odometry"
 
     # The occupancy mapper produces the planar x/y/yaw estimate on this
     # intermediate topic. gravity_plane_pose_fusion.py adds z/roll/pitch and
@@ -78,19 +77,24 @@
     ground_plane_pose_enabled: false
     ground_plane_pointcloud_topic: "/livox/lidar"
     ground_plane_imu_topic: "/livox/imu_filtered"
-    ground_plane_planar_odometry_topic: "toy/planar_odometry"
-    ground_plane_output_odometry_topic: "toy/corrected_odometry"
+    ground_plane_planar_odometry_topic: "odom"
+    ground_plane_output_odometry_topic: "mapping/floor_odometry"
     ground_plane_local_frame_id: "base_link"
 
-    # This is the active mapping-height filter. The output contains points
-    # between 5 cm and exactly 1.00 m above the detected plane. No fixed sensor
-    # Z interval and no invert_z logic is used by the default mapper path.
     ground_plane_height_filter_enabled: true
     ground_plane_filtered_cloud_topic: "mapping/plane_height_filtered"
     ground_plane_filter_min_height_m: 0.05
     ground_plane_filter_max_height_m: 1.00
     ground_plane_filtered_cloud_min_points: 20
     ground_plane_filtered_cloud_log_period_ms: 2000
+
+    # The default assumes one approximately horizontal floor. The IMU fixes the
+    # plane normal and a robust 1-D mode search estimates only the floor offset.
+    # ransac preserves the previous gravity-constrained 3-D fit for ablations.
+    ground_plane_estimation_mode: "single_floor"
+    ground_plane_single_floor_bin_size_m: 0.025
+    ground_plane_single_floor_lowest_support_ratio: 0.55
+    ground_plane_single_floor_prior_tolerance_m: 0.15
 
     # orientation: world-up from the filtered IMU quaternion
     # acceleration: normalized accelerometer specific force (+g at rest)
@@ -104,8 +108,8 @@
     ground_plane_sync_queue_size: 30
     ground_plane_sync_slop_sec: 0.08
 
-    # Candidate points are selected in a gravity-aligned local coordinate
-    # system. Height values are signed along up; ground is normally negative.
+    # Candidate points are selected in a gravity-aligned local coordinate system.
+    # Ground is below the base origin, hence the negative signed-height interval.
     ground_plane_candidate_min_range_m: 0.30
     ground_plane_candidate_max_range_m: 6.0
     ground_plane_candidate_height_min_m: -2.5
@@ -113,9 +117,11 @@
     ground_plane_candidate_center_exclusion_m: 0.25
     ground_plane_max_points: 4000
 
-    ground_plane_ransac_iterations: 120
+    # Used only when ground_plane_estimation_mode="ransac". The tighter normal
+    # gate encodes the same flat, single-floor assumption.
+    ground_plane_ransac_iterations: 80
     ground_plane_distance_threshold_m: 0.04
-    ground_plane_max_normal_deviation_deg: 18.0
+    ground_plane_max_normal_deviation_deg: 8.0
     ground_plane_min_inliers: 80
     ground_plane_min_inlier_ratio: 0.08
     ground_plane_min_height_m: 0.05
@@ -123,18 +129,17 @@
     ground_plane_lowest_score_weight: 0.03
     ground_plane_random_seed: 7
 
-    # Temporal gates prevent a table top, a sparse frame, or an IMU spike from
-    # abruptly changing z/roll/pitch or the mapping-height filter. A short hold
-    # bridges temporary plane-fitting dropouts.
+    # One shared temporal state feeds both filtering and pose fusion. Short holds
+    # bridge sparse scans without fitting the same raw cloud twice.
     ground_plane_filter_gain: 0.25
-    ground_plane_max_height_jump_m: 0.20
-    ground_plane_max_tilt_jump_deg: 10.0
+    ground_plane_max_height_jump_m: 0.15
+    ground_plane_max_tilt_jump_deg: 6.0
     ground_plane_hold_timeout_sec: 0.75
     ground_plane_state_reset_timeout_sec: 3.0
 
-    # height_above_plane: z = reference plane z + measured base height + offset
-    # relative_to_initial: preserve initial odom z and use plane-height changes
-    # passthrough: retain planar odometry z while still replacing roll/pitch
+    # Under the single-floor assumption, height_above_plane gives the base height
+    # in the floor-fixed world. relative_to_initial and passthrough remain for
+    # controlled ablations.
     ground_plane_z_mode: "height_above_plane"
     ground_plane_reference_z_m: 0.0
     ground_plane_z_offset_m: 0.0
