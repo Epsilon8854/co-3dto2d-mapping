@@ -113,9 +113,11 @@ def test_two_live_public_wrapper_uses_raw_clouds_and_occupancy_config_for_alignm
     wrapper = (
         PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
     ).read_text()
+    base = (PACKAGE / "launch" / "two_live_mapping.launch.py").read_text()
     assert "RENAME two_live_mapping_base.launch.py" in cmake
     assert "RENAME two_live_mapping.launch.py" in cmake
-    assert "_configured_initial_alignment_node" in wrapper
-    assert 'rewritten["parameters"] = [config_file, runtime_overrides]' in wrapper
+    assert "_load_base_module" in wrapper
+    assert 'parameters=[\n                    occupancy_config_file,' in base
+    assert "_alignment_parameters(" in base
     assert "filtered_topic" not in wrapper
     assert "_place_recognition_node" not in wrapper
