@@ -66,7 +66,30 @@ def _load_base_module():
 _BASE = _load_base_module()
 _ORIGINAL_LAUNCH_SETUP = _BASE.launch_setup
 _ORIGINAL_NODE = _BASE.Node
+_ORIGINAL_DECLARE_LAUNCH_ARGUMENT = _BASE.DeclareLaunchArgument
 _ACTIVE_OCCUPANCY_CONFIG: Optional[str] = None
+
+
+_PUBLIC_ALIGNMENT_ARGUMENT_DEFAULTS = {
+    "alignment_use_z_filter": "false",
+    "alignment_z_min": "-1000.0",
+    "alignment_z_max": "1000.0",
+    "alignment_invert_z_slice": "false",
+}
+
+
+def _configured_launch_argument(name, *args, **kwargs):
+    """Expose non-inverted public defaults even though the base is retained."""
+
+    if name in _PUBLIC_ALIGNMENT_ARGUMENT_DEFAULTS:
+        replacement = _PUBLIC_ALIGNMENT_ARGUMENT_DEFAULTS[name]
+        positional = list(args)
+        if positional:
+            positional[0] = replacement
+        else:
+            kwargs["default_value"] = replacement
+        args = tuple(positional)
+    return _ORIGINAL_DECLARE_LAUNCH_ARGUMENT(name, *args, **kwargs)
 
 
 def _config_aware_launch_setup(context, *args, **kwargs):
@@ -108,6 +131,7 @@ def _configured_initial_alignment_node(*args, **kwargs):
 
 _BASE.launch_setup = _config_aware_launch_setup
 _BASE.Node = _configured_initial_alignment_node
+_BASE.DeclareLaunchArgument = _configured_launch_argument
 
 
 def generate_launch_description():
