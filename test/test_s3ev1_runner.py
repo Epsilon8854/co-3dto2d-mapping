@@ -9,6 +9,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 COMBINED_RUNNER = REPOSITORY_ROOT / "scripts" / "run_two_live_combined_bag.sh"
 S3EV1_RUNNER = REPOSITORY_ROOT / "scripts" / "run_s3ev1_mapping.sh"
 S3EV1_CONFIG = REPOSITORY_ROOT / "config" / "s3e_sparse_strict.yaml"
+DEFAULT_CONFIG = REPOSITORY_ROOT / "config" / "occupancy.yaml"
 
 
 def _write_metadata(
@@ -136,7 +137,7 @@ def test_s3ev1_profile_is_strict_while_accepting_sparse_evidence() -> None:
         "profile = yaml.safe_load(open(sys.argv[1], encoding='utf-8')); "
         "occupancy = profile['/**']['ros__parameters']; "
         "alignment = profile['/initial_xy_icp_alignment']['ros__parameters']; "
-        "print(" 
+        "print("
         "alignment['min_fitness'] >= 0.25, "
         "alignment['max_rmse'] <= 0.25, "
         "alignment['required_consistent_results'] >= 3, "
@@ -144,7 +145,9 @@ def test_s3ev1_profile_is_strict_while_accepting_sparse_evidence() -> None:
         "alignment['max_correspondence_distance'] >= 0.75, "
         "occupancy['grid_resolution'] >= 0.10, "
         "occupancy['icp_window_size'] >= 12, "
-        "occupancy['ground_plane_min_inliers'] <= 60"
+        "occupancy['ground_plane_min_inliers'] <= 60, "
+        "occupancy['dynamic_filter_enabled'] is False, "
+        "occupancy['ground_plane_pose_enabled'] is False"
         ")"
     )
 
@@ -156,9 +159,44 @@ def test_s3ev1_profile_is_strict_while_accepting_sparse_evidence() -> None:
         text=True,
     )
 
-    # Then: strict acceptance and sparse-input accommodations are both active.
+    # Then: strict sparse-input settings remain, with feature ablations off.
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "True True True True True True True True"
+    assert result.stdout.strip() == (
+        "True True True True True True True True True True"
+    )
+
+
+def test_master_baseline_defaults_disable_dynamic_and_plane_pose() -> None:
+    inspection = (
+        "import sys, yaml; "
+        "profile = yaml.safe_load(open(sys.argv[1], encoding='utf-8')); "
+        "params = profile['/**']['ros__parameters']; "
+        "print(params['dynamic_filter_enabled'] is False, "
+        "params['ground_plane_pose_enabled'] is False)"
+    )
+    result = subprocess.run(
+        ["/usr/bin/python3", "-c", inspection, str(DEFAULT_CONFIG)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "True True"
+
+    mapper_parameters = (
+        REPOSITORY_ROOT
+        / "include"
+        / "co_3dto2d_mapping"
+        / "occupancy_mapper"
+        / "parameters.inc"
+    ).read_text(encoding="utf-8")
+    merged_temporal = (
+        REPOSITORY_ROOT
+        / "co_3dto2d_mapping"
+        / "record_republisher_temporal.py"
+    ).read_text(encoding="utf-8")
+    assert 'declare_parameter<bool>("dynamic_filter_enabled", false);' in mapper_parameters
+    assert 'declare_parameter("merged_temporal_filter_enabled", False)' in merged_temporal
 
 
 def test_environment_check_ignores_an_inherited_ros1_distro(
