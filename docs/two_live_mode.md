@@ -69,9 +69,10 @@ occupancy mapper는 `mapping_startup_delay_sec:=10.0` 동안 시작하지 않습
 구간은 센서와 IMU 자세 추정이 안정되기 전에 생기는 작은 변화가 odometry 원점과
 초기 지도에 누적되는 것을 막습니다.
 
-두 로봇 사이의 정렬은 이 정지 구간을 활용합니다. fusion host가 두
-`/r*/mapping/lidar` 입력을 모두 본 뒤 `alignment_startup_delay_sec:=3.0`을 기다리고,
-각 로봇에서 기본 5 frame의 cropped XYZ submap을 만듭니다. 기본값에서는 독립적인
+두 로봇 사이의 정렬은 이 정지 구간을 활용합니다. fusion host에서 각
+`/r*/mapping/lidar` 입력은 서로를 기다리지 않고, 자기 입력이 처음 보인 뒤
+`alignment_startup_delay_sec:=3.0`을 기다려 기본 5 frame의 cropped XYZ submap을
+독립적으로 만듭니다. ICP 계산만 두 submap이 모두 준비된 뒤 시작합니다. 기본값에서는 독립적인
 두 정합 결과가 0.25 m / 5도 안에서 일치해야 정렬을 확정합니다. 정상적인 경우 이
 과정은 10초 odometry warm-up이 끝나기 전에 완료되므로, 로봇은 적어도 다음 로그가
 나올 때까지 움직이지 않는 것이 안전합니다.

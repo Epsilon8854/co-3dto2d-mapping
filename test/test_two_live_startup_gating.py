@@ -135,3 +135,19 @@ def test_two_live_alignment_uses_cropped_xyz_rtabmap_clouds():
 
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     assert "co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py" in cmake
+
+
+def test_startup_icp_collects_each_robot_without_a_shared_input_gate():
+    base_aligner = (
+        PACKAGE / "co_3dto2d_mapping" / "initial_xy_icp_alignment.py"
+    ).read_text()
+    xyz_aligner = (
+        PACKAGE / "co_3dto2d_mapping" / "cropped_xyz_initial_icp_alignment.py"
+    ).read_text()
+
+    assert "input_ready_since_ns: List[Optional[int]] = [None, None]" in base_aligner
+    assert "inputs_ready_since_ns" not in base_aligner
+    assert "not all(self.input_seen)" not in base_aligner
+    assert "self._startup_delay_elapsed(0)" in base_aligner
+    assert "self._startup_delay_elapsed(1)" in base_aligner
+    assert "self._startup_delay_elapsed(robot_index)" in xyz_aligner

@@ -438,8 +438,8 @@ def generate_launch_description():
                 "alignment_startup_delay_sec",
                 default_value="3.0",
                 description=(
-                    "Settle time after both RTAB-Map cloud inputs appear before "
-                    "cropped-cloud 3D alignment samples are collected."
+                    "Per-robot settle time after each RTAB-Map cloud input appears "
+                    "before that robot's cropped-cloud samples are collected."
                 ),
             ),
             DeclareLaunchArgument("alignment_use_z_filter", default_value="true"),
