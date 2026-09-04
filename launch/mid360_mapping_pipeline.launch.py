@@ -9,29 +9,41 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _bool_value(context, name):
+    value = LaunchConfiguration(name).perform(context).strip().lower()
+    if value in _TRUE_VALUES:
+        return True
+    if value in _FALSE_VALUES:
+        return False
+    raise RuntimeError("%s must be a boolean value, got %r" % (name, value))
+
+
 def launch_setup(context, *args, **kwargs):
+    del args, kwargs
     package_share = get_package_share_directory("co_3dto2d_mapping")
     robot_id = LaunchConfiguration("robot_id").perform(context)
     namespace = "/r" + robot_id
-    use_bag = LaunchConfiguration("use_bag").perform(context).lower() == "true"
-    publish_sensor_static_tf = (
-        LaunchConfiguration("publish_sensor_static_tf").perform(context).lower() == "true"
-    )
-    enable_rear_lidar_filter = (
-        LaunchConfiguration("enable_rear_lidar_filter").perform(context).lower() == "true"
-    )
+    use_bag = _bool_value(context, "use_bag")
+    publish_sensor_static_tf = _bool_value(context, "publish_sensor_static_tf")
+    enable_rear_lidar_filter = _bool_value(context, "enable_rear_lidar_filter")
+    imu_input_is_filtered = _bool_value(context, "imu_input_is_filtered")
     scan_cloud_topic = LaunchConfiguration("scan_cloud_topic").perform(context)
+    imu_raw_topic = LaunchConfiguration("imu_raw_topic").perform(context)
     imu_filtered_topic = LaunchConfiguration("imu_filtered_topic").perform(context)
     imu_filter_output_topic = imu_filtered_topic + "_raw_frame"
+    imu_republisher_input_topic = (
+        imu_raw_topic if imu_input_is_filtered else imu_filter_output_topic
+    )
     bag_lidar_topic = (
         LaunchConfiguration("bag_lidar_topic").perform(context)
         if enable_rear_lidar_filter
         else scan_cloud_topic
     )
-
-    use_sim_time = (
-        LaunchConfiguration("use_sim_time").perform(context).lower() == "true"
-    )
+    use_sim_time = _bool_value(context, "use_sim_time")
 
     imu_filter_node = Node(
         package="imu_filter_madgwick",
@@ -50,7 +62,7 @@ def launch_setup(context, *args, **kwargs):
             }
         ],
         remappings=[
-            ("imu/data_raw", LaunchConfiguration("imu_raw_topic").perform(context)),
+            ("imu/data_raw", imu_raw_topic),
             ("imu/data", imu_filter_output_topic),
         ],
     )
@@ -63,9 +75,11 @@ def launch_setup(context, *args, **kwargs):
         output="screen",
         parameters=[
             {
-                "input_topic": imu_filter_output_topic,
+                "input_topic": imu_republisher_input_topic,
                 "output_topic": imu_filtered_topic,
-                "output_frame_id": LaunchConfiguration("sensor_child_frame").perform(context),
+                "output_frame_id": LaunchConfiguration("sensor_child_frame").perform(
+                    context
+                ),
                 "use_sim_time": use_sim_time,
             }
         ],
@@ -92,7 +106,9 @@ def launch_setup(context, *args, **kwargs):
                 "log_period": int(
                     LaunchConfiguration("rear_filter_log_period").perform(context)
                 ),
-                "output_frame_id": LaunchConfiguration("sensor_child_frame").perform(context),
+                "output_frame_id": LaunchConfiguration("sensor_child_frame").perform(
+                    context
+                ),
                 "use_sim_time": use_sim_time,
             }
         ],
@@ -111,15 +127,24 @@ def launch_setup(context, *args, **kwargs):
             "frame_id": LaunchConfiguration("sensor_parent_frame").perform(context),
             "odom_topic": "odom",
             "scan_cloud_topic": scan_cloud_topic,
-            "imu_topic": LaunchConfiguration("imu_filtered_topic").perform(context),
-            "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(context),
-            "expected_update_rate": LaunchConfiguration("expected_update_rate").perform(context),
+            "imu_topic": imu_filtered_topic,
+            "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(
+                context
+            ),
+            "expected_update_rate": LaunchConfiguration(
+                "expected_update_rate"
+            ).perform(context),
+            "startup_delay_sec": LaunchConfiguration(
+                "mapping_startup_delay_sec"
+            ).perform(context),
             "publish_tf": LaunchConfiguration("publish_tf_odom").perform(context),
             "use_sim_time": LaunchConfiguration("use_sim_time").perform(context),
         }.items(),
     )
 
-    actions = [imu_filter_node, imu_frame_republisher_node, odom_proc]
+    actions = [imu_frame_republisher_node, odom_proc]
+    if not imu_input_is_filtered:
+        actions.insert(0, imu_filter_node)
     if use_bag:
         actions.insert(
             0,
@@ -136,8 +161,10 @@ def launch_setup(context, *args, **kwargs):
                     "rate": LaunchConfiguration("rate").perform(context),
                     "storage_id": LaunchConfiguration("storage_id").perform(context),
                     "lidar_topic": bag_lidar_topic,
-                    "imu_topic": LaunchConfiguration("imu_raw_topic").perform(context),
-                    "play_tf_static": LaunchConfiguration("play_tf_static").perform(context),
+                    "imu_topic": imu_raw_topic,
+                    "play_tf_static": LaunchConfiguration("play_tf_static").perform(
+                        context
+                    ),
                 }.items(),
             ),
         )
@@ -185,10 +212,9 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
-            DeclareLaunchArgument(
-                "bag_path",
-                default_value="",
-            ),
+            DeclareLaunchArgument("mapping_startup_delay_sec", default_value="0.0"),
+            DeclareLaunchArgument("imu_input_is_filtered", default_value="false"),
+            DeclareLaunchArgument("bag_path", default_value=""),
             DeclareLaunchArgument("rate", default_value="1.0"),
             DeclareLaunchArgument("storage_id", default_value="sqlite3"),
             DeclareLaunchArgument("enable_rear_lidar_filter", default_value="true"),

@@ -6,9 +6,10 @@ Panels:
       Expanded:
         - /Global Options1
         - /Global Occupancy1
-        - /Odometry1
+        - /Final Ground-Fused Odometry1
+        - /Plane-Relative Obstacle Cloud1
       Splitter Ratio: 0.5
-    Tree Height: 241
+    Tree Height: 520
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -33,7 +34,7 @@ Visualization Manager:
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
-      Name: Grid
+      Name: Ground Grid
       Normal Cell Count: 0
       Offset:
         X: 0
@@ -43,10 +44,10 @@ Visualization Manager:
       Plane Cell Count: 40
       Reference Frame: <Fixed Frame>
       Value: true
-    - Alpha: 0.5
+    - Alpha: 0.65
       Class: rviz_default_plugins/Map
       Color Scheme: map
-      Draw Behind: false
+      Draw Behind: true
       Enabled: true
       Name: Global Occupancy
       Topic:
@@ -63,11 +64,11 @@ Visualization Manager:
         Value: true
       Use Timestamp: false
       Value: true
-    - Alpha: 0.35
+    - Alpha: 0.3
       Class: rviz_default_plugins/Map
       Color Scheme: map
       Draw Behind: false
-      Enabled: true
+      Enabled: false
       Name: Local Occupancy
       Topic:
         Depth: 5
@@ -82,12 +83,50 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: true
       Use Timestamp: false
-      Value: true
-    - Angle Tolerance: 0.10000000149011612
+      Value: false
+    - Angle Tolerance: 0.05
       Class: rviz_default_plugins/Odometry
       Covariance:
         Orientation:
-          Alpha: 0.5
+          Alpha: 0.35
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.25
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Keep: 500
+      Name: Final Ground-Fused Odometry
+      Position Tolerance: 0.03
+      Shape:
+        Alpha: 1
+        Axes Length: 0.6
+        Axes Radius: 0.04
+        Color: 0; 200; 255
+        Head Length: 0.2
+        Head Radius: 0.08
+        Shaft Length: 0.6
+        Shaft Radius: 0.035
+        Value: Axes
+      Topic:
+        Depth: 50
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /r0/toy/corrected_odometry
+      Value: true
+    - Angle Tolerance: 0.1
+      Class: rviz_default_plugins/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.2
           Color: 255; 255; 127
           Color Style: Unique
           Frame: Local
@@ -95,24 +134,62 @@ Visualization Manager:
           Scale: 1
           Value: false
         Position:
-          Alpha: 0.3
+          Alpha: 0.2
           Color: 204; 51; 204
           Scale: 1
           Value: false
         Value: false
-      Enabled: true
+      Enabled: false
       Keep: 500
-      Name: Odometry
-      Position Tolerance: 0.05000000074505806
+      Name: Planar x-y-yaw Odometry
+      Position Tolerance: 0.05
       Shape:
-        Alpha: 1
-        Axes Length: 1
-        Axes Radius: 0.10000000149011612
-        Color: 255; 25; 0
-        Head Length: 0.30000001192092896
-        Head Radius: 0.10000000149011612
-        Shaft Length: 1
-        Shaft Radius: 0.05000000074505806
+        Alpha: 0.8
+        Axes Length: 0.5
+        Axes Radius: 0.03
+        Color: 255; 210; 0
+        Head Length: 0.2
+        Head Radius: 0.07
+        Shaft Length: 0.5
+        Shaft Radius: 0.03
+        Value: Arrow
+      Topic:
+        Depth: 50
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /r0/toy/planar_odometry
+      Value: false
+    - Angle Tolerance: 0.1
+      Class: rviz_default_plugins/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.2
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: false
+        Position:
+          Alpha: 0.2
+          Color: 204; 51; 204
+          Scale: 1
+          Value: false
+        Value: false
+      Enabled: false
+      Keep: 500
+      Name: Raw RTAB-Map Odometry
+      Position Tolerance: 0.05
+      Shape:
+        Alpha: 0.6
+        Axes Length: 0.5
+        Axes Radius: 0.03
+        Color: 255; 70; 70
+        Head Length: 0.2
+        Head Radius: 0.07
+        Shaft Length: 0.5
+        Shaft Radius: 0.03
         Value: Arrow
       Topic:
         Depth: 50
@@ -120,41 +197,41 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /r0/odom
-      Value: true
-    - Alpha: 1
-      Autocompute Intensity Bounds: true
+      Value: false
+    - Alpha: 0.95
+      Autocompute Intensity Bounds: false
       Autocompute Value Bounds:
-        Max Value: 10
-        Min Value: -10
+        Max Value: 1
+        Min Value: 0
         Value: true
       Axis: Z
       Channel Name: intensity
       Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: Intensity
-      Decay Time: 0
+      Color: 0; 230; 170
+      Color Transformer: FlatColor
+      Decay Time: 0.15
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 4096
+      Max Intensity: 1
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: Livox PointCloud
+      Name: Plane-Relative Obstacle Cloud (0.05-1.00m)
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
-      Size (m): 0.009999999776482582
+      Size (m): 0.025
       Style: Flat Squares
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /livox/lidar
+        Reliability Policy: Best Effort
+        Value: /r0/mapping/plane_height_filtered
       Use Fixed Frame: true
-      Use rainbow: true
+      Use rainbow: false
       Value: true
-    - Alpha: 1
+    - Alpha: 0.25
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 10
@@ -163,20 +240,53 @@ Visualization Manager:
       Axis: Z
       Channel Name: intensity
       Class: rviz_default_plugins/PointCloud2
-      Color: 0; 255; 0
+      Color: 190; 190; 190
       Color Transformer: FlatColor
-      Decay Time: 0
+      Decay Time: 0.1
       Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: Kept Slice Points
+      Name: Raw Mapping Cloud
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 2
+      Size (m): 0.015
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /r0/mapping/lidar
+      Use Fixed Frame: true
+      Use rainbow: false
+      Value: false
+    - Alpha: 0.7
+      Autocompute Intensity Bounds: false
+      Autocompute Value Bounds:
+        Max Value: 1
+        Min Value: 0
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 210; 0
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: false
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 1
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Name: Integrated Occupancy Endpoints (debug)
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
-      Size (m): 0.009999999776482582
+      Size (m): 0.02
       Style: Flat Squares
       Topic:
         Depth: 5
@@ -185,11 +295,24 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /r0/toy/slice_kept_points
       Use Fixed Frame: true
-      Use rainbow: true
+      Use rainbow: false
+      Value: false
+    - Class: rviz_default_plugins/TF
+      Enabled: false
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+      Marker Scale: 0.5
+      Name: TF Debug
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree: {}
+      Update Interval: 0
       Value: false
   Enabled: true
   Global Options:
-    Background Color: 48; 48; 48
+    Background Color: 36; 39; 43
     Fixed Frame: odom
     Frame Rate: 30
   Name: root
@@ -230,7 +353,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 20
+      Distance: 18
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -239,16 +362,16 @@ Visualization Manager:
       Focal Point:
         X: 0
         Y: 0
-        Z: 0
+        Z: 0.5
       Focal Shape Fixed Size: true
-      Focal Shape Size: 0.05000000074505806
+      Focal Shape Size: 0.05
       Invert Z Axis: false
       Name: Current View
-      Near Clip Distance: 0.0099999997768953
-      Pitch: 1.2
+      Near Clip Distance: 0.01
+      Pitch: 1.05
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 0
+      Yaw: -1.2
     Saved: ~
 Window Geometry:
   Displays:

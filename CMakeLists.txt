@@ -45,17 +45,56 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+# Preserve the original two-live implementation under an internal name, then
+# expose the plane-height wrapper through the existing public launch name.
+install(
+  FILES launch/two_live_mapping.launch.py
+  DESTINATION share/${PROJECT_NAME}/launch
+  RENAME two_live_mapping_base.launch.py
+)
+install(
+  FILES launch/two_live_plane_height_mapping.launch.py
+  DESTINATION share/${PROJECT_NAME}/launch
+  RENAME two_live_mapping.launch.py
+)
+
 install(
   PROGRAMS
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
-    co_3dto2d_mapping/initial_xy_icp_alignment.py
-    co_3dto2d_mapping/record_republisher.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Keep the public pose-fusion executable name, while the installed wrapper also
+# publishes a cloud selected by signed height above the detected ground plane.
+# The implementation module remains importable through the Python package.
+install(
+  PROGRAMS co_3dto2d_mapping/gravity_plane_height_cloud.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME gravity_plane_pose_fusion.py
+)
+
+# Keep the public executable expected by all existing launch files. In
+# cloud_initial mode it registers cropped XYZ clouds and projects the accepted
+# result to the planar x/y/yaw transform consumed by merged occupancy maps;
+# global_occupancy mode remains the legacy 2D fallback used by bag replay.
+install(
+  PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME initial_xy_icp_alignment.py
+)
+
+# Preserve temporal merged-map cleanup and prefer the final odometry composed
+# from planar x/y/yaw plus ground-plane z/roll/pitch. Raw /rN/odom remains a
+# startup fallback until the fused topic publishes.
+install(
+  PROGRAMS co_3dto2d_mapping/record_republisher_ground_fused.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME record_republisher.py
 )
 
 if(BUILD_TESTING)
@@ -76,9 +115,84 @@ if(BUILD_TESTING)
   target_compile_features(test_occupancy_point_filter PUBLIC cxx_std_17)
   target_include_directories(test_occupancy_point_filter PRIVATE include)
 
+  ament_add_gtest(
+    test_temporal_occupancy
+    test/test_temporal_occupancy.cpp
+  )
+  target_compile_features(test_temporal_occupancy PUBLIC cxx_std_17)
+  target_include_directories(test_temporal_occupancy PRIVATE include)
+
+  ament_add_gtest(
+    test_planar_icp
+    test/test_planar_icp.cpp
+  )
+  target_compile_features(test_planar_icp PUBLIC cxx_std_17)
+  target_include_directories(test_planar_icp PRIVATE include)
+
+  ament_add_pytest_test(
+    test_alignment_utils
+    test/test_alignment_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_pointcloud_registration
+    test/test_pointcloud_registration.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_heading_constraint
+    test/test_heading_constraint.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_gravity_plane_utils
+    test/test_gravity_plane_utils.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_plane_height_filter
+    test/test_plane_height_filter.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_ground_pose_pipeline
+    test/test_ground_pose_pipeline.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
+  ament_add_pytest_test(
+    test_two_live_startup_gating
+    test/test_two_live_startup_gating.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
   ament_add_pytest_test(
     test_record_republisher
     test/test_record_republisher.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_temporal_fusion
+    test/test_temporal_fusion.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
+  ament_add_pytest_test(
+    test_record_republisher_temporal
+    test/test_record_republisher_temporal.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )
@@ -92,6 +206,18 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_two_live_bag_runner
     test/test_two_live_bag_runner.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
+  ament_add_pytest_test(
+    test_two_live_combined_bag_runner
+    test/test_two_live_combined_bag_runner.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
+  ament_add_pytest_test(
+    test_s3ev1_runner
+    test/test_s3ev1_runner.py
     PYTHON_EXECUTABLE /usr/bin/python3
   )
 

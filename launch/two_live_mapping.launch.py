@@ -106,6 +106,9 @@ def _robot_actions(
             "sensor_tf_roll": _value(context, "sensor_tf_roll_%d" % robot_id),
             "expected_update_rate": _value(context, "expected_update_rate"),
             "wait_imu_to_init": _value(context, "wait_imu_to_init"),
+            "mapping_startup_delay_sec": _value(
+                context, "mapping_startup_delay_sec"
+            ),
             "enable_rear_lidar_filter": _value(
                 context, "enable_rear_lidar_filter"
             ),
@@ -213,6 +216,12 @@ def launch_setup(context, *args, **kwargs):
             "at least one robot pipeline or the fusion pipeline must be enabled"
         )
 
+    alignment_startup_delay_sec = float(
+        _value(context, "alignment_startup_delay_sec")
+    )
+    if alignment_startup_delay_sec < 0.0:
+        raise RuntimeError("alignment_startup_delay_sec must be non-negative")
+
     robot0_scan_topic = "/r0/mapping/lidar"
     robot1_scan_topic = "/r1/mapping/lidar"
     actions = []
@@ -242,16 +251,28 @@ def launch_setup(context, *args, **kwargs):
         output="screen",
         parameters=[
             {
+                # Use exactly the PointCloud2 topics consumed by RTAB-Map.  The
+                # alignment node keeps XYZ after the same z/range/body crop.
                 "robot0_cloud_topic": robot0_scan_topic,
                 "robot1_cloud_topic": robot1_scan_topic,
                 "robot0_map_topic": "/r0/toy/global_occupancy",
                 "robot1_map_topic": "/r1/toy/global_occupancy",
-                "input_mode": "global_occupancy",
+                "input_mode": "cloud_initial",
                 "alignment_topic": alignment_topic,
                 "target_frame_id": common_frame_id,
                 "source_frame_id": "r1/odom",
-                "local_frame_id": "r0/base_link",
-                "transform_cloud_to_local_frame": False,
+                "local_frame_id": "base_link",
+                "robot0_local_frame_id": "r0/base_link",
+                "robot1_local_frame_id": "r1/base_link",
+                "transform_cloud_to_local_frame": _bool_value(
+                    context, "transform_cloud_to_local_frame"
+                ),
+                "use_z_filter": _bool_value(
+                    context, "alignment_use_z_filter"
+                ),
+                "slice_z_in_cloud_frame": _bool_value(
+                    context, "slice_z_in_cloud_frame"
+                ),
                 "z_min": float(_value(context, "alignment_z_min")),
                 "z_max": float(_value(context, "alignment_z_max")),
                 "invert_z_slice": _bool_value(
@@ -261,6 +282,12 @@ def launch_setup(context, *args, **kwargs):
                 "invert_result": _bool_value(context, "alignment_invert_result"),
                 "center_box_half_extent_m": float(
                     _value(context, "alignment_center_box_half_extent_m")
+                ),
+                "range_min_m": float(
+                    _value(context, "alignment_range_min_m")
+                ),
+                "range_max_m": float(
+                    _value(context, "alignment_range_max_m")
                 ),
                 "voxel_size": float(_value(context, "alignment_voxel_size")),
                 "max_points": int(_value(context, "alignment_max_points")),
@@ -280,6 +307,29 @@ def launch_setup(context, *args, **kwargs):
                 ),
                 "occupied_threshold": int(
                     _value(context, "alignment_occupied_threshold")
+                ),
+                "startup_delay_sec": alignment_startup_delay_sec,
+                "retry_on_failure": True,
+                "lock_after_first_alignment": _bool_value(
+                    context, "alignment_lock_after_first"
+                ),
+                "required_consistent_results": int(
+                    _value(context, "alignment_required_consistent_results")
+                ),
+                "max_consistency_translation_m": float(
+                    _value(context, "alignment_max_consistency_translation_m")
+                ),
+                "max_consistency_rotation_rad": float(
+                    _value(context, "alignment_max_consistency_rotation_rad")
+                ),
+                "initialize_from_centroids": _bool_value(
+                    context, "alignment_initialize_from_centroids"
+                ),
+                "enforce_tilt_prior": _bool_value(
+                    context, "alignment_enforce_tilt_prior"
+                ),
+                "max_tilt_deviation_rad": float(
+                    _value(context, "alignment_max_tilt_deviation_rad")
                 ),
                 "use_sim_time": False,
             }
@@ -347,6 +397,14 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
+            DeclareLaunchArgument(
+                "mapping_startup_delay_sec",
+                default_value="10.0",
+                description=(
+                    "Warm-up time before starting ICP odometry and occupancy mapping. "
+                    "The LiDAR driver and IMU filter run during this delay."
+                ),
+            ),
             DeclareLaunchArgument("publish_sensor_static_tf", default_value="true"),
             DeclareLaunchArgument("enable_rear_lidar_filter", default_value="false"),
             DeclareLaunchArgument("rear_filter_angle_deg", default_value="120.0"),
@@ -376,6 +434,15 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "alignment_topic", default_value="/toy/initial_xy_alignment"
             ),
+            DeclareLaunchArgument(
+                "alignment_startup_delay_sec",
+                default_value="3.0",
+                description=(
+                    "Settle time after both RTAB-Map cloud inputs appear before "
+                    "cropped-cloud 3D alignment samples are collected."
+                ),
+            ),
+            DeclareLaunchArgument("alignment_use_z_filter", default_value="true"),
             DeclareLaunchArgument("alignment_z_min", default_value="0.4"),
             DeclareLaunchArgument("alignment_z_max", default_value="0.8"),
             DeclareLaunchArgument(
@@ -386,8 +453,10 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "alignment_center_box_half_extent_m", default_value="0.80"
             ),
-            DeclareLaunchArgument("alignment_voxel_size", default_value="0.05"),
-            DeclareLaunchArgument("alignment_max_points", default_value="30000"),
+            DeclareLaunchArgument("alignment_range_min_m", default_value="0.80"),
+            DeclareLaunchArgument("alignment_range_max_m", default_value="12.0"),
+            DeclareLaunchArgument("alignment_voxel_size", default_value="0.10"),
+            DeclareLaunchArgument("alignment_max_points", default_value="15000"),
             DeclareLaunchArgument(
                 "alignment_max_correspondence_distance", default_value="0.75"
             ),
@@ -396,12 +465,35 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("alignment_min_fitness", default_value="0.05"),
             DeclareLaunchArgument("alignment_max_rmse", default_value="0.40"),
-            DeclareLaunchArgument("alignment_max_iterations", default_value="80"),
+            DeclareLaunchArgument("alignment_max_iterations", default_value="40"),
             DeclareLaunchArgument(
                 "alignment_recompute_period_sec", default_value="5.0"
             ),
             DeclareLaunchArgument(
                 "alignment_occupied_threshold", default_value="50"
+            ),
+            DeclareLaunchArgument(
+                "alignment_lock_after_first", default_value="true"
+            ),
+            DeclareLaunchArgument(
+                "alignment_required_consistent_results", default_value="2"
+            ),
+            DeclareLaunchArgument(
+                "alignment_max_consistency_translation_m", default_value="0.25"
+            ),
+            DeclareLaunchArgument(
+                "alignment_max_consistency_rotation_rad",
+                default_value="0.08726646259971647",
+            ),
+            DeclareLaunchArgument(
+                "alignment_initialize_from_centroids", default_value="true"
+            ),
+            DeclareLaunchArgument(
+                "alignment_enforce_tilt_prior", default_value="true"
+            ),
+            DeclareLaunchArgument(
+                "alignment_max_tilt_deviation_rad",
+                default_value="0.2617993877991494",
             ),
             DeclareLaunchArgument("enable_record_republisher", default_value="true"),
             DeclareLaunchArgument("record_publish_period_ms", default_value="200"),

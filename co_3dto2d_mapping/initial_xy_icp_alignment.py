@@ -15,6 +15,13 @@ from scipy.spatial import cKDTree
 from sensor_msgs.msg import PointCloud2, PointField
 from tf2_ros import Buffer, TransformListener
 
+from co_3dto2d_mapping.alignment_utils import (
+    PlanarCandidate,
+    angular_distance,
+    candidate_is_consistent,
+    mean_planar_candidate,
+)
+
 
 class InitialXyIcpAlignment(Node):
     def __init__(self) -> None:
@@ -47,6 +54,15 @@ class InitialXyIcpAlignment(Node):
         self.declare_parameter("convergence_translation_m", 1e-4)
         self.declare_parameter("convergence_rotation_rad", 1e-4)
         self.declare_parameter("publish_period_sec", 1.0)
+        self.declare_parameter("startup_delay_sec", 0.0)
+        self.declare_parameter("retry_on_failure", True)
+        self.declare_parameter("lock_after_first_alignment", False)
+        self.declare_parameter("required_consistent_results", 1)
+        self.declare_parameter("max_consistency_translation_m", 0.25)
+        self.declare_parameter(
+            "max_consistency_rotation_rad", math.radians(5.0)
+        )
+        self.declare_parameter("initialize_from_centroids", False)
 
         self.input_mode = str(self.get_parameter("input_mode").value)
         self.z_min = float(self.get_parameter("z_min").value)
@@ -82,6 +98,36 @@ class InitialXyIcpAlignment(Node):
         self.convergence_rotation_rad = float(
             self.get_parameter("convergence_rotation_rad").value
         )
+        self.startup_delay_sec = max(
+            0.0, float(self.get_parameter("startup_delay_sec").value)
+        )
+        self.retry_on_failure = bool(self.get_parameter("retry_on_failure").value)
+        self.lock_after_first_alignment = bool(
+            self.get_parameter("lock_after_first_alignment").value
+        )
+        self.required_consistent_results = max(
+            1, int(self.get_parameter("required_consistent_results").value)
+        )
+        self.max_consistency_translation_m = max(
+            0.0,
+            float(self.get_parameter("max_consistency_translation_m").value),
+        )
+        self.max_consistency_rotation_rad = max(
+            0.0,
+            float(self.get_parameter("max_consistency_rotation_rad").value),
+        )
+        self.initialize_from_centroids = bool(
+            self.get_parameter("initialize_from_centroids").value
+        )
+
+        if self.z_min > self.z_max:
+            raise ValueError("z_min must be <= z_max")
+        if self.max_correspondence_distance <= 0.0:
+            raise ValueError("max_correspondence_distance must be positive")
+        if not 0.0 <= self.min_fitness <= 1.0:
+            raise ValueError("min_fitness must be between 0 and 1")
+        if self.max_rmse <= 0.0:
+            raise ValueError("max_rmse must be positive")
 
         qos = QoSProfile(depth=1)
         qos.reliability = ReliabilityPolicy.RELIABLE
@@ -101,6 +147,10 @@ class InitialXyIcpAlignment(Node):
         self.alignment_msg: Optional[TransformStamped] = None
         self.failed = False
         self.last_recompute_ns = 0
+        self.input_seen = [False, False]
+        self.inputs_ready_since_ns: Optional[int] = None
+        self.startup_complete_logged = False
+        self.pending_candidates: List[PlanarCandidate] = []
         self.missing_transform_warnings = set()
         self.tf_buffer = None
         self.tf_listener = None
@@ -143,7 +193,8 @@ class InitialXyIcpAlignment(Node):
         self.get_logger().info(
             "Waiting for XY ICP alignment input_mode=%s clouds=(%s, %s) maps=(%s, %s), frame_count=%d, "
             "invert_result=%s, local_frame=%s, transform_cloud_to_local=%s, "
-            "center_box_half_extent_m=%.2f, voxel_size=%.3f, recompute_period=%.2fs"
+            "center_box_half_extent_m=%.2f, voxel_size=%.3f, recompute_period=%.2fs, "
+            "startup_delay=%.2fs, stable_results=%d, lock_after_first=%s, centroid_init=%s"
             % (
                 self.input_mode,
                 str(self.get_parameter("robot0_cloud_topic").value),
@@ -157,11 +208,42 @@ class InitialXyIcpAlignment(Node):
                 self.center_box_half_extent_m,
                 self.voxel_size,
                 self.recompute_period_sec,
+                self.startup_delay_sec,
+                self.required_consistent_results,
+                "true" if self.lock_after_first_alignment else "false",
+                "true" if self.initialize_from_centroids else "false",
             )
         )
 
+    def _mark_input_seen(self, robot_index: int) -> None:
+        self.input_seen[robot_index] = True
+        if self.inputs_ready_since_ns is not None or not all(self.input_seen):
+            return
+
+        self.inputs_ready_since_ns = self.get_clock().now().nanoseconds
+        if self.startup_delay_sec > 0.0:
+            self.get_logger().info(
+                "Both ICP inputs are available; ignoring the first %.2fs so the sensor and maps can settle."
+                % self.startup_delay_sec
+            )
+
+    def _startup_delay_elapsed(self) -> bool:
+        if self.inputs_ready_since_ns is None:
+            return False
+        elapsed_ns = max(
+            0,
+            self.get_clock().now().nanoseconds - self.inputs_ready_since_ns,
+        )
+        if elapsed_ns < int(self.startup_delay_sec * 1e9):
+            return False
+        if not self.startup_complete_logged:
+            self.startup_complete_logged = True
+            self.get_logger().info("ICP startup delay complete; alignment attempts are enabled.")
+        return True
+
     def _robot0_callback(self, msg: PointCloud2) -> None:
-        if self.robot0_points is not None:
+        self._mark_input_seen(0)
+        if not self._startup_delay_elapsed() or self.robot0_points is not None:
             return
         self.robot0_points = self._cache_initial_frame(
             "robot0", self.robot0_frames, msg
@@ -169,7 +251,8 @@ class InitialXyIcpAlignment(Node):
         self._try_compute_alignment(msg.header.stamp)
 
     def _robot1_callback(self, msg: PointCloud2) -> None:
-        if self.robot1_points is not None:
+        self._mark_input_seen(1)
+        if not self._startup_delay_elapsed() or self.robot1_points is not None:
             return
         self.robot1_points = self._cache_initial_frame(
             "robot1", self.robot1_frames, msg
@@ -178,9 +261,11 @@ class InitialXyIcpAlignment(Node):
 
     def _robot0_map_callback(self, msg: OccupancyGrid) -> None:
         self.robot0_map = msg
+        self._mark_input_seen(0)
 
     def _robot1_map_callback(self, msg: OccupancyGrid) -> None:
         self.robot1_map = msg
+        self._mark_input_seen(1)
 
     def _cache_initial_frame(
         self, robot_name: str, frames: List[np.ndarray], msg: PointCloud2
@@ -207,6 +292,12 @@ class InitialXyIcpAlignment(Node):
             % (robot_name, len(frames), len(merged))
         )
         return merged
+
+    def _reset_cloud_samples(self) -> None:
+        self.robot0_frames.clear()
+        self.robot1_frames.clear()
+        self.robot0_points = None
+        self.robot1_points = None
 
     def _lookup_cloud_to_local_transform(
         self, msg: PointCloud2
@@ -377,15 +468,17 @@ class InitialXyIcpAlignment(Node):
         translation = target_mean - rotation @ source_mean
         return rotation, translation
 
-    def _run_icp(self, target: np.ndarray, source: np.ndarray):
-        if len(target) < self.min_correspondences or len(source) < self.min_correspondences:
-            return None
-
+    def _run_icp_once(
+        self,
+        target: np.ndarray,
+        source: np.ndarray,
+        initial_translation: np.ndarray,
+        initialization_label: str,
+    ):
         tree = cKDTree(target)
         total_rotation = np.eye(2, dtype=np.float64)
-        total_translation = np.zeros(2, dtype=np.float64)
+        total_translation = initial_translation.astype(np.float64, copy=True)
         last_rmse = None
-        best = None
 
         for _ in range(self.max_iterations):
             transformed = source @ total_rotation.T + total_translation
@@ -404,9 +497,7 @@ class InitialXyIcpAlignment(Node):
             total_translation = delta_rotation @ total_translation + delta_translation
 
             rmse = float(np.sqrt(np.mean(np.square(distances[mask]))))
-            fitness = float(correspondences) / float(len(source))
             yaw_delta = math.atan2(delta_rotation[1, 0], delta_rotation[0, 0])
-            best = (total_rotation.copy(), total_translation.copy(), rmse, fitness, correspondences)
             if (
                 last_rmse is not None
                 and abs(last_rmse - rmse) < 1e-5
@@ -416,34 +507,73 @@ class InitialXyIcpAlignment(Node):
                 break
             last_rmse = rmse
 
-        return best
+        transformed = source @ total_rotation.T + total_translation
+        distances, _ = tree.query(transformed, k=1)
+        mask = distances <= self.max_correspondence_distance
+        correspondences = int(np.count_nonzero(mask))
+        if correspondences < self.min_correspondences:
+            return None
+        rmse = float(np.sqrt(np.mean(np.square(distances[mask]))))
+        fitness = float(correspondences) / float(len(source))
+        return (
+            total_rotation,
+            total_translation,
+            rmse,
+            fitness,
+            correspondences,
+            initialization_label,
+        )
 
-    def _set_alignment_from_result(
-        self, result, stamp, label: str, fail_on_reject: bool
-    ) -> None:
+    def _run_icp(self, target: np.ndarray, source: np.ndarray):
+        if len(target) < self.min_correspondences or len(source) < self.min_correspondences:
+            return None
+
+        initializations = [("identity", np.zeros(2, dtype=np.float64))]
+        if self.initialize_from_centroids:
+            centroid_translation = np.mean(target, axis=0) - np.mean(source, axis=0)
+            if np.linalg.norm(centroid_translation) > 1e-9:
+                initializations.append(("centroid", centroid_translation))
+
+        results = []
+        for label, initial_translation in initializations:
+            result = self._run_icp_once(
+                target,
+                source,
+                initial_translation,
+                label,
+            )
+            if result is not None:
+                results.append(result)
+        if not results:
+            return None
+
+        return max(results, key=lambda result: (result[3], -result[2], result[4]))
+
+    def _set_alignment_from_result(self, result, stamp, label: str) -> str:
         if result is None:
-            if fail_on_reject:
-                self.failed = True
-                log = self.get_logger().error
-            else:
-                log = self.get_logger().warn
-            log(
-                "%s XY ICP failed: not enough correspondences within %.3fm."
+            self.pending_candidates.clear()
+            self.get_logger().warn(
+                "%s XY ICP failed: not enough correspondences within %.3fm; "
+                "stability count was reset and it will be retried."
                 % (label, self.max_correspondence_distance)
             )
-            return
+            return "rejected"
 
-        raw_rotation, raw_translation, rmse, fitness, correspondences = result
+        (
+            raw_rotation,
+            raw_translation,
+            rmse,
+            fitness,
+            correspondences,
+            initialization_label,
+        ) = result
         raw_yaw = math.atan2(raw_rotation[1, 0], raw_rotation[0, 0])
         if fitness < self.min_fitness or rmse > self.max_rmse:
-            if fail_on_reject:
-                self.failed = True
-                log = self.get_logger().error
-            else:
-                log = self.get_logger().warn
-            log(
+            self.pending_candidates.clear()
+            self.get_logger().warn(
                 "%s XY ICP rejected: fitness=%.3f rmse=%.3f correspondences=%d "
-                "thresholds fitness>=%.3f rmse<=%.3f"
+                "thresholds fitness>=%.3f rmse<=%.3f; "
+                "stability count was reset and it will be retried."
                 % (
                     label,
                     fitness,
@@ -453,7 +583,7 @@ class InitialXyIcpAlignment(Node):
                     self.max_rmse,
                 )
             )
-            return
+            return "rejected"
 
         rotation = raw_rotation
         translation = raw_translation
@@ -461,36 +591,87 @@ class InitialXyIcpAlignment(Node):
             rotation = raw_rotation.T
             translation = -(rotation @ raw_translation)
         yaw = math.atan2(rotation[1, 0], rotation[0, 0])
+        candidate: PlanarCandidate = (
+            float(translation[0]),
+            float(translation[1]),
+            float(yaw),
+        )
 
+        if not candidate_is_consistent(
+            candidate,
+            self.pending_candidates,
+            self.max_consistency_translation_m,
+            self.max_consistency_rotation_rad,
+        ):
+            reference = mean_planar_candidate(self.pending_candidates)
+            translation_delta = math.hypot(
+                candidate[0] - reference[0], candidate[1] - reference[1]
+            )
+            rotation_delta = angular_distance(candidate[2], reference[2])
+            self.get_logger().warn(
+                "%s XY ICP candidate changed by %.3fm / %.2fdeg; resetting stability count."
+                % (label, translation_delta, math.degrees(rotation_delta))
+            )
+            self.pending_candidates = [candidate]
+        else:
+            self.pending_candidates.append(candidate)
+
+        if len(self.pending_candidates) < self.required_consistent_results:
+            self.get_logger().info(
+                "%s XY ICP candidate %d/%d: x=%.3f y=%.3f yaw=%.3fdeg "
+                "fitness=%.3f rmse=%.3f init=%s"
+                % (
+                    label,
+                    len(self.pending_candidates),
+                    self.required_consistent_results,
+                    candidate[0],
+                    candidate[1],
+                    math.degrees(candidate[2]),
+                    fitness,
+                    rmse,
+                    initialization_label,
+                )
+            )
+            return "pending"
+
+        published_x, published_y, published_yaw = mean_planar_candidate(
+            self.pending_candidates[-self.required_consistent_results :]
+        )
         msg = TransformStamped()
         msg.header.stamp = stamp
         msg.header.frame_id = str(self.get_parameter("target_frame_id").value)
         msg.child_frame_id = str(self.get_parameter("source_frame_id").value)
-        msg.transform.translation.x = float(translation[0])
-        msg.transform.translation.y = float(translation[1])
+        msg.transform.translation.x = published_x
+        msg.transform.translation.y = published_y
         msg.transform.translation.z = 0.0
-        msg.transform.rotation.z = math.sin(0.5 * yaw)
-        msg.transform.rotation.w = math.cos(0.5 * yaw)
+        msg.transform.rotation.z = math.sin(0.5 * published_yaw)
+        msg.transform.rotation.w = math.cos(0.5 * published_yaw)
         self.alignment_msg = msg
         self.publisher.publish(msg)
+        self.pending_candidates.clear()
         self.get_logger().info(
-            "%s XY ICP alignment accepted: raw=(x=%.3f y=%.3f yaw=%.3fdeg) "
+            "%s XY ICP alignment accepted after %d consistent result(s): "
+            "raw=(x=%.3f y=%.3f yaw=%.3fdeg) "
             "published=(x=%.3f y=%.3f yaw=%.3fdeg, inverted=%s) "
-            "fitness=%.3f rmse=%.3f correspondences=%d"
+            "fitness=%.3f rmse=%.3f correspondences=%d init=%s lock=%s"
             % (
                 label,
+                self.required_consistent_results,
                 raw_translation[0],
                 raw_translation[1],
                 math.degrees(raw_yaw),
-                translation[0],
-                translation[1],
-                math.degrees(yaw),
+                published_x,
+                published_y,
+                math.degrees(published_yaw),
                 "true" if self.invert_result else "false",
                 fitness,
                 rmse,
                 correspondences,
+                initialization_label,
+                "true" if self.lock_after_first_alignment else "false",
             )
         )
+        return "accepted"
 
     def _try_compute_alignment(self, stamp) -> None:
         if self.alignment_msg is not None or self.failed:
@@ -499,10 +680,26 @@ class InitialXyIcpAlignment(Node):
             return
 
         result = self._run_icp(self.robot0_points, self.robot1_points)
-        self._set_alignment_from_result(result, stamp, "Initial", True)
+        status = self._set_alignment_from_result(result, stamp, "Initial")
+        if status == "accepted":
+            return
+        if status == "pending" or self.retry_on_failure:
+            self._reset_cloud_samples()
+            self.get_logger().info(
+                "Collecting a fresh pair of initial cloud submaps for the next ICP attempt."
+            )
+        else:
+            self.failed = True
+            self.get_logger().error(
+                "Initial XY ICP failed and retry_on_failure is false."
+            )
 
     def _try_compute_periodic_map_alignment(self) -> None:
         if self.robot0_map is None or self.robot1_map is None:
+            return
+        if not self._startup_delay_elapsed():
+            return
+        if self.alignment_msg is not None and self.lock_after_first_alignment:
             return
 
         now = self.get_clock().now()
@@ -524,7 +721,7 @@ class InitialXyIcpAlignment(Node):
 
         result = self._run_icp(robot0_points, robot1_points)
         self._set_alignment_from_result(
-            result, now.to_msg(), "Periodic map", False
+            result, now.to_msg(), "Periodic map"
         )
 
     def _publish_alignment(self) -> None:

@@ -2,6 +2,21 @@ co_3dto2d_rerun:
   ros__parameters:
     spawn_viewer: true
     rerun_port: 9876
+
     occupancy_point_radius: 0.045
-    slice_point_radius: 0.025
     odometry_point_radius: 0.04
+    robot_axis_length_m: 0.60
+    max_trajectory_points: 5000
+
+    # Visualize the same 0.05-1.00 m plane-relative cloud consumed by the
+    # mapper. The node places this local cloud with the full ground-fused
+    # x/y/z/roll/pitch/yaw odometry before applying the inter-robot XY alignment.
+    visualize_plane_height_cloud: true
+    plane_height_cloud_topic_format: "/r{robot_id}/mapping/plane_height_filtered"
+    plane_height_point_radius: 0.025
+
+    # Legacy slice clouds are already transformed by the occupancy mapper and
+    # can be useful for diagnosis, but are disabled by default to avoid showing
+    # stale/raw-attitude endpoints beside the final ground-fused visualization.
+    visualize_legacy_slice_points: false
+    slice_point_radius: 0.025

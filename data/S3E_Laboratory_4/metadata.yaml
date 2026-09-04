@@ -1,0 +1,93 @@
+rosbag2_bagfile_information:
+  compression_format: ''
+  compression_mode: ''
+  custom_data: {}
+  duration:
+    nanoseconds: 382019425082
+  files:
+  - duration:
+      nanoseconds: 382019425082
+    message_count: 148675
+    path: S3E_Laboratory_4.db3
+    starting_time:
+      nanoseconds_since_epoch: 1662377752637000000
+  message_count: 148675
+  relative_file_paths:
+  - S3E_Laboratory_4.db3
+  starting_time:
+    nanoseconds_since_epoch: 1662377752637000000
+  storage_identifier: sqlite3
+  topics_with_message_count:
+  - message_count: 3817
+    topic_metadata:
+      name: /Alpha/left_camera/compressed
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CompressedImage
+  - message_count: 3816
+    topic_metadata:
+      name: /Alpha/right_camera/compressed
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CompressedImage
+  - message_count: 38164
+    topic_metadata:
+      name: /Alpha/imu/data
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/Imu
+  - message_count: 3817
+    topic_metadata:
+      name: /Alpha/velodyne_points
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/PointCloud2
+  - message_count: 38166
+    topic_metadata:
+      name: /Carol/imu/data
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/Imu
+  - message_count: 3817
+    topic_metadata:
+      name: /Carol/velodyne_points
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/PointCloud2
+  - message_count: 3816
+    topic_metadata:
+      name: /Carol/left_camera/compressed
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CompressedImage
+  - message_count: 3816
+    topic_metadata:
+      name: /Carol/right_camera/compressed
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CompressedImage
+  - message_count: 3803
+    topic_metadata:
+      name: /Bob/right_camera/compressed
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CompressedImage
+  - message_count: 3804
+    topic_metadata:
+      name: /Bob/left_camera/compressed
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/CompressedImage
+  - message_count: 38036
+    topic_metadata:
+      name: /Bob/imu/data
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/Imu
+  - message_count: 3803
+    topic_metadata:
+      name: /Bob/velodyne_points
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/PointCloud2
+  version: 6
