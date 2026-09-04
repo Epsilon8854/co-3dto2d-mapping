@@ -4,6 +4,9 @@
 # local submap, using a 10 cm grid, and allowing a wider correspondence search.
 # A place match is still published only when fitness/RMSE pass strict gates and
 # four consecutive estimates agree within 12 cm and 2 degrees.
+#
+# This profile follows the master baseline: temporal dynamic filtering and
+# ground-plane pose fusion are available but disabled unless explicitly enabled.
 
 /**:
   ros__parameters:
@@ -36,8 +39,8 @@
     raycast_clear_occupied: false
     occupied_threshold_points: 1
 
-    # Two observations retain sparse structure while rejecting one-frame noise.
-    dynamic_filter_enabled: true
+    # Baseline off. Enable for the dynamic-filter ablation/feature experiment.
+    dynamic_filter_enabled: false
     dynamic_free_clear_count: 10
     dynamic_occupied_confirm_count: 1
     dynamic_counter_decay: 1
@@ -71,7 +74,9 @@
     publish_corrected_odometry: true
     corrected_odometry_topic: "toy/planar_odometry"
 
-    ground_plane_pose_enabled: true
+    # Baseline off. The plane-height cloud remains available, but z/roll/pitch
+    # are passed through from planar odometry unless this switch is enabled.
+    ground_plane_pose_enabled: false
     ground_plane_pointcloud_topic: "/livox/lidar"
     ground_plane_imu_topic: "/livox/imu_filtered"
     ground_plane_planar_odometry_topic: "toy/planar_odometry"
