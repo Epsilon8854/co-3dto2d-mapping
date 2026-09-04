@@ -22,6 +22,42 @@ def test_two_live_mode_has_a_sensor_warmup_before_mapping():
     assert "TimerAction(period=startup_delay_sec" in odometry
 
 
+def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
+    public_wrapper = (
+        LAUNCH_DIR / "two_live_plane_height_mapping.launch.py"
+    ).read_text()
+
+    required_fragments = (
+        '"wait_for_initial_alignment"',
+        'default_value="true"',
+        '"startup_alignment_topic"',
+        'default_value="/toy/startup_xy_alignment"',
+        'name="startup_initial_xy_icp_alignment"',
+        '"robot0_cloud_topic": _prealignment_cloud_topic(context, 0)',
+        '"robot1_cloud_topic": _prealignment_cloud_topic(context, 1)',
+        'parameters=[occupancy_config_file, overrides]',
+        '"use_z_filter": False',
+        '"invert_z_slice": False',
+        'occupancy, "center_box_filter_half_extent_m", 0.80',
+        'occupancy, "range_min_m", 0.80',
+        'occupancy, "range_max_m", 12.0',
+        '"ros2",',
+        '"topic",',
+        '"echo",',
+        '"--once",',
+        'OnProcessExit(',
+        'odometry/mapping has not started.',
+        'starting odometry/mapping now.',
+        'inter_robot_place_alignment.py',
+    )
+    for fragment in required_fragments:
+        assert fragment in public_wrapper
+
+    cmake = (PACKAGE / "CMakeLists.txt").read_text()
+    assert "launch/two_live_plane_height_mapping.launch.py" in cmake
+    assert "RENAME two_live_mapping.launch.py" in cmake
+
+
 def test_two_live_alignment_uses_cropped_xyz_rtabmap_clouds():
     two_live = (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
     required_launch_fragments = (
