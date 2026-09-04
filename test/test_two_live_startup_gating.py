@@ -32,6 +32,10 @@ def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
         'default_value="true"',
         '"startup_alignment_topic"',
         'default_value="/toy/startup_xy_alignment"',
+        '"startup_alignment_timeout_sec"',
+        'default_value="60.0"',
+        '"startup_alignment_required_consistent_results"',
+        'default_value="1"',
         'name == "mapping_startup_delay_sec"',
         'return "0.0"',
         'name="startup_initial_xy_icp_alignment"',
@@ -43,19 +47,39 @@ def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
         'occupancy, "center_box_filter_half_extent_m", 0.80',
         'occupancy, "range_min_m", 0.80',
         'occupancy, "range_max_m", 12.0',
-        '"ros2",',
-        '"topic",',
-        '"echo",',
-        '"--once",',
-        'OnProcessExit(',
+        '"required_consistent_results": _ACTIVE_STARTUP_REQUIRED_RESULTS',
+        '"co_3dto2d_mapping.alignment_startup_gate"',
+        'EmitEvent(event=Shutdown(reason=reason))',
         'odometry/mapping has not started.',
         'starting odometry/mapping now.',
         'inter_robot_place_alignment.py',
+        'startup_alignment_gate_record_republisher',
     )
     for fragment in required_fragments:
         assert fragment in public_wrapper
 
+    # The process-exit handler must exist before the gate action is started.
+    # Otherwise a fast transient-local delivery can exit before registration
+    # and leave the pipeline waiting forever.
+    release_group = public_wrapper[public_wrapper.index("def _release_group") :]
+    assert release_group.index("handler = RegisterEventHandler") < release_group.index(
+        "handler,\n            gate,"
+    )
+
+    gate = (
+        PACKAGE / "co_3dto2d_mapping" / "alignment_startup_gate.py"
+    ).read_text()
+    for fragment in (
+        "DurabilityPolicy.TRANSIENT_LOCAL",
+        'self.declare_parameter("timeout_sec", 60.0)',
+        "self.count_publishers(self.alignment_topic)",
+        "self.count_publishers(self.cloud_topics[0])",
+        "raise SystemExit(exit_code)",
+    ):
+        assert fragment in gate
+
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
+    assert "ament_python_install_package(${PROJECT_NAME})" in cmake
     assert "launch/two_live_plane_height_mapping.launch.py" in cmake
     assert "RENAME two_live_mapping.launch.py" in cmake
 
