@@ -176,8 +176,10 @@
     min_fitness: 0.05
     max_rmse: 0.40
     max_iterations: 40
+    recompute_period_sec: 5.0
     frame_count: 5
     invert_result: false
+    lock_after_first_alignment: true
     required_consistent_results: 2
     max_consistency_translation_m: 0.25
     max_consistency_rotation_rad: 0.08726646259971647
