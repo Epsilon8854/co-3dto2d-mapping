@@ -152,3 +152,44 @@
     publish_period_ms: 200
     global_map_padding_m: 5.0
     sync_queue_size: 100
+
+# The side-by-side live startup aligner runs before odometry. It therefore uses
+# the raw 3-D LiDAR clouds and reads its crop/range/ICP settings from this same
+# file. The mapper's old inverse-Z slice must not be repeated here: both the
+# explicit z filter and invert_z_slice are disabled. The launch also enforces
+# those two values as a safety fallback for older custom YAML files.
+/initial_xy_icp_alignment:
+  ros__parameters:
+    use_z_filter: false
+    slice_z_in_cloud_frame: true
+    z_min: -1000.0
+    z_max: 1000.0
+    invert_z_slice: false
+
+    center_box_half_extent_m: 0.80
+    range_min_m: 0.80
+    range_max_m: 12.0
+    voxel_size: 0.10
+    max_points: 15000
+    max_correspondence_distance: 0.75
+    min_correspondences: 100
+    min_fitness: 0.05
+    max_rmse: 0.40
+    max_iterations: 40
+    frame_count: 5
+    invert_result: false
+    required_consistent_results: 2
+    max_consistency_translation_m: 0.25
+    max_consistency_rotation_rad: 0.08726646259971647
+    initialize_from_centroids: true
+
+    # The README requires both robots to start side-by-side with the same
+    # heading, so reject the common 180-degree symmetric solution.
+    enforce_heading_prior: true
+    expected_yaw_rad: 0.0
+    max_yaw_deviation_rad: 1.5707963267948966
+    initial_yaw_offsets_rad: [0.0, -0.5235987755982988, 0.5235987755982988]
+    max_iteration_rotation_rad: 1.0471975511965976
+    heading_prior_weight: 0.05
+    enforce_tilt_prior: true
+    max_tilt_deviation_rad: 0.2617993877991494
