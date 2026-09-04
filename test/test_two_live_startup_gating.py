@@ -36,6 +36,11 @@ def test_public_two_live_wrapper_removes_legacy_inline_alignment_filters():
 
     assert "_config_aware_launch_setup" in wrapper
     assert "_configured_initial_alignment_node" in wrapper
+    assert "_configured_launch_argument" in wrapper
+    assert '"alignment_use_z_filter": "false"' in wrapper
+    assert '"alignment_z_min": "-1000.0"' in wrapper
+    assert '"alignment_z_max": "1000.0"' in wrapper
+    assert '"alignment_invert_z_slice": "false"' in wrapper
     assert '"use_z_filter"' in wrapper
     assert '"invert_z_slice"' in wrapper
     assert 'rewritten["parameters"] = [config_file, runtime_overrides]' in wrapper
