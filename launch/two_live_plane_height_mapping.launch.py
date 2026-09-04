@@ -83,11 +83,16 @@ def _startup_topic(context):
 
 
 def _startup_value(context, name):
-    # While startup gating is active, publish the sensor static TF outside the
-    # delayed local pipeline so startup ICP can transform both clouds.  The
-    # pipeline itself must not publish the same static TF a second time.
-    if name == "publish_sensor_static_tf" and _startup_gate_enabled(context):
-        return "false"
+    if _startup_gate_enabled(context):
+        # The actual alignment result is now the startup barrier.  Disable the
+        # old fixed 10 s odometry/mapping timer so "alignment received" really
+        # means the local pipeline starts immediately.
+        if name == "mapping_startup_delay_sec":
+            return "0.0"
+        # Publish the sensor static TF outside the delayed local pipeline so
+        # startup ICP can transform both clouds without duplicating the TF.
+        if name == "publish_sensor_static_tf":
+            return "false"
     return _ORIGINAL_VALUE(context, name)
 
 
