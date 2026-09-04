@@ -5,19 +5,19 @@ import yaml
 PACKAGE = Path(__file__).resolve().parents[1]
 
 
-def test_public_two_live_launch_selects_fixed_occupancy_alignment():
+def test_public_two_live_launch_uses_configured_initial_alignment():
     wrapper = (
         PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
     ).read_text()
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
 
-    assert "_place_recognition_node" in wrapper
-    assert 'rewritten["executable"] = "inter_robot_place_alignment.py"' in wrapper
-    assert '"config", "place_recognition.yaml"' in wrapper
-    assert '"robot0_odom_topic": "/r0/toy/corrected_odometry"' in wrapper
-    assert '"robot1_odom_topic": "/r1/toy/corrected_odometry"' in wrapper
-    assert "_BASE.Node = _place_recognition_node" in wrapper
-    assert "co_3dto2d_mapping/inter_robot_place_alignment.py" in cmake
+    assert "_configured_initial_alignment_node" in wrapper
+    assert "_config_aware_launch_setup" in wrapper
+    assert 'rewritten["parameters"] = [config_file, runtime_overrides]' in wrapper
+    assert "_ALIGNMENT_CONFIG_PARAMETERS" in wrapper
+    assert "_place_recognition_node" not in wrapper
+    assert "inter_robot_place_alignment.py" not in wrapper
+    assert "co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py" in cmake
 
 
 def test_combined_bag_launch_uses_profile_then_explicit_overrides():
