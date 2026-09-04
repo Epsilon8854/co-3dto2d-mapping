@@ -36,6 +36,19 @@ def test_quantization_preserves_free_and_occupied_cells():
     assert values.tolist() == [0, 100]
 
 
+def test_quantization_uses_axis_aligned_odom_applied_local_origin():
+    msg = make_grid([100], width=1, height=1, resolution=0.5)
+    msg.info.origin.position.x = 4.0
+    msg.info.origin.position.y = -2.0
+
+    cols, rows, values = quantized_grid_observations(msg, 0.5, 50)
+
+    # Cell centre is (4.25, -1.75) in the robot odometry frame.
+    assert cols.tolist() == [8]
+    assert rows.tolist() == [-4]
+    assert values.tolist() == [100]
+
+
 def test_quantization_applies_robot_alignment_before_common_grid_index():
     msg = make_grid([100], width=1, height=1)
     cols, rows, values = quantized_grid_observations(
