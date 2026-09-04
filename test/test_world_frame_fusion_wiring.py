@@ -68,7 +68,7 @@ def test_s3e_profile_selects_single_floor_and_stricter_fixed_alignment():
     assert alignment["lock_after_consensus"] is True
 
 
-def test_public_record_output_latches_alignment_in_common_frame():
+def test_public_record_output_latches_alignment_and_maps_in_common_frame():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     implementation = (
         PACKAGE / "co_3dto2d_mapping" / "record_republisher_world.py"
@@ -77,5 +77,25 @@ def test_public_record_output_latches_alignment_in_common_frame():
     assert "record_republisher_world.py" in cmake
     assert "RENAME record_republisher.py" in cmake
     assert "suppress_unaligned_world_odometry" in implementation
+    assert "publish_world_maps" in implementation
+    assert "suppress_unaligned_world_maps" in implementation
+    assert "transform_grid_to_common_frame" in implementation
     assert "lock_world_alignment" in implementation
     assert "output.header.frame_id = self.common_frame_id" in implementation
+
+
+def test_local_observation_grid_bakes_corrected_odometry_into_cell_coordinates():
+    implementation = (
+        PACKAGE
+        / "include"
+        / "co_3dto2d_mapping"
+        / "occupancy_mapper"
+        / "sensor_and_local_grid.inc"
+    ).read_text()
+
+    assert "latest_local_grid_ = buildLocalGrid(\n        global_hits" in implementation
+    assert "global_free_ray_hits, cloud->header.stamp, aligned_t" in implementation
+    assert "const Vec3 &sensor_position" in implementation
+    assert "grid.info.origin.orientation.w = 1.0" in implementation
+    assert "x - sensor_position.x" in implementation
+    assert "Map projection applied:" in implementation
