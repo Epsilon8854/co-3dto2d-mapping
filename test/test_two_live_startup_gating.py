@@ -1,75 +1,99 @@
 from pathlib import Path
 
+import yaml
+
 
 PACKAGE = Path(__file__).resolve().parents[1]
 LAUNCH_DIR = PACKAGE / "launch"
 
 
-def test_two_live_mode_has_a_sensor_warmup_before_mapping():
-    two_live = (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
-    assert '"mapping_startup_delay_sec"' in two_live
-    assert 'default_value="10.0"' in two_live
+def test_initial_alignment_uses_same_occupancy_yaml_without_inverse_z():
+    profile = yaml.safe_load((PACKAGE / "config" / "occupancy.yaml").read_text())
+    alignment = profile["/initial_xy_icp_alignment"]["ros__parameters"]
 
-    forwarding = {
-        "live_mapping.launch.py": '"mapping_startup_delay_sec": LaunchConfiguration(',
-        "single_bag_mapping.launch.py": '"mapping_startup_delay_sec": str(mapping_startup_delay_sec)',
-        "mid360_mapping_pipeline.launch.py": '"startup_delay_sec": LaunchConfiguration("mapping_startup_delay_sec")',
-    }
-    for filename, fragment in forwarding.items():
-        assert fragment in (LAUNCH_DIR / filename).read_text()
+    assert alignment["use_z_filter"] is False
+    assert alignment["invert_z_slice"] is False
+    assert alignment["z_min"] == -1000.0
+    assert alignment["z_max"] == 1000.0
+    assert alignment["center_box_half_extent_m"] == 0.80
+    assert alignment["range_min_m"] == 0.80
+    assert alignment["range_max_m"] == 12.0
+    assert alignment["voxel_size"] == 0.10
+    assert alignment["required_consistent_results"] >= 2
 
-    odometry = (LAUNCH_DIR / "rtabmap_mid360_odometry.launch.py").read_text()
-    assert "TimerAction(period=startup_delay_sec" in odometry
+    launch = (LAUNCH_DIR / "initial_alignment_live.launch.py").read_text()
+    assert 'parameters=[\n                config_file,' in launch
+    assert '"use_z_filter": False' in launch
+    assert '"invert_z_slice": False' in launch
+    assert '"robot0_cloud_topic": _value(context, "robot0_cloud_topic")' in launch
+    assert '"robot1_cloud_topic": _value(context, "robot1_cloud_topic")' in launch
+    assert '"robot0_local_frame_id": "r0/base_link"' in launch
+    assert '"robot1_local_frame_id": "r1/base_link"' in launch
 
 
-def test_two_live_alignment_uses_cropped_xyz_rtabmap_clouds():
-    two_live = (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
-    required_launch_fragments = (
-        '"robot0_cloud_topic": robot0_scan_topic',
-        '"robot1_cloud_topic": robot1_scan_topic',
-        '"input_mode": "cloud_initial"',
-        '"robot0_local_frame_id": "r0/base_link"',
-        '"robot1_local_frame_id": "r1/base_link"',
-        '"alignment_use_z_filter"',
-        '"alignment_range_min_m"',
-        '"alignment_range_max_m"',
-        '"alignment_enforce_tilt_prior"',
-        '"alignment_required_consistent_results"',
-        'default_value="2"',
-        '"alignment_lock_after_first"',
-        '"alignment_initialize_from_centroids"',
-    )
-    for fragment in required_launch_fragments:
-        assert fragment in two_live
+def test_public_two_live_wrapper_removes_legacy_inline_alignment_filters():
+    wrapper = (LAUNCH_DIR / "two_live_plane_height_mapping.launch.py").read_text()
 
+    assert "_config_aware_launch_setup" in wrapper
+    assert "_configured_initial_alignment_node" in wrapper
+    assert '"use_z_filter"' in wrapper
+    assert '"invert_z_slice"' in wrapper
+    assert 'rewritten["parameters"] = [config_file, runtime_overrides]' in wrapper
+    assert "_place_recognition_node" not in wrapper
+    assert "inter_robot_place_alignment.py" not in wrapper
+
+
+def test_two_live_runner_blocks_odom_until_initial_alignment_message():
+    runner = (PACKAGE / "scripts" / "run_two_mid360_2d_mapping.sh").read_text()
+
+    assert 'WAIT_FOR_INITIAL_ALIGNMENT="${TWO_LIVE_WAIT_FOR_INITIAL_ALIGNMENT:-true}"' in runner
+    assert "initial_alignment_live.launch.py" in runner
+    assert "ODOM/MAPPING BLOCKED" in runner
+    assert "--qos-durability transient_local" in runner
+    assert "geometry_msgs/msg/TransformStamped" in runner
+    assert "INITIAL ALIGNMENT READY" in runner
+    assert 'MAPPING_STARTUP_DELAY_SEC=0.0' in runner
+    assert 'MAPPING_ENABLE_FUSION=false' in runner
+    assert '"enable_fusion:=${MAPPING_ENABLE_FUSION}"' in runner
+    assert '"mapping_startup_delay_sec:=${MAPPING_STARTUP_DELAY_SEC}"' in runner
+    assert "post_alignment_fusion.launch.py" in runner
+
+    # The blocking topic wait must occur textually before the mapping process is
+    # assembled and started, preventing misleading RTAB-Map startup logs.
+    wait_index = runner.index('alignment_wait_command=(')
+    ready_index = runner.index('INITIAL ALIGNMENT READY')
+    mapping_index = runner.index('mapping_command=(')
+    assert wait_index < ready_index < mapping_index
+
+
+def test_initial_alignment_launch_starts_no_odometry_or_mapper():
+    launch = (LAUNCH_DIR / "initial_alignment_live.launch.py").read_text()
+    assert 'executable="initial_xy_icp_alignment.py"' in launch
+    assert "rtabmap_odom" not in launch
+    assert "occupancy_mapper" not in launch
+    assert "initial_alignment_sensor_static_tf_r%d" in launch
+
+
+def test_post_alignment_launch_contains_only_common_frame_fusion():
+    launch = (LAUNCH_DIR / "post_alignment_fusion.launch.py").read_text()
+    assert 'executable="record_republisher.py"' in launch
+    assert '"publish_world_odometry": True' in launch
+    assert '"publish_world_maps": True' in launch
+    assert "initial_xy_icp_alignment.py" not in launch
+    assert "rtabmap_odom" not in launch
+
+
+def test_cropped_xyz_aligner_retains_full_3d_registration():
     aligner = (
-        PACKAGE
-        / "co_3dto2d_mapping"
-        / "cropped_xyz_initial_icp_alignment.py"
+        PACKAGE / "co_3dto2d_mapping" / "cropped_xyz_initial_icp_alignment.py"
     ).read_text()
-    required_aligner_fragments = (
+    for fragment in (
         "Cropped XYZ startup ICP",
         "robot0_local_frame_id",
-        "slice_z_in_cloud_frame",
-        "range_min_m",
+        "use_z_filter",
         "estimate_rigid_transform",
         "Collecting a fresh pair",
         "published_planar",
         "max_tilt_deviation_rad",
-    )
-    for fragment in required_aligner_fragments:
-        assert fragment in aligner
-
-    registration = (
-        PACKAGE / "co_3dto2d_mapping" / "pointcloud_registration.py"
-    ).read_text()
-    for fragment in (
-        "estimate_rigid_transform",
-        "yaw_rotation_matrix",
-        "rotation_tilt",
-        "voxel_downsample",
     ):
-        assert fragment in registration
-
-    cmake = (PACKAGE / "CMakeLists.txt").read_text()
-    assert "co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py" in cmake
+        assert fragment in aligner
