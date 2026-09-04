@@ -32,6 +32,8 @@ def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
         'default_value="true"',
         '"startup_alignment_topic"',
         'default_value="/toy/startup_xy_alignment"',
+        'name == "mapping_startup_delay_sec"',
+        'return "0.0"',
         'name="startup_initial_xy_icp_alignment"',
         '"robot0_cloud_topic": _prealignment_cloud_topic(context, 0)',
         '"robot1_cloud_topic": _prealignment_cloud_topic(context, 1)',
