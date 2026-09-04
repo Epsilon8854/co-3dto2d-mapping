@@ -31,10 +31,9 @@
     raycast_clear_occupied: false
     occupied_threshold_points: 1
 
-    # Temporal occupancy evidence. A cell is cleared only after free space is
-    # observed in this many different mapping frames. A previously free cell
-    # also needs repeated occupied frames before a new obstacle is committed.
-    dynamic_filter_enabled: False
+    # Baseline default: temporal dynamic filtering is opt-in. Set this to true
+    # for repeated occupied/free evidence and stale-obstacle cleanup.
+    dynamic_filter_enabled: false
     dynamic_free_clear_count: 10
     dynamic_occupied_confirm_count: 1
     dynamic_counter_decay: 1
@@ -71,13 +70,12 @@
 
     # The occupancy mapper produces the planar x/y/yaw estimate on this
     # intermediate topic. gravity_plane_pose_fusion.py adds z/roll/pitch and
-    # publishes the final pose on toy/corrected_odometry.
+    # publishes the final pose on toy/corrected_odometry when explicitly enabled.
     corrected_odometry_topic: "toy/planar_odometry"
 
-    # Gravity-constrained ground-plane pose fusion. x/y/yaw are copied from
-    # toy/planar_odometry. z/roll/pitch are estimated from a horizontal plane
-    # whose normal must remain close to the IMU-derived up direction.
-    ground_plane_pose_enabled: true
+    # Baseline default: pass planar odometry through without replacing
+    # z/roll/pitch. Set this to true to enable ground-plane pose fusion.
+    ground_plane_pose_enabled: false
     ground_plane_pointcloud_topic: "/livox/lidar"
     ground_plane_imu_topic: "/livox/imu_filtered"
     ground_plane_planar_odometry_topic: "toy/planar_odometry"
