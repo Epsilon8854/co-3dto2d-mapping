@@ -203,15 +203,11 @@
         rotated.z + corrected_t.z});
     };
 
-    std::vector<std::pair<double, double>> local_hits;
     std::vector<std::pair<double, double>> global_hits;
-    std::vector<std::pair<double, double>> local_free_ray_hits;
     std::vector<std::pair<double, double>> global_free_ray_hits;
     std::vector<Vec3> kept_debug_points;
     std::vector<Vec3> rejected_debug_points;
-    local_hits.reserve(local_occupied_points.size());
     global_hits.reserve(local_occupied_points.size());
-    local_free_ray_hits.reserve(local_free_ray_points.size());
     global_free_ray_hits.reserve(local_free_ray_points.size());
     if (publish_slice_debug_points_) {
       kept_debug_points.reserve(local_occupied_points.size());
@@ -220,7 +216,6 @@
 
     for (const Vec3 &point : local_occupied_points) {
       const Vec3 global_point = to_global(point);
-      local_hits.emplace_back(point.x, point.y);
       global_hits.emplace_back(global_point.x, global_point.y);
       if (publish_slice_debug_points_) {
         kept_debug_points.push_back(global_point);
@@ -228,7 +223,6 @@
     }
     for (const Vec3 &point : local_free_ray_points) {
       const Vec3 global_point = to_global(point);
-      local_free_ray_hits.emplace_back(point.x, point.y);
       global_free_ray_hits.emplace_back(global_point.x, global_point.y);
     }
     if (publish_slice_debug_points_) {
@@ -238,13 +232,32 @@
     }
 
     latest_stamp_ = cloud->header.stamp;
+    // The local observation grid is axis-aligned in the odometry/global frame.
+    // Its cell coordinates therefore contain the exact same corrected odometry
+    // projection as the persistent global grid, without requiring downstream
+    // consumers to reconstruct a rotated robot-centric OccupancyGrid origin.
     latest_local_grid_ = buildLocalGrid(
-        local_hits, local_free_ray_hits, cloud->header.stamp, aligned_q, aligned_t);
+        global_hits, global_free_ray_hits, cloud->header.stamp, aligned_t);
     latest_local_grid_ready_ = true;
 
     updateGlobalGrid(
         global_hits, global_free_ray_hits, {aligned_t.x, aligned_t.y},
         cloud->header.stamp);
+
+    RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), icp_log_period_ms_,
+        "Map projection applied: raw=(%.3f, %.3f, %.2fdeg) "
+        "corrected=(%.3f, %.3f, %.2fdeg) hits=%zu free_rays=%zu "
+        "local_origin=(%.3f, %.3f) global_frame=%s",
+        raw_planar_pose.x, raw_planar_pose.y,
+        raw_planar_pose.yaw * 180.0 / co_3dto2d_mapping::icp::kPi,
+        corrected_planar_pose.x, corrected_planar_pose.y,
+        corrected_planar_pose.yaw * 180.0 / co_3dto2d_mapping::icp::kPi,
+        global_hits.size(), global_free_ray_hits.size(),
+        latest_local_grid_.info.origin.position.x,
+        latest_local_grid_.info.origin.position.y,
+        global_frame_id_.c_str());
+
     if (publish_slice_debug_points_) {
       publishDebugPointClouds(kept_debug_points, rejected_debug_points, cloud->header.stamp);
     }
@@ -299,8 +312,7 @@
       const std::vector<std::pair<double, double>> &occupied_hits,
       const std::vector<std::pair<double, double>> &free_ray_hits,
       const builtin_interfaces::msg::Time &stamp,
-      const Quaternion &odom_orientation,
-      const Vec3 &odom_position) const
+      const Vec3 &sensor_position) const
   {
     nav_msgs::msg::OccupancyGrid grid;
     grid.header.stamp = stamp;
@@ -308,37 +320,36 @@
     grid.info.resolution = static_cast<float>(resolution_);
     grid.info.width = static_cast<uint32_t>(std::ceil(local_map_size_m_ / resolution_));
     grid.info.height = grid.info.width;
-    const double local_origin_x = -0.5 * static_cast<double>(grid.info.width) * resolution_;
-    const double local_origin_y = -0.5 * static_cast<double>(grid.info.height) * resolution_;
-    const Vec3 odom_origin =
-        rotatePoint(odom_orientation, Vec3{local_origin_x, local_origin_y, 0.0});
-    grid.info.origin.position.x = odom_position.x + odom_origin.x;
-    grid.info.origin.position.y = odom_position.y + odom_origin.y;
-    grid.info.origin.position.z = odom_position.z + odom_origin.z;
-    grid.info.origin.orientation.x = odom_orientation.x;
-    grid.info.origin.orientation.y = odom_orientation.y;
-    grid.info.origin.orientation.z = odom_orientation.z;
-    grid.info.origin.orientation.w = odom_orientation.w;
+
+    const double width_m = static_cast<double>(grid.info.width) * resolution_;
+    const double height_m = static_cast<double>(grid.info.height) * resolution_;
+    const double origin_x = sensor_position.x - 0.5 * width_m;
+    const double origin_y = sensor_position.y - 0.5 * height_m;
+    grid.info.origin.position.x = origin_x;
+    grid.info.origin.position.y = origin_y;
+    grid.info.origin.position.z = 0.0;
+    grid.info.origin.orientation.w = 1.0;
     grid.data.assign(
         static_cast<size_t>(grid.info.width) * grid.info.height, raycast_unknown_value_);
 
     using co_3dto2d_mapping::occupancy::Cell;
     const auto to_cell = [&](double x, double y) {
       return Cell{
-        static_cast<int>(std::floor((x - local_origin_x) / resolution_)),
-        static_cast<int>(std::floor((y - local_origin_y) / resolution_))};
+        static_cast<int>(std::floor((x - origin_x) / resolution_)),
+        static_cast<int>(std::floor((y - origin_y) / resolution_))};
     };
 
     if (enable_raycast_free_space_) {
-      const Cell sensor_origin_cell = to_cell(0.0, 0.0);
+      const Cell sensor_origin_cell = to_cell(sensor_position.x, sensor_position.y);
       for (const auto &[x, y] : free_ray_hits) {
-        const double hit_range_m = std::hypot(x, y);
+        const double hit_range_m = std::hypot(
+            x - sensor_position.x, y - sensor_position.y);
         if (hit_range_m < raycast_min_range_m_) {
           continue;
         }
         const auto [ray_end_x, ray_end_y] =
             co_3dto2d_mapping::occupancy::clipRayEndpoint(
-                0.0, 0.0, x, y, raycast_max_range_m_);
+                sensor_position.x, sensor_position.y, x, y, raycast_max_range_m_);
         const Cell hit_cell = to_cell(x, y);
         const Cell ray_end_cell = to_cell(ray_end_x, ray_end_y);
         const bool ray_was_clipped =
@@ -371,4 +382,3 @@
     }
     return grid;
   }
-
