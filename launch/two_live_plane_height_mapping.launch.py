@@ -1,31 +1,34 @@
 """Public two-live wrapper with startup ICP gating and occupancy place recognition.
 
-The raw live clouds are available before RTAB-Map odometry starts.  This wrapper
-uses those clouds for a one-shot cropped XYZ startup ICP, waits for the accepted
-startup transform on every robot laptop, and only then launches each local
-odometry/mapping pipeline.  The later CPU-only occupancy place-recognition node
-is kept as the final inter-robot map alignment stage.
+The raw live clouds are available before RTAB-Map odometry starts. This wrapper
+uses those clouds for a one-shot cropped XYZ startup ICP and launches each local
+odometry/mapping pipeline only after an accepted startup transform is observed.
+The later CPU-only occupancy place-recognition node remains the final inter-robot
+map alignment stage.
 
-The startup ICP preprocessing is derived from ``occupancy_config_file`` for the
-shared body/range/TF crop, while the legacy fixed-Z/inverted-Z slice is disabled.
-Plane-height filtering remains in the post-odometry mapping pipeline because that
-filter is synchronized with odometry by design.
+Startup ICP preprocessing is derived from ``occupancy_config_file`` for the
+shared body/range/TF crop. The legacy fixed-Z and inverted-Z slice is disabled.
+Plane-height filtering remains in the post-odometry mapping pipeline because it
+is synchronized with odometry by design.
 """
 
 import importlib.util
 import os
+import sys
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    EmitEvent,
     ExecuteProcess,
     GroupAction,
     LogInfo,
     RegisterEventHandler,
 )
 from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
 
 
@@ -54,6 +57,13 @@ _ORIGINAL_LAUNCH_SETUP = _BASE.launch_setup
 
 _ACTIVE_STARTUP_GATE = False
 _ACTIVE_STARTUP_TOPIC = "/toy/startup_xy_alignment"
+_ACTIVE_STARTUP_TIMEOUT_SEC = 60.0
+_ACTIVE_STARTUP_STATUS_PERIOD_SEC = 2.0
+_ACTIVE_STARTUP_REQUIRED_RESULTS = 1
+_ACTIVE_STARTUP_CLOUD_TOPICS = (
+    "/r0/mapping/lidar",
+    "/r1/mapping/lidar",
+)
 
 
 def _parse_bool(value, name):
@@ -82,15 +92,34 @@ def _startup_topic(context):
     return topic
 
 
+def _positive_float_argument(context, name):
+    try:
+        value = float(LaunchConfiguration(name).perform(context))
+    except ValueError as exc:
+        raise RuntimeError("%s must be numeric" % name) from exc
+    if value <= 0.0:
+        raise RuntimeError("%s must be greater than zero" % name)
+    return value
+
+
+def _positive_int_argument(context, name):
+    try:
+        value = int(LaunchConfiguration(name).perform(context))
+    except ValueError as exc:
+        raise RuntimeError("%s must be an integer" % name) from exc
+    if value < 1:
+        raise RuntimeError("%s must be at least one" % name)
+    return value
+
+
 def _startup_value(context, name):
     if _startup_gate_enabled(context):
-        # The actual alignment result is now the startup barrier.  Disable the
-        # old fixed 10 s odometry/mapping timer so "alignment received" really
-        # means the local pipeline starts immediately.
+        # The accepted alignment is the startup barrier. Disable the old fixed
+        # 10 s timer so the local pipeline starts immediately after release.
         if name == "mapping_startup_delay_sec":
             return "0.0"
-        # Publish the sensor static TF outside the delayed local pipeline so
-        # startup ICP can transform both clouds without duplicating the TF.
+        # The static sensor TF must be available before startup ICP while the
+        # rest of the local mapping pipeline is still gated.
         if name == "publish_sensor_static_tf":
             return "false"
     return _ORIGINAL_VALUE(context, name)
@@ -102,19 +131,28 @@ def _plane_height_bool_value(context, name):
     return _ORIGINAL_BOOL_VALUE(context, name)
 
 
-def _gate_process(topic):
+def _gate_process(topic, name):
+    robot0_cloud_topic, robot1_cloud_topic = _ACTIVE_STARTUP_CLOUD_TOPICS
     return ExecuteProcess(
         cmd=[
-            "ros2",
-            "topic",
-            "echo",
-            "--once",
-            "--qos-durability",
-            "transient_local",
-            topic,
-            "geometry_msgs/msg/TransformStamped",
+            sys.executable,
+            "-m",
+            "co_3dto2d_mapping.alignment_startup_gate",
+            "--ros-args",
+            "-r",
+            "__node:=%s" % name,
+            "-p",
+            "alignment_topic:=%s" % topic,
+            "-p",
+            "robot0_cloud_topic:=%s" % robot0_cloud_topic,
+            "-p",
+            "robot1_cloud_topic:=%s" % robot1_cloud_topic,
+            "-p",
+            "timeout_sec:=%.6f" % _ACTIVE_STARTUP_TIMEOUT_SEC,
+            "-p",
+            "status_period_sec:=%.6f" % _ACTIVE_STARTUP_STATUS_PERIOD_SEC,
         ],
-        output="log",
+        output="screen",
     )
 
 
@@ -138,21 +176,48 @@ def _sensor_static_tf_action(context, robot_id):
 
 
 def _gate_exit_actions(event, success_message, released_actions):
-    if int(event.returncode) != 0:
+    return_code = int(event.returncode)
+    if return_code != 0:
+        reason = (
+            "startup alignment gate failed with exit code %d; odometry/mapping "
+            "was not started" % return_code
+        )
         return [
-            LogInfo(
-                msg=(
-                    "Startup alignment gate exited with code %s; keeping "
-                    "odometry/mapping stopped." % event.returncode
-                )
-            )
+            LogInfo(msg=reason),
+            EmitEvent(event=Shutdown(reason=reason)),
         ]
     return [LogInfo(msg=success_message), *released_actions]
 
 
+def _release_group(gate, waiting_message, success_message, released_actions):
+    # Register the exit handler before starting the gate process. The previous
+    # order could miss a fast exit when a transient-local sample was already
+    # available, leaving the launch in a permanent wait state.
+    handler = RegisterEventHandler(
+        OnProcessExit(
+            target_action=gate,
+            on_exit=lambda event, _context: _gate_exit_actions(
+                event,
+                success_message,
+                released_actions,
+            ),
+        )
+    )
+    return GroupAction(
+        actions=[
+            LogInfo(msg=waiting_message),
+            handler,
+            gate,
+        ]
+    )
+
+
 def _gated_pipeline(context, robot_id, pipeline):
     startup_topic = _startup_topic(context)
-    gate = _gate_process(startup_topic)
+    gate = _gate_process(
+        startup_topic,
+        "startup_alignment_gate_r%d" % robot_id,
+    )
     actions = []
     publish_static_tf = _parse_bool(
         _ORIGINAL_VALUE(context, "publish_sensor_static_tf"),
@@ -160,30 +225,20 @@ def _gated_pipeline(context, robot_id, pipeline):
     )
     if publish_static_tf:
         actions.append(_sensor_static_tf_action(context, robot_id))
-    actions.extend(
-        [
-            LogInfo(
-                msg=(
-                    "[r%d] waiting for startup ICP alignment on %s; "
-                    "odometry/mapping has not started."
-                    % (robot_id, startup_topic)
-                )
-            ),
+    actions.append(
+        _release_group(
             gate,
-            RegisterEventHandler(
-                OnProcessExit(
-                    target_action=gate,
-                    on_exit=lambda event, _context: _gate_exit_actions(
-                        event,
-                        (
-                            "[r%d] startup ICP alignment received; "
-                            "starting odometry/mapping now." % robot_id
-                        ),
-                        [pipeline],
-                    ),
-                )
+            (
+                "[r%d] waiting for startup ICP alignment on %s; "
+                "odometry/mapping has not started."
+                % (robot_id, startup_topic)
             ),
-        ]
+            (
+                "[r%d] startup ICP alignment received; starting "
+                "odometry/mapping now." % robot_id
+            ),
+            [pipeline],
+        )
     )
     return GroupAction(actions=actions)
 
@@ -237,54 +292,53 @@ def _place_recognition_parameters(forwarded):
 
 
 def _place_recognition_node(*args, **kwargs):
-    """Replace the base final-alignment node with occupancy place recognition."""
+    """Rewrite final alignment and gate fusion consumers behind startup ICP."""
 
-    if not (
+    is_alignment_node = (
         kwargs.get("package") == "co_3dto2d_mapping"
         and kwargs.get("executable") == "initial_xy_icp_alignment.py"
-    ):
+    )
+    is_record_node = (
+        kwargs.get("package") == "co_3dto2d_mapping"
+        and kwargs.get("executable") == "record_republisher.py"
+    )
+
+    if is_alignment_node:
+        forwarded = {}
+        for parameter_set in kwargs.get("parameters", []):
+            if isinstance(parameter_set, dict):
+                forwarded.update(parameter_set)
+
+        place_config, overrides = _place_recognition_parameters(forwarded)
+        rewritten = dict(kwargs)
+        rewritten["executable"] = "inter_robot_place_alignment.py"
+        rewritten["name"] = "inter_robot_place_alignment"
+        rewritten["parameters"] = [place_config, overrides]
+        node = _ORIGINAL_NODE(*args, **rewritten)
+        gate_name = "startup_alignment_gate_place_recognition"
+        waiting = (
+            "Place recognition is waiting for startup ICP alignment on %s."
+            % _ACTIVE_STARTUP_TOPIC
+        )
+        success = "Startup ICP is complete; starting occupancy place recognition."
+    elif is_record_node:
+        node = _ORIGINAL_NODE(*args, **kwargs)
+        gate_name = "startup_alignment_gate_record_republisher"
+        waiting = (
+            "Record/merged-map publishing is waiting for startup ICP alignment "
+            "on %s." % _ACTIVE_STARTUP_TOPIC
+        )
+        success = (
+            "Startup ICP is complete; starting record and merged-map publishing."
+        )
+    else:
         return _ORIGINAL_NODE(*args, **kwargs)
 
-    forwarded = {}
-    for parameter_set in kwargs.get("parameters", []):
-        if isinstance(parameter_set, dict):
-            forwarded.update(parameter_set)
-
-    place_config, overrides = _place_recognition_parameters(forwarded)
-    rewritten = dict(kwargs)
-    rewritten["executable"] = "inter_robot_place_alignment.py"
-    rewritten["name"] = "inter_robot_place_alignment"
-    rewritten["parameters"] = [place_config, overrides]
-    place_node = _ORIGINAL_NODE(*args, **rewritten)
-
     if not _ACTIVE_STARTUP_GATE:
-        return place_node
+        return node
 
-    gate = _gate_process(_ACTIVE_STARTUP_TOPIC)
-    return GroupAction(
-        actions=[
-            LogInfo(
-                msg=(
-                    "Place recognition is waiting for startup ICP alignment on %s."
-                    % _ACTIVE_STARTUP_TOPIC
-                )
-            ),
-            gate,
-            RegisterEventHandler(
-                OnProcessExit(
-                    target_action=gate,
-                    on_exit=lambda event, _context: _gate_exit_actions(
-                        event,
-                        (
-                            "Startup ICP is complete; starting occupancy "
-                            "place recognition."
-                        ),
-                        [place_node],
-                    ),
-                )
-            ),
-        ]
-    )
+    gate = _gate_process(_ACTIVE_STARTUP_TOPIC, gate_name)
+    return _release_group(gate, waiting, success, [node])
 
 
 def _load_occupancy_parameters(path):
@@ -332,10 +386,9 @@ def _startup_icp_node(context):
         "transform_cloud_to_local_frame",
     )
 
-    # The active occupancy mapper no longer uses a fixed/inverted Z slice.  The
-    # startup ICP runs before odometry, so it cannot consume the synchronized
-    # plane-height cloud; instead it shares the occupancy YAML's static TF/body/
-    # range crop and deliberately disables the legacy fixed-Z path.
+    # Startup ICP runs before odometry, so it cannot consume the synchronized
+    # plane-height cloud. It uses the occupancy YAML's static TF/body/range crop
+    # and deliberately disables the obsolete fixed/inverted-Z path.
     overrides = {
         "robot0_cloud_topic": _prealignment_cloud_topic(context, 0),
         "robot1_cloud_topic": _prealignment_cloud_topic(context, 1),
@@ -386,9 +439,10 @@ def _startup_icp_node(context):
         ),
         "retry_on_failure": True,
         "lock_after_first_alignment": True,
-        "required_consistent_results": int(
-            _ORIGINAL_VALUE(context, "alignment_required_consistent_results")
-        ),
+        # Startup alignment is only a release barrier. The later occupancy place
+        # recognizer already performs multi-measurement consensus, so requiring
+        # two independently stable startup ICPs can deadlock on small scan noise.
+        "required_consistent_results": _ACTIVE_STARTUP_REQUIRED_RESULTS,
         "max_consistency_translation_m": float(
             _ORIGINAL_VALUE(context, "alignment_max_consistency_translation_m")
         ),
@@ -406,6 +460,7 @@ def _startup_icp_node(context):
         "max_tilt_deviation_rad": float(
             _ORIGINAL_VALUE(context, "alignment_max_tilt_deviation_rad")
         ),
+        "publish_period_sec": 0.2,
         "use_sim_time": False,
     }
     return _ORIGINAL_NODE(
@@ -418,12 +473,31 @@ def _startup_icp_node(context):
 
 
 def _startup_launch_setup(context, *args, **kwargs):
-    global _ACTIVE_STARTUP_GATE, _ACTIVE_STARTUP_TOPIC
+    global _ACTIVE_STARTUP_GATE
+    global _ACTIVE_STARTUP_TOPIC
+    global _ACTIVE_STARTUP_TIMEOUT_SEC
+    global _ACTIVE_STARTUP_STATUS_PERIOD_SEC
+    global _ACTIVE_STARTUP_REQUIRED_RESULTS
+    global _ACTIVE_STARTUP_CLOUD_TOPICS
 
     _ACTIVE_STARTUP_GATE = _startup_gate_enabled(context)
     _ACTIVE_STARTUP_TOPIC = _startup_topic(context)
-    actions = _ORIGINAL_LAUNCH_SETUP(context, *args, **kwargs)
+    if _ACTIVE_STARTUP_GATE:
+        _ACTIVE_STARTUP_TIMEOUT_SEC = _positive_float_argument(
+            context, "startup_alignment_timeout_sec"
+        )
+        _ACTIVE_STARTUP_STATUS_PERIOD_SEC = _positive_float_argument(
+            context, "startup_alignment_status_period_sec"
+        )
+        _ACTIVE_STARTUP_REQUIRED_RESULTS = _positive_int_argument(
+            context, "startup_alignment_required_consistent_results"
+        )
+        _ACTIVE_STARTUP_CLOUD_TOPICS = (
+            _prealignment_cloud_topic(context, 0),
+            _prealignment_cloud_topic(context, 1),
+        )
 
+    actions = _ORIGINAL_LAUNCH_SETUP(context, *args, **kwargs)
     enable_fusion = _parse_bool(
         _ORIGINAL_VALUE(context, "enable_fusion"),
         "enable_fusion",
@@ -434,9 +508,16 @@ def _startup_launch_setup(context, *args, **kwargs):
             1,
             LogInfo(
                 msg=(
-                    "Startup ICP is active on %s. Legacy fixed/inverted Z slicing "
-                    "is disabled; occupancy.yaml supplies the static TF/body/range crop."
-                    % _ACTIVE_STARTUP_TOPIC
+                    "Startup ICP is active on %s using clouds=(%s, %s), "
+                    "timeout=%.1fs, accepted_results=%d. Legacy fixed/inverted "
+                    "Z slicing is disabled; occupancy.yaml supplies the static "
+                    "TF/body/range crop."
+                    % (
+                        _ACTIVE_STARTUP_TOPIC,
+                        *_ACTIVE_STARTUP_CLOUD_TOPICS,
+                        _ACTIVE_STARTUP_TIMEOUT_SEC,
+                        _ACTIVE_STARTUP_REQUIRED_RESULTS,
+                    )
                 )
             ),
         )
@@ -458,16 +539,37 @@ def generate_launch_description():
                 "wait_for_initial_alignment",
                 default_value="true",
                 description=(
-                    "Wait for the one-shot startup cloud ICP before launching each "
-                    "robot's odometry/mapping pipeline."
+                    "Wait for one accepted startup cloud ICP before launching "
+                    "each robot's odometry/mapping pipeline."
                 ),
             ),
             DeclareLaunchArgument(
                 "startup_alignment_topic",
                 default_value="/toy/startup_xy_alignment",
                 description=(
-                    "Transient-local startup ICP topic used only as the odometry/"
-                    "mapping release gate."
+                    "Transient-local startup ICP topic used only as the "
+                    "odometry/mapping release gate."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "startup_alignment_timeout_sec",
+                default_value="60.0",
+                description=(
+                    "Fail the launch instead of waiting forever when no accepted "
+                    "startup alignment arrives."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "startup_alignment_status_period_sec",
+                default_value="2.0",
+                description="Periodic diagnostic interval while the gate is waiting.",
+            ),
+            DeclareLaunchArgument(
+                "startup_alignment_required_consistent_results",
+                default_value="1",
+                description=(
+                    "Number of quality-qualified startup ICP results required "
+                    "before releasing odometry."
                 ),
             ),
             *list(base_description.entities),
