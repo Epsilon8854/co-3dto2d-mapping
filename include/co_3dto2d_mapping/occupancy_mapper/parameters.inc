@@ -36,7 +36,7 @@
 
   void declareDynamicFilterParameters()
   {
-    declare_parameter<bool>("dynamic_filter_enabled", true);
+    declare_parameter<bool>("dynamic_filter_enabled", false);
     declare_parameter<int>("dynamic_free_clear_count", 4);
     declare_parameter<int>("dynamic_occupied_confirm_count", 3);
     declare_parameter<int>("dynamic_counter_decay", 1);
@@ -249,4 +249,3 @@
       throw std::runtime_error("ICP coarse-search step must be positive when enabled.");
     }
   }
-
