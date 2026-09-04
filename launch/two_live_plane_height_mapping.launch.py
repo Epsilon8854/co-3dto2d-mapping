@@ -1,19 +1,55 @@
-"""Public two-live wrapper with shared-floor mapping and fixed 2-D alignment.
+"""Public two-live wrapper with config-driven initial XYZ alignment.
 
-The base launch owns both robot pipelines and the record/merged-map outputs. This
-wrapper keeps the plane-height topic contract and replaces the legacy startup
-cloud aligner with CPU-only occupancy place recognition. The result is one fixed
-``map <- r1/odom`` transform; no pose graph or submap optimization is introduced
-at this stage.
+The base launch owns both robot pipelines and the common-frame outputs.  This
+wrapper keeps the public installed launch name while ensuring the startup
+``initial_xy_icp_alignment`` reads its geometric/ICP parameters from the same
+occupancy YAML as the mappers.  Legacy inline z/invert/range defaults are removed
+from the node override list, so the dedicated YAML section is authoritative.
 """
+
+from __future__ import annotations
 
 import importlib.util
 import os
+from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
 
 
-_FILTERED_SUFFIX = "/mapping/plane_height_filtered"
+# These parameters are algorithm/config values and must come from the selected
+# occupancy YAML.  Topic/frame/startup values remain explicit runtime overrides.
+_ALIGNMENT_CONFIG_PARAMETERS = {
+    "use_z_filter",
+    "slice_z_in_cloud_frame",
+    "z_min",
+    "z_max",
+    "invert_z_slice",
+    "frame_count",
+    "invert_result",
+    "center_box_half_extent_m",
+    "range_min_m",
+    "range_max_m",
+    "voxel_size",
+    "max_points",
+    "max_correspondence_distance",
+    "min_correspondences",
+    "min_fitness",
+    "max_rmse",
+    "max_iterations",
+    "occupied_threshold",
+    "required_consistent_results",
+    "max_consistency_translation_m",
+    "max_consistency_rotation_rad",
+    "initialize_from_centroids",
+    "enforce_heading_prior",
+    "expected_yaw_rad",
+    "max_yaw_deviation_rad",
+    "initial_yaw_offsets_rad",
+    "max_iteration_rotation_rad",
+    "heading_prior_weight",
+    "enforce_tilt_prior",
+    "max_tilt_deviation_rad",
+}
 
 
 def _load_base_module():
@@ -28,84 +64,50 @@ def _load_base_module():
 
 
 _BASE = _load_base_module()
-_ORIGINAL_ROBOT_ACTIONS = _BASE._robot_actions
-_ORIGINAL_BOOL_VALUE = _BASE._bool_value
+_ORIGINAL_LAUNCH_SETUP = _BASE.launch_setup
 _ORIGINAL_NODE = _BASE.Node
+_ACTIVE_OCCUPANCY_CONFIG: Optional[str] = None
 
 
-def _plane_filtered_robot_actions(
-    context,
-    robot_id,
-    live_launch_path,
-    enable_rear_lidar_filter,
-):
-    republisher, pipeline, _raw_scan_topic = _ORIGINAL_ROBOT_ACTIONS(
-        context,
-        robot_id,
-        live_launch_path,
-        enable_rear_lidar_filter,
-    )
-    filtered_topic = "/r%d%s" % (robot_id, _FILTERED_SUFFIX)
-    return republisher, pipeline, filtered_topic
+def _config_aware_launch_setup(context, *args, **kwargs):
+    global _ACTIVE_OCCUPANCY_CONFIG
+    _ACTIVE_OCCUPANCY_CONFIG = _BASE._value(context, "occupancy_config_file")
+    return _ORIGINAL_LAUNCH_SETUP(context, *args, **kwargs)
 
 
-def _plane_height_bool_value(context, name):
-    if name == "alignment_use_z_filter":
-        return False
-    return _ORIGINAL_BOOL_VALUE(context, name)
-
-
-def _place_recognition_node(*args, **kwargs):
-    """Replace only the base launch's inter-robot alignment node."""
-
+def _configured_initial_alignment_node(*args, **kwargs):
     if not (
         kwargs.get("package") == "co_3dto2d_mapping"
         and kwargs.get("executable") == "initial_xy_icp_alignment.py"
     ):
         return _ORIGINAL_NODE(*args, **kwargs)
 
-    forwarded = {}
+    config_file = _ACTIVE_OCCUPANCY_CONFIG
+    if not config_file:
+        config_file = os.path.join(
+            get_package_share_directory("co_3dto2d_mapping"),
+            "config",
+            "occupancy.yaml",
+        )
+
+    runtime_overrides = {}
     for parameter_set in kwargs.get("parameters", []):
         if isinstance(parameter_set, dict):
-            forwarded.update(parameter_set)
-
-    package_share = get_package_share_directory("co_3dto2d_mapping")
-    place_config = os.path.join(package_share, "config", "place_recognition.yaml")
-    overrides = {
-        "robot0_map_topic": forwarded.get(
-            "robot0_map_topic", "/r0/toy/global_occupancy"
-        ),
-        "robot1_map_topic": forwarded.get(
-            "robot1_map_topic", "/r1/toy/global_occupancy"
-        ),
-        "robot0_odom_topic": "/r0/toy/corrected_odometry",
-        "robot1_odom_topic": "/r1/toy/corrected_odometry",
-        "alignment_topic": forwarded.get(
-            "alignment_topic", "/toy/initial_xy_alignment"
-        ),
-        "target_frame_id": forwarded.get("target_frame_id", "map"),
-        "source_frame_id": forwarded.get("source_frame_id", "r1/odom"),
-        "startup_delay_sec": forwarded.get("startup_delay_sec", 3.0),
-        "occupied_threshold": forwarded.get("occupied_threshold", 50),
-        "lock_after_consensus": forwarded.get(
-            "lock_after_first_alignment", True
-        ),
-        "stop_processing_after_lock": forwarded.get(
-            "lock_after_first_alignment", True
-        ),
-        "use_sim_time": forwarded.get("use_sim_time", False),
-    }
+            runtime_overrides.update(
+                {
+                    name: value
+                    for name, value in parameter_set.items()
+                    if name not in _ALIGNMENT_CONFIG_PARAMETERS
+                }
+            )
 
     rewritten = dict(kwargs)
-    rewritten["executable"] = "inter_robot_place_alignment.py"
-    rewritten["name"] = "inter_robot_place_alignment"
-    rewritten["parameters"] = [place_config, overrides]
+    rewritten["parameters"] = [config_file, runtime_overrides]
     return _ORIGINAL_NODE(*args, **rewritten)
 
 
-_BASE._robot_actions = _plane_filtered_robot_actions
-_BASE._bool_value = _plane_height_bool_value
-_BASE.Node = _place_recognition_node
+_BASE.launch_setup = _config_aware_launch_setup
+_BASE.Node = _configured_initial_alignment_node
 
 
 def generate_launch_description():
