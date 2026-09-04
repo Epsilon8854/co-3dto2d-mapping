@@ -142,7 +142,7 @@ class CroppedXyzInitialIcpAlignment(HeadingConstrainedInitialXyIcpAlignment):
         self._mark_input_seen(robot_index)
         points_ready = self.robot0_points if robot_index == 0 else self.robot1_points
         if (
-            not self._startup_delay_elapsed()
+            not self._startup_delay_elapsed(robot_index)
             or not self._cloud_collection_enabled()
             or points_ready is not None
         ):

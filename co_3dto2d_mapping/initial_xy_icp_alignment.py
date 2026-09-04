@@ -147,9 +147,11 @@ class InitialXyIcpAlignment(Node):
         self.alignment_msg: Optional[TransformStamped] = None
         self.failed = False
         self.last_recompute_ns = 0
-        self.input_seen = [False, False]
-        self.inputs_ready_since_ns: Optional[int] = None
-        self.startup_complete_logged = False
+        # Warm up and collect each robot independently.  A late remote stream
+        # must not prevent the already-available robot from building its ICP
+        # submap; only the ICP calculation itself requires both submaps.
+        self.input_ready_since_ns: List[Optional[int]] = [None, None]
+        self.startup_complete_logged = [False, False]
         self.pending_candidates: List[PlanarCandidate] = []
         self.missing_transform_warnings = set()
         self.tf_buffer = None
@@ -216,34 +218,37 @@ class InitialXyIcpAlignment(Node):
         )
 
     def _mark_input_seen(self, robot_index: int) -> None:
-        self.input_seen[robot_index] = True
-        if self.inputs_ready_since_ns is not None or not all(self.input_seen):
+        if self.input_ready_since_ns[robot_index] is not None:
             return
 
-        self.inputs_ready_since_ns = self.get_clock().now().nanoseconds
+        self.input_ready_since_ns[robot_index] = self.get_clock().now().nanoseconds
         if self.startup_delay_sec > 0.0:
             self.get_logger().info(
-                "Both ICP inputs are available; ignoring the first %.2fs so the sensor and maps can settle."
-                % self.startup_delay_sec
+                "robot%d ICP input is available; ignoring its first %.2fs so the sensor or map can settle."
+                % (robot_index, self.startup_delay_sec)
             )
 
-    def _startup_delay_elapsed(self) -> bool:
-        if self.inputs_ready_since_ns is None:
+    def _startup_delay_elapsed(self, robot_index: int) -> bool:
+        ready_since_ns = self.input_ready_since_ns[robot_index]
+        if ready_since_ns is None:
             return False
         elapsed_ns = max(
             0,
-            self.get_clock().now().nanoseconds - self.inputs_ready_since_ns,
+            self.get_clock().now().nanoseconds - ready_since_ns,
         )
         if elapsed_ns < int(self.startup_delay_sec * 1e9):
             return False
-        if not self.startup_complete_logged:
-            self.startup_complete_logged = True
-            self.get_logger().info("ICP startup delay complete; alignment attempts are enabled.")
+        if not self.startup_complete_logged[robot_index]:
+            self.startup_complete_logged[robot_index] = True
+            self.get_logger().info(
+                "robot%d ICP startup delay complete; independent frame collection is enabled."
+                % robot_index
+            )
         return True
 
     def _robot0_callback(self, msg: PointCloud2) -> None:
         self._mark_input_seen(0)
-        if not self._startup_delay_elapsed() or self.robot0_points is not None:
+        if not self._startup_delay_elapsed(0) or self.robot0_points is not None:
             return
         self.robot0_points = self._cache_initial_frame(
             "robot0", self.robot0_frames, msg
@@ -252,7 +257,7 @@ class InitialXyIcpAlignment(Node):
 
     def _robot1_callback(self, msg: PointCloud2) -> None:
         self._mark_input_seen(1)
-        if not self._startup_delay_elapsed() or self.robot1_points is not None:
+        if not self._startup_delay_elapsed(1) or self.robot1_points is not None:
             return
         self.robot1_points = self._cache_initial_frame(
             "robot1", self.robot1_frames, msg
@@ -697,7 +702,10 @@ class InitialXyIcpAlignment(Node):
     def _try_compute_periodic_map_alignment(self) -> None:
         if self.robot0_map is None or self.robot1_map is None:
             return
-        if not self._startup_delay_elapsed():
+        if not (
+            self._startup_delay_elapsed(0)
+            and self._startup_delay_elapsed(1)
+        ):
             return
         if self.alignment_msg is not None and self.lock_after_first_alignment:
             return
