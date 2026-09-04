@@ -106,3 +106,16 @@ def test_public_record_republisher_uses_fixed_common_world_frame():
     assert "RENAME record_republisher.py" in cmake
     assert "lock_world_alignment" in world
     assert "output.header.frame_id = self.common_frame_id" in world
+
+
+def test_two_live_public_wrapper_uses_raw_clouds_and_occupancy_config_for_alignment():
+    cmake = (PACKAGE / "CMakeLists.txt").read_text()
+    wrapper = (
+        PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
+    ).read_text()
+    assert "RENAME two_live_mapping_base.launch.py" in cmake
+    assert "RENAME two_live_mapping.launch.py" in cmake
+    assert "_configured_initial_alignment_node" in wrapper
+    assert 'rewritten["parameters"] = [config_file, runtime_overrides]' in wrapper
+    assert "filtered_topic" not in wrapper
+    assert "_place_recognition_node" not in wrapper
