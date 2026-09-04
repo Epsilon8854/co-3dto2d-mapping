@@ -5,8 +5,12 @@ from builtin_interfaces.msg import Time
 from nav_msgs.msg import OccupancyGrid
 
 from co_3dto2d_mapping.record_republisher import (
+    apply_planar_alignment,
     known_cell_centers,
     merge_global_grids,
+)
+from co_3dto2d_mapping.record_republisher_world import (
+    transform_grid_to_common_frame,
 )
 
 
@@ -30,6 +34,22 @@ def make_grid(
     msg.info.origin.orientation.w = math.cos(0.5 * origin_yaw)
     msg.data = data
     return msg
+
+
+def quaternion_yaw(quaternion):
+    return math.atan2(
+        2.0
+        * (
+            quaternion.w * quaternion.z
+            + quaternion.x * quaternion.y
+        ),
+        1.0
+        - 2.0
+        * (
+            quaternion.y * quaternion.y
+            + quaternion.z * quaternion.z
+        ),
+    )
 
 
 def test_known_cell_centers_preserve_free_and_occupied():
@@ -56,6 +76,47 @@ def test_known_cell_centers_apply_grid_origin_yaw():
     assert cells[0][0] == pytest.approx(9.5)
     assert cells[0][1] == pytest.approx(20.5)
     assert cells[0][2] == 0
+
+
+def test_common_frame_grid_transform_preserves_odom_applied_cell_positions():
+    grid = make_grid(
+        width=2,
+        height=1,
+        data=[0, 100],
+        resolution=0.5,
+        origin_x=3.0,
+        origin_y=-2.0,
+        origin_yaw=math.radians(30.0),
+    )
+    alignment = (1.0, 4.0, math.radians(90.0))
+    stamp = Time(sec=8, nanosec=9)
+
+    original_cells = known_cell_centers(grid, 50)
+    transformed = transform_grid_to_common_frame(
+        grid,
+        alignment,
+        "map",
+        stamp,
+    )
+    transformed_cells = known_cell_centers(transformed, 50)
+
+    assert transformed.header.frame_id == "map"
+    assert transformed.header.stamp.sec == 8
+    assert transformed.header.stamp.nanosec == 9
+    assert list(transformed.data) == list(grid.data)
+    assert transformed.info.origin.position.x == pytest.approx(3.0)
+    assert transformed.info.origin.position.y == pytest.approx(7.0)
+    assert quaternion_yaw(transformed.info.origin.orientation) == pytest.approx(
+        math.radians(120.0)
+    )
+    for original, common in zip(original_cells, transformed_cells):
+        expected_x, expected_y = apply_planar_alignment(
+            (original[0], original[1]),
+            alignment,
+        )
+        assert common[0] == pytest.approx(expected_x)
+        assert common[1] == pytest.approx(expected_y)
+        assert common[2] == original[2]
 
 
 def test_merge_keeps_unknown_background_and_both_known_values():
