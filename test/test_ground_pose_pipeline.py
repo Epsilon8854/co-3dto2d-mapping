@@ -30,12 +30,13 @@ def test_namespaced_ground_plane_node_uses_global_tf_topics():
     assert 'remappings=[("tf", "/tf"), ("tf_static", "/tf_static")]' in text
 
 
-def test_default_config_uses_one_meter_plane_height_band():
+def test_default_config_uses_one_meter_plane_height_band_with_pose_fusion_off():
     text = (PACKAGE / "config" / "occupancy.yaml").read_text()
     assert 'corrected_odometry_topic: "toy/planar_odometry"' in text
     assert 'ground_plane_planar_odometry_topic: "toy/planar_odometry"' in text
     assert 'ground_plane_output_odometry_topic: "toy/corrected_odometry"' in text
     assert 'ground_plane_filtered_cloud_topic: "mapping/plane_height_filtered"' in text
+    assert "ground_plane_pose_enabled: false" in text
     assert "ground_plane_height_filter_enabled: true" in text
     assert "ground_plane_filter_min_height_m: 0.05" in text
     assert "ground_plane_filter_max_height_m: 1.00" in text
@@ -48,7 +49,9 @@ def test_default_config_uses_one_meter_plane_height_band():
 def test_cmake_installs_height_filter_wrapper_as_pose_fusion_executable():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     wrapper = (
-        PACKAGE / "co_3dto2d_mapping" / "gravity_plane_height_cloud.py"
+        PACKAGE
+        / "co_3dto2d_mapping"
+        / "gravity_plane_height_cloud.py"
     ).read_text()
     assert "gravity_plane_height_cloud.py" in cmake
     assert "RENAME gravity_plane_pose_fusion.py" in cmake
@@ -59,7 +62,9 @@ def test_cmake_installs_height_filter_wrapper_as_pose_fusion_executable():
 def test_record_republisher_prefers_fresh_ground_fused_pose_with_raw_fallback():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     wrapper = (
-        PACKAGE / "co_3dto2d_mapping" / "record_republisher_ground_fused.py"
+        PACKAGE
+        / "co_3dto2d_mapping"
+        / "record_republisher_ground_fused.py"
     ).read_text()
     assert "record_republisher_ground_fused.py" in cmake
     assert "RENAME record_republisher.py" in cmake
@@ -73,7 +78,9 @@ def test_record_republisher_prefers_fresh_ground_fused_pose_with_raw_fallback():
 def test_two_live_public_launch_aligns_plane_filtered_clouds():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     wrapper = (
-        PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
+        PACKAGE
+        / "launch"
+        / "two_live_plane_height_mapping.launch.py"
     ).read_text()
     assert "RENAME two_live_mapping_base.launch.py" in cmake
     assert "RENAME two_live_mapping.launch.py" in cmake
