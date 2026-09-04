@@ -3,20 +3,21 @@
 
 This wrapper keeps the ground-fused odometry selection and temporal occupancy
 fusion from the existing implementation, but publishes recorded robot odometry
-poses directly in the common/world frame.  It also latches the first accepted
-inter-robot alignment by default so a late noisy estimate cannot repeatedly
-reset and visually blink the merged map.
+and occupancy grids directly in the common/world frame. It also latches the
+first accepted inter-robot alignment by default so a late noisy estimate cannot
+repeatedly reset and visually blink the merged map.
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 import math
 from typing import Optional, Set, Tuple
 
 import numpy as np
 import rclpy
-from geometry_msgs.msg import TransformStamped
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Quaternion, TransformStamped
+from nav_msgs.msg import OccupancyGrid, Odometry
 
 from co_3dto2d_mapping.alignment_utils import angular_distance
 from co_3dto2d_mapping.record_republisher_ground_fused import (
@@ -27,18 +28,111 @@ from co_3dto2d_mapping.record_republisher_ground_fused import (
 PlanarAlignment = Tuple[float, float, float]
 
 
+def _multiply_quaternion(left: Quaternion, right: Quaternion) -> Quaternion:
+    output = Quaternion()
+    output.x = (
+        left.w * right.x
+        + left.x * right.w
+        + left.y * right.z
+        - left.z * right.y
+    )
+    output.y = (
+        left.w * right.y
+        - left.x * right.z
+        + left.y * right.w
+        + left.z * right.x
+    )
+    output.z = (
+        left.w * right.z
+        + left.x * right.y
+        - left.y * right.x
+        + left.z * right.w
+    )
+    output.w = (
+        left.w * right.w
+        - left.x * right.x
+        - left.y * right.y
+        - left.z * right.z
+    )
+    norm = math.sqrt(
+        output.x * output.x
+        + output.y * output.y
+        + output.z * output.z
+        + output.w * output.w
+    )
+    if norm > 1e-12:
+        output.x /= norm
+        output.y /= norm
+        output.z /= norm
+        output.w /= norm
+    else:
+        output.x = 0.0
+        output.y = 0.0
+        output.z = 0.0
+        output.w = 1.0
+    return output
+
+
+def transform_grid_to_common_frame(
+    msg: OccupancyGrid,
+    alignment: PlanarAlignment,
+    common_frame_id: str,
+    stamp=None,
+) -> OccupancyGrid:
+    """Rigidly move an occupancy-grid pose into ``common_frame_id``.
+
+    The raster values do not need resampling: an OccupancyGrid already stores a
+    full origin pose. Composing that origin with ``common <- robot/odom`` keeps
+    all odometry-applied cells intact while making the published frame contract
+    self-contained for RViz, map saving, and consumers that do not resolve TF.
+    """
+
+    output = deepcopy(msg)
+    if stamp is not None:
+        output.header.stamp = stamp
+    output.header.frame_id = str(common_frame_id)
+
+    align_x, align_y, align_yaw = alignment
+    cosine = math.cos(align_yaw)
+    sine = math.sin(align_yaw)
+    origin = msg.info.origin
+    output.info.origin.position.x = (
+        align_x
+        + cosine * float(origin.position.x)
+        - sine * float(origin.position.y)
+    )
+    output.info.origin.position.y = (
+        align_y
+        + sine * float(origin.position.x)
+        + cosine * float(origin.position.y)
+    )
+    output.info.origin.position.z = float(origin.position.z)
+
+    yaw_quaternion = Quaternion()
+    yaw_quaternion.z = math.sin(0.5 * align_yaw)
+    yaw_quaternion.w = math.cos(0.5 * align_yaw)
+    output.info.origin.orientation = _multiply_quaternion(
+        yaw_quaternion,
+        origin.orientation,
+    )
+    return output
+
+
 class WorldFrameGroundFusedRecordRepublisher(
     GroundFusedTemporalRecordRepublisher
 ):
-    """Republish selected odometry as ``world <- robot/base_link`` poses."""
+    """Republish selected odometry and maps in the shared world frame."""
 
     def __init__(self) -> None:
         self._world_odom_logged: Set[int] = set()
+        self._world_map_logged: Set[int] = set()
         self._last_latched_alignment_warning_ns = 0
         super().__init__()
 
         self.declare_parameter("publish_world_odometry", True)
         self.declare_parameter("suppress_unaligned_world_odometry", True)
+        self.declare_parameter("publish_world_maps", True)
+        self.declare_parameter("suppress_unaligned_world_maps", True)
         self.declare_parameter("lock_world_alignment", True)
         self.declare_parameter("world_alignment_same_translation_m", 0.01)
         self.declare_parameter(
@@ -49,6 +143,12 @@ class WorldFrameGroundFusedRecordRepublisher(
         )
         self.suppress_unaligned_world_odometry = bool(
             self.get_parameter("suppress_unaligned_world_odometry").value
+        )
+        self.publish_world_maps = bool(
+            self.get_parameter("publish_world_maps").value
+        )
+        self.suppress_unaligned_world_maps = bool(
+            self.get_parameter("suppress_unaligned_world_maps").value
         )
         self.lock_world_alignment = bool(
             self.get_parameter("lock_world_alignment").value
@@ -66,12 +166,15 @@ class WorldFrameGroundFusedRecordRepublisher(
             ),
         )
         self.get_logger().info(
-            "World-frame record output: enabled=%s common_frame=%s "
-            "suppress_unaligned=%s lock_alignment=%s"
+            "World-frame record output: odometry=%s maps=%s common_frame=%s "
+            "suppress_unaligned_odom=%s suppress_unaligned_maps=%s "
+            "lock_alignment=%s"
             % (
                 "true" if self.publish_world_odometry else "false",
+                "true" if self.publish_world_maps else "false",
                 self.common_frame_id,
                 "true" if self.suppress_unaligned_world_odometry else "false",
+                "true" if self.suppress_unaligned_world_maps else "false",
                 "true" if self.lock_world_alignment else "false",
             )
         )
@@ -187,6 +290,38 @@ class WorldFrameGroundFusedRecordRepublisher(
             )
         return output
 
+    def _world_grid(
+        self,
+        msg: OccupancyGrid,
+        stamp,
+        robot_id: int,
+    ) -> Optional[OccupancyGrid]:
+        if not self.publish_world_maps:
+            return self.copy_grid(msg, stamp, robot_id)
+
+        if robot_id == 0:
+            alignment = (0.0, 0.0, 0.0)
+        elif self.alignment is None:
+            if self.suppress_unaligned_world_maps:
+                return None
+            return self.copy_grid(msg, stamp, robot_id)
+        else:
+            alignment = self.alignment
+
+        output = transform_grid_to_common_frame(
+            msg,
+            alignment,
+            self.common_frame_id,
+            stamp,
+        )
+        if robot_id not in self._world_map_logged:
+            self._world_map_logged.add(robot_id)
+            self.get_logger().info(
+                "Publishing %s/r%d occupancy grids directly in common frame %s."
+                % (self.output_prefix, robot_id, self.common_frame_id)
+            )
+        return output
+
     def publish_outputs(self) -> None:
         # Keep the most recent ground-fused pose selected before creating both
         # the world-frame odometry messages and odom->base TF transforms.
@@ -198,13 +333,13 @@ class WorldFrameGroundFusedRecordRepublisher(
                 self.odom_pubs[robot_id].publish(output)
 
         for robot_id, msg in self.latest_local_maps.items():
-            self.local_map_pubs[robot_id].publish(
-                self.copy_grid(msg, stamp, robot_id)
-            )
+            output = self._world_grid(msg, stamp, robot_id)
+            if output is not None:
+                self.local_map_pubs[robot_id].publish(output)
         for robot_id, msg in self.latest_global_maps.items():
-            self.global_map_pubs[robot_id].publish(
-                self.copy_grid(msg, stamp, robot_id)
-            )
+            output = self._world_grid(msg, stamp, robot_id)
+            if output is not None:
+                self.global_map_pubs[robot_id].publish(output)
         for robot_id, msg in self.latest_slice_kept_points.items():
             self.slice_kept_points_pubs[robot_id].publish(
                 self.copy_cloud(msg, stamp, robot_id)
