@@ -46,8 +46,8 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-# Preserve the original two-live implementation under an internal name, then
-# expose the shared-floor/place-recognition wrapper through the public launch.
+# Preserve the config-driven implementation under an internal installed name,
+# then expose its lightweight compatibility wrapper through the public launch.
 install(
   FILES launch/two_live_mapping.launch.py
   DESTINATION share/${PROJECT_NAME}/launch
@@ -79,8 +79,9 @@ install(
   RENAME gravity_plane_pose_fusion.py
 )
 
-# Retain the cropped-cloud aligner as a legacy fallback/baseline. Public live
-# and combined-bag paths select inter_robot_place_alignment.py instead.
+# Public two-live operation uses this cropped-XYZ aligner for the pre-odometry
+# startup stage. The occupancy place-recognition node remains installed for the
+# combined-bag/S3E path and later collaborative experiments.
 install(
   PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
   DESTINATION lib/${PROJECT_NAME}
