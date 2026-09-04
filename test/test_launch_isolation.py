@@ -7,6 +7,9 @@ LAUNCH_NAMES = (
     "bag_mid360.launch.py",
     "live_mapping.launch.py",
     "two_live_mapping.launch.py",
+    "two_live_plane_height_mapping.launch.py",
+    "initial_alignment_live.launch.py",
+    "post_alignment_fusion.launch.py",
     "rtabmap_mid360_odometry.launch.py",
     "mid360_mapping_pipeline.launch.py",
     "single_bag_mapping.launch.py",
@@ -45,6 +48,8 @@ def test_mapping_nodes_use_standalone_package_name():
         "mid360_mapping_pipeline.launch.py",
         "single_bag_mapping.launch.py",
         "two_live_mapping.launch.py",
+        "initial_alignment_live.launch.py",
+        "post_alignment_fusion.launch.py",
         "two_bag_mapping.launch.py",
         "rerun_mapping.launch.py",
     )
@@ -79,16 +84,21 @@ def test_two_live_mapping_isolates_robot_topics_and_frames():
     assert missing == []
 
 
-def test_two_live_laptop_runner_starts_only_its_local_mapping_pipeline():
+def test_two_live_laptop_runner_stages_alignment_before_local_mapping():
     text = (PACKAGE / "scripts" / "run_two_mid360_2d_mapping.sh").read_text()
     required = (
         'ENABLE_ROBOT0_PIPELINE="true"',
         'ENABLE_ROBOT1_PIPELINE="true"',
         '"enable_robot0_pipeline:=${ENABLE_ROBOT0_PIPELINE}"',
         '"enable_robot1_pipeline:=${ENABLE_ROBOT1_PIPELINE}"',
-        '"enable_fusion:=${RUN_FUSION}"',
+        '"enable_fusion:=${MAPPING_ENABLE_FUSION}"',
         'RUN_LOCAL_MAPPING="${TWO_LIVE_LOCAL_MAPPING:-true}"',
+        'WAIT_FOR_INITIAL_ALIGNMENT="${TWO_LIVE_WAIT_FOR_INITIAL_ALIGNMENT:-true}"',
         'EXPECTED_UPDATE_RATE="${EXPECTED_UPDATE_RATE:-11.0}"',
+        "initial_alignment_live.launch.py",
+        "post_alignment_fusion.launch.py",
+        "ODOM/MAPPING BLOCKED",
+        "INITIAL ALIGNMENT READY",
     )
     missing = [fragment for fragment in required if fragment not in text]
     assert missing == []
