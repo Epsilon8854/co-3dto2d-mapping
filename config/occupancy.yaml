@@ -30,12 +30,11 @@
     raycast_clear_occupied: false
     occupied_threshold_points: 1
 
-    # Temporal occupied/free evidence is frame based. Each grid cell contributes
-    # at most one free/occupied observation per mapping frame, so dense scans do
-    # not clear a cell immediately. Time-based evidence remains a later ablation.
-    dynamic_filter_enabled: true
-    dynamic_free_clear_count: 4
-    dynamic_occupied_confirm_count: 3
+    # Baseline default: temporal dynamic filtering is opt-in. Set this to true
+    # for repeated occupied/free evidence and stale-obstacle cleanup.
+    dynamic_filter_enabled: false
+    dynamic_free_clear_count: 10
+    dynamic_occupied_confirm_count: 1
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 30
 
@@ -68,15 +67,14 @@
     publish_corrected_odometry: true
     corrected_odometry_topic: "toy/corrected_odometry"
 
-    # Single-floor shared-state front end.
-    #
-    # raw cloud + IMU + raw odom -> one floor observation
-    #   -> mapping/plane_height_filtered
-    #   -> mapping/floor_odometry
-    # Both outputs have the raw cloud stamp and the occupancy mapper consumes
-    # both. Set ground_plane_pose_enabled=false to pass raw odometry through on
-    # mapping/floor_odometry while keeping exactly the same filtered cloud.
-    ground_plane_pose_enabled: true
+    # The occupancy mapper produces the planar x/y/yaw estimate on this
+    # intermediate topic. gravity_plane_pose_fusion.py adds z/roll/pitch and
+    # publishes the final pose on toy/corrected_odometry when explicitly enabled.
+    corrected_odometry_topic: "toy/planar_odometry"
+
+    # Baseline default: pass planar odometry through without replacing
+    # z/roll/pitch. Set this to true to enable ground-plane pose fusion.
+    ground_plane_pose_enabled: false
     ground_plane_pointcloud_topic: "/livox/lidar"
     ground_plane_imu_topic: "/livox/imu_filtered"
     ground_plane_planar_odometry_topic: "odom"

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Record republisher with temporal fusion driven by local observation grids.
+"""Record republisher with optional temporal fusion from local observations.
 
 The original merged map rebuilt an occupied-wins union of the two persistent
-per-robot global maps.  That makes an occupied cell from a robot that no longer
-observes the area impossible to clear.  This wrapper keeps the existing
-republishing/TF behavior, seeds from each global map once, and then updates the
-merged map only from new current-frame local occupancy observations.
+per-robot global maps.  When enabled, this wrapper instead seeds from each
+global map once and updates the merged map from fresh local observation grids.
+The baseline keeps this behavior opt-in through
+``merged_temporal_filter_enabled``.
 """
 
 import math
@@ -117,7 +117,7 @@ class TemporalToyRecordRepublisher(ToyRecordRepublisher):
         self.last_temporal_log_ns = 0
         super().__init__()
 
-        self.declare_parameter("merged_temporal_filter_enabled", True)
+        self.declare_parameter("merged_temporal_filter_enabled", False)
         self.declare_parameter("merged_dynamic_free_clear_count", 4)
         self.declare_parameter("merged_dynamic_occupied_confirm_count", 3)
         self.declare_parameter("merged_dynamic_counter_decay", 1)
@@ -242,7 +242,7 @@ class TemporalToyRecordRepublisher(ToyRecordRepublisher):
         if not self._ensure_temporal_fusion(msg):
             return None
 
-        # A global map may be used once as a startup bootstrap.  It is never
+        # A global map may be used once as a startup bootstrap. It is never
         # processed again after live local observations start.
         if robot_id not in self.seeded_robots and robot_id not in self.live_robots:
             global_map = self.latest_global_maps.get(robot_id)

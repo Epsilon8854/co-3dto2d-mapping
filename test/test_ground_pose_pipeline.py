@@ -34,48 +34,13 @@ def test_namespaced_ground_plane_node_uses_global_tf_topics():
     assert 'remappings=[("tf", "/tf"), ("tf_static", "/tf_static")]' in text
 
 
-def test_shared_floor_wrapper_has_one_fit_callback_per_cloud_odom_pair():
-    wrapper = (
-        PACKAGE / "co_3dto2d_mapping" / "gravity_plane_height_cloud.py"
-    ).read_text()
-    assert "def _synchronized_callback(" in wrapper
-    assert "This is the only floor-fitting callback" in wrapper
-    assert "def _height_cloud_callback(" not in wrapper
-    assert "_height_cloud_subscription" not in wrapper
-    assert "estimate_single_floor_plane(" in wrapper
-    assert "_publish_mapping_cloud(" in wrapper
-    assert "_fused_mapping_odometry(" in wrapper
-
-
-def test_shared_floor_state_resets_on_a_replayed_earlier_timestamp():
-    wrapper = (
-        PACKAGE / "co_3dto2d_mapping" / "gravity_plane_height_cloud.py"
-    ).read_text()
-    assert "stamp_ns < self._last_plane_stamp_ns" in wrapper
-    assert "non-monotonic cloud timestamp" in wrapper
-    assert "self._clear_plane_state()" in wrapper
-    assert "super()._accept_or_hold_plane(" in wrapper
-
-
-def test_projection_ablation_keeps_filtered_cloud_but_passes_raw_pose():
-    wrapper = (
-        PACKAGE / "co_3dto2d_mapping" / "gravity_plane_height_cloud.py"
-    ).read_text()
-    config = (PACKAGE / "config" / "occupancy.yaml").read_text()
-    assert "if not self.enabled or normal is None or height_m is None:" in wrapper
-    assert "ground_plane_pose_enabled: true" in config
-    assert "Set ground_plane_pose_enabled=false" in config
-    assert 'ground_plane_planar_odometry_topic: "odom"' in config
-    assert 'ground_plane_output_odometry_topic: "mapping/floor_odometry"' in config
-    assert 'corrected_odometry_topic: "toy/corrected_odometry"' in config
-
-
-def test_default_config_encodes_flat_single_floor_mode():
+def test_default_config_uses_one_meter_plane_height_band_with_pose_fusion_off():
     text = (PACKAGE / "config" / "occupancy.yaml").read_text()
-    assert 'ground_plane_estimation_mode: "single_floor"' in text
-    assert "ground_plane_single_floor_bin_size_m: 0.025" in text
-    assert "ground_plane_single_floor_lowest_support_ratio: 0.55" in text
-    assert "ground_plane_max_normal_deviation_deg: 8.0" in text
+    assert 'corrected_odometry_topic: "toy/planar_odometry"' in text
+    assert 'ground_plane_planar_odometry_topic: "toy/planar_odometry"' in text
+    assert 'ground_plane_output_odometry_topic: "toy/corrected_odometry"' in text
+    assert 'ground_plane_filtered_cloud_topic: "mapping/plane_height_filtered"' in text
+    assert "ground_plane_pose_enabled: false" in text
     assert "ground_plane_height_filter_enabled: true" in text
     assert "ground_plane_filter_min_height_m: 0.05" in text
     assert "ground_plane_filter_max_height_m: 1.00" in text
@@ -88,7 +53,9 @@ def test_default_config_encodes_flat_single_floor_mode():
 def test_cmake_installs_single_floor_module_and_shared_wrapper():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
     wrapper = (
-        PACKAGE / "co_3dto2d_mapping" / "gravity_plane_height_cloud.py"
+        PACKAGE
+        / "co_3dto2d_mapping"
+        / "gravity_plane_height_cloud.py"
     ).read_text()
     assert "ament_python_install_package" in cmake
     assert "gravity_plane_height_cloud.py" in cmake
@@ -98,11 +65,30 @@ def test_cmake_installs_single_floor_module_and_shared_wrapper():
 
 def test_public_record_republisher_uses_fixed_common_world_frame():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
-    world = (
-        PACKAGE / "co_3dto2d_mapping" / "record_republisher_world.py"
+    wrapper = (
+        PACKAGE
+        / "co_3dto2d_mapping"
+        / "record_republisher_ground_fused.py"
     ).read_text()
     assert "record_republisher_ground_fused.py" in cmake
     assert "record_republisher_world.py" in cmake
     assert "RENAME record_republisher.py" in cmake
-    assert "lock_world_alignment" in world
-    assert "output.header.frame_id = self.common_frame_id" in world
+    assert "/r{robot_id}/toy/corrected_odometry" in wrapper
+    assert "TemporalToyRecordRepublisher" in wrapper
+    assert 'declare_parameter("ground_fused_odometry_timeout_sec", 3.0)' in wrapper
+    assert "falling back to /r%d/odom" in wrapper
+    assert "self._refresh_odometry_selection()" in wrapper
+
+
+def test_two_live_public_launch_aligns_plane_filtered_clouds():
+    cmake = (PACKAGE / "CMakeLists.txt").read_text()
+    wrapper = (
+        PACKAGE
+        / "launch"
+        / "two_live_plane_height_mapping.launch.py"
+    ).read_text()
+    assert "RENAME two_live_mapping_base.launch.py" in cmake
+    assert "RENAME two_live_mapping.launch.py" in cmake
+    assert 'filtered_topic = "/r%d%s"' in wrapper
+    assert 'name == "alignment_use_z_filter"' in wrapper
+    assert "return False" in wrapper
