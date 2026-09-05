@@ -1,4 +1,4 @@
-"""Compose current two-live mapping with LiDAR-frame 2D startup map ICP."""
+"""Compose current two-live mapping with distributed LiDAR-frame 2D startup maps."""
 
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 
 from co_3dto2d_mapping.startup_lidar_launch_icp import (
     gate_process,
+    local_startup_map_nodes,
     map_topic_instead_of_cloud,
     startup_2d_map_icp_node,
 )
@@ -33,12 +34,21 @@ _LAYER = _load_plane_layer()
 _SOURCE_CLOUD_TOPIC = _LAYER._prealignment_cloud_topic
 
 # Reuse the current ground-plane/local-window/place-recognition launch, changing
-# only its startup producer and the gate's diagnostic input topics.
+# only the startup producer and the gate's diagnostic input topics.
 _LAYER._prealignment_cloud_topic = map_topic_instead_of_cloud
 _LAYER._gate_process = lambda topic, name: gate_process(_LAYER, topic, name)
 _LAYER._startup_icp_node = lambda context: startup_2d_map_icp_node(
     _LAYER, _SOURCE_CLOUD_TOPIC, context
 )
+
+
+def _local_startup_maps(context, *args, **kwargs):
+    del args, kwargs
+    return local_startup_map_nodes(
+        _LAYER,
+        _SOURCE_CLOUD_TOPIC,
+        context,
+    )
 
 
 def generate_launch_description():
@@ -75,5 +85,9 @@ def generate_launch_description():
                 description="Republish period for each latched startup map.",
             ),
             *list(layered.entities),
+            # This comes after all inherited DeclareLaunchArgument actions, so it
+            # can inspect enable_robotN_pipeline. Each distributed laptop creates
+            # only its own startup map; the fusion host receives the two maps.
+            OpaqueFunction(function=_local_startup_maps),
         ]
     )
