@@ -50,6 +50,7 @@ def generate_launch_description():
         "scan_cloud_topic": LaunchConfiguration("scan_cloud_topic"),
         "imu_raw_topic": LaunchConfiguration("imu_raw_topic"),
         "imu_filtered_topic": LaunchConfiguration("imu_filtered_topic"),
+        "imu_input_is_filtered": LaunchConfiguration("imu_input_is_filtered"),
         "alignment_required": "false",
         "alignment_topic": LaunchConfiguration("alignment_topic"),
         "transform_cloud_to_local_frame": LaunchConfiguration(
@@ -94,6 +95,7 @@ def generate_launch_description():
                 "imu_filtered_topic",
                 default_value="/livox/imu_filtered",
             ),
+            DeclareLaunchArgument("imu_input_is_filtered", default_value="false"),
             DeclareLaunchArgument(
                 "alignment_topic",
                 default_value="/toy/initial_xy_alignment",

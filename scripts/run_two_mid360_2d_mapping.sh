@@ -46,6 +46,7 @@ ROBOT0_IMU_TOPIC="/r0/livox/imu"
 ROBOT1_LIDAR_TOPIC="/r1/livox/lidar"
 ROBOT1_IMU_TOPIC="/r1/livox/imu"
 PUBLISH_SENSOR_STATIC_TF="true"
+ENABLE_PLACE_RECOGNITION="false"
 START_RVIZ=true
 PROCESS_GROUPS=()
 CHILD_PIDS=()
@@ -87,6 +88,7 @@ Options:
   --robot1-imu-topic TOPIC     r1 IMU input (default: ${ROBOT1_IMU_TOPIC})
   --publish-sensor-static-tf BOOL
                                 Publish robot-specific sensor TF (default: true)
+  --enable-place-recognition   Run later occupancy place recognition (default: off)
   --launch-arg NAME:=VALUE     Additional two_live_mapping launch argument;
                                 may be repeated
   --no-rviz                    Mapping host runs without RViz
@@ -203,6 +205,10 @@ while (($# > 0)); do
       require_value "$1" "${2:-}"
       PUBLISH_SENSOR_STATIC_TF=$2
       shift 2
+      ;;
+    --enable-place-recognition)
+      ENABLE_PLACE_RECOGNITION="true"
+      shift
       ;;
     --launch-arg)
       require_value "$1" "${2:-}"
@@ -427,6 +433,7 @@ if [[ "${RUN_LOCAL_MAPPING}" == true || "${RUN_FUSION}" == true ]]; then
     "robot1_imu_topic:=${ROBOT1_IMU_TOPIC}"
     "expected_update_rate:=${EXPECTED_UPDATE_RATE}"
     "publish_sensor_static_tf:=${PUBLISH_SENSOR_STATIC_TF}"
+    "enable_place_recognition:=${ENABLE_PLACE_RECOGNITION}"
     "occupancy_config_file:=${MAPPING_CONFIG}"
   )
   mapping_command+=("${EXTRA_LAUNCH_ARGS[@]}")

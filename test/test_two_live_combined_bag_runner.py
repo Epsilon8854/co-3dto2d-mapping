@@ -95,13 +95,40 @@ def test_auto_imu_prefers_the_more_complete_filtered_stream(tmp_path: Path) -> N
     assert result.returncode == 0, result.stderr
     assert "INPUT_R0_IMU=/r0/mapping/imu_filtered (2088 messages, filtered)" in result.stdout
     assert "INPUT_R1_IMU=/r1/mapping/imu_filtered (3053 messages, filtered)" in result.stdout
-    assert "two_live_combined_bag_mapping.launch.py" in result.stdout
+    assert "two_live_mapping.launch.py" in result.stdout
+    assert "two_live_combined_bag_mapping.launch.py" not in result.stdout
+    assert "enable_robot0_pipeline:=true" in result.stdout
+    assert "enable_robot1_pipeline:=true" in result.stdout
+    assert "enable_fusion:=true" in result.stdout
+    assert "publish_sensor_static_tf:=true" in result.stdout
+    assert "wait_for_initial_alignment:=true" in result.stdout
     assert "robot0_imu_input_is_filtered:=true" in result.stdout
     assert "robot1_imu_input_is_filtered:=true" in result.stdout
     assert "R0_FILTERED_IMU_BYPASS=true" in result.stdout
     assert "R1_FILTERED_IMU_BYPASS=true" in result.stdout
     assert "wait_imu_to_init:=false" in result.stdout
     assert "expected_update_rate:=0.0" in result.stdout
+
+
+def test_place_recognition_is_opt_in_for_combined_replay(tmp_path: Path) -> None:
+    # Given: a valid combined bag at the shared-start location.
+    bag = tmp_path / "combined"
+    _write_metadata(bag, _representative_topics())
+
+    # When: the default runner command is printed.
+    default_result = _dry_run(bag)
+
+    # Then: startup ICP supplies the initial transform without the later
+    # occupancy place recognizer.
+    assert default_result.returncode == 0, default_result.stderr
+    assert "enable_place_recognition:=false" in default_result.stdout
+
+    # When: an operator explicitly enables later place recognition.
+    enabled_result = _dry_run(bag, "--enable-place-recognition")
+
+    # Then: the public launch receives the opt-in boolean.
+    assert enabled_result.returncode == 0, enabled_result.stderr
+    assert "enable_place_recognition:=true" in enabled_result.stdout
 
 
 def test_replay_rate_scales_mapping_and_alignment_wall_timers(tmp_path: Path) -> None:
@@ -131,6 +158,20 @@ def test_replay_rate_scales_mapping_and_alignment_wall_timers(tmp_path: Path) ->
     assert "alignment_recompute_period_sec:=4.000" in result.stdout
 
 
+def test_startup_gate_default_keeps_one_recorded_second_for_final_alignment(
+    tmp_path: Path,
+) -> None:
+    bag = tmp_path / "combined"
+    _write_metadata(bag, _representative_topics())
+
+    result = _dry_run(bag)
+
+    assert result.returncode == 0, result.stderr
+    assert "RECORDED_ALIGNMENT_WARMUP=1s" in result.stdout
+    assert "ALIGNMENT_STARTUP_DELAY_WALL=2.000s" in result.stdout
+    assert "alignment_startup_delay_sec:=2.000" in result.stdout
+
+
 def test_raw_imu_mode_can_be_forced(tmp_path: Path) -> None:
     bag = tmp_path / "combined"
     _write_metadata(bag, _representative_topics())
@@ -144,23 +185,42 @@ def test_raw_imu_mode_can_be_forced(tmp_path: Path) -> None:
     assert "robot1_imu_input_is_filtered:=false" in result.stdout
 
 
-def test_prefiltered_imu_is_forwarded_without_running_madgwick_twice() -> None:
+def test_prefiltered_imu_is_forwarded_through_the_public_live_launch() -> None:
     pipeline = (
         REPOSITORY_ROOT / "launch" / "mid360_mapping_pipeline.launch.py"
     ).read_text(encoding="utf-8")
-    single = (
-        REPOSITORY_ROOT / "launch" / "single_bag_mapping.launch.py"
-    ).read_text(encoding="utf-8")
-    combined = (
-        REPOSITORY_ROOT / "launch" / "two_live_combined_bag_mapping.launch.py"
-    ).read_text(encoding="utf-8")
+    live = (REPOSITORY_ROOT / "launch" / "live_mapping.launch.py").read_text(
+        encoding="utf-8"
+    )
+    two_live = (REPOSITORY_ROOT / "launch" / "two_live_mapping.launch.py").read_text(
+        encoding="utf-8"
+    )
 
     assert 'DeclareLaunchArgument("imu_input_is_filtered", default_value="false")' in pipeline
     assert "if not imu_input_is_filtered:" in pipeline
     assert "imu_raw_topic if imu_input_is_filtered else imu_filter_output_topic" in pipeline
-    assert '"imu_input_is_filtered": LaunchConfiguration(' in single
-    assert "robot0_imu_input_is_filtered" in combined
-    assert "robot1_imu_input_is_filtered" in combined
+    assert '"imu_input_is_filtered": LaunchConfiguration(' in live
+    assert "robot0_imu_input_is_filtered" in two_live
+    assert "robot1_imu_input_is_filtered" in two_live
+
+
+def test_public_live_launch_keeps_bag_alignment_profiles() -> None:
+    two_live = (REPOSITORY_ROOT / "launch" / "two_live_mapping.launch.py").read_text(
+        encoding="utf-8"
+    )
+    public_wrapper = (
+        REPOSITORY_ROOT / "launch" / "two_live_plane_height_mapping.launch.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'DeclareLaunchArgument("alignment_config_file", default_value="")' in two_live
+    assert (
+        'DeclareLaunchArgument(\n'
+        '                "enable_place_recognition",\n'
+        '                default_value="false",'
+    ) in two_live
+    assert "if enable_fusion and enable_place_recognition:" in two_live
+    assert "_active_alignment_config_file" in public_wrapper
+    assert "alignment_parameters.append(_active_alignment_config_file)" in public_wrapper
 
 
 def test_extra_launch_arguments_are_forwarded_after_safe_defaults(tmp_path: Path) -> None:

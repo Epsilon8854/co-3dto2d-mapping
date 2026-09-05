@@ -75,7 +75,7 @@ source ~/co_3dto2d_mapping/install/local_setup.bash
 
 두 로봇 live mode에는 다음 조건이 추가됩니다.
 
-- **두 로봇은 같은 바닥에서 서로 나란히 배치하고, 동일한 방향을 바라보는 상태로 mapping을 시작합니다.** 양쪽 LiDAR가 충분한 공통 구조를 관측하도록 간격을 너무 넓히지 말고, 실행 후 초기 odometry와 occupancy가 안정될 때까지 약 10초간 정지한 뒤 이동합니다. 이 초기 배치 조건을 만족하지 않으면 place recognition과 `map <- r1/odom` 초기 정렬이 실패할 수 있습니다.
+- **두 로봇은 같은 바닥에서 서로 나란히 배치하고, 동일한 방향을 바라보는 상태로 mapping을 시작합니다.** 시작 ICP가 `map <- r1/odom` 초기 정렬을 만들며 후속 place recognition은 기본적으로 꺼져 있습니다. 시작 위치가 다르거나 주행 중 재정렬이 필요한 경우에만 fusion host에 `--enable-place-recognition`을 지정합니다.
 - 네 입력 토픽은 `/`로 시작하는 절대 이름이어야 하며 서로 중복되면 안 됩니다. launch가 중복 토픽, 내부 `/rN/mapping/*` 토픽 또는 재게시 순환 연결을 감지하면 종료합니다.
 - 두 driver가 이미 동일한 `/livox/lidar`, `/livox/imu`에 데이터를 섞어 publish한 뒤에는 launch 인자만으로 로봇별 메시지를 다시 분리할 수 없습니다. driver의 namespace 또는 remap을 먼저 설정해야 합니다.
 - 외부 `robot_state_publisher`나 driver가 TF를 publish한다면 `r0/base_link`, `r0/livox_frame`, `r1/base_link`, `r1/livox_frame`처럼 frame을 로봇별로 분리합니다. 동일 static TF를 외부에서 제공할 때는 `publish_sensor_static_tf:=false`를 사용합니다.

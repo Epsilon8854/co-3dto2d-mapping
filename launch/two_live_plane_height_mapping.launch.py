@@ -64,6 +64,7 @@ _ACTIVE_STARTUP_CLOUD_TOPICS = (
     "/r0/mapping/lidar",
     "/r1/mapping/lidar",
 )
+_active_alignment_config_file = ""
 
 
 def _parse_bool(value, name):
@@ -264,6 +265,9 @@ def _plane_filtered_robot_actions(
 def _place_recognition_parameters(forwarded):
     package_share = get_package_share_directory("co_3dto2d_mapping")
     place_config = os.path.join(package_share, "config", "place_recognition.yaml")
+    alignment_parameters = [place_config]
+    if _active_alignment_config_file:
+        alignment_parameters.append(_active_alignment_config_file)
     overrides = {
         "robot0_map_topic": forwarded.get(
             "robot0_map_topic", "/r0/toy/global_occupancy"
@@ -288,7 +292,7 @@ def _place_recognition_parameters(forwarded):
         ),
         "use_sim_time": forwarded.get("use_sim_time", False),
     }
-    return place_config, overrides
+    return alignment_parameters, overrides
 
 
 def _place_recognition_node(*args, **kwargs):
@@ -309,11 +313,11 @@ def _place_recognition_node(*args, **kwargs):
             if isinstance(parameter_set, dict):
                 forwarded.update(parameter_set)
 
-        place_config, overrides = _place_recognition_parameters(forwarded)
+        alignment_parameters, overrides = _place_recognition_parameters(forwarded)
         rewritten = dict(kwargs)
         rewritten["executable"] = "inter_robot_place_alignment.py"
         rewritten["name"] = "inter_robot_place_alignment"
-        rewritten["parameters"] = [place_config, overrides]
+        rewritten["parameters"] = [*alignment_parameters, overrides]
         node = _ORIGINAL_NODE(*args, **rewritten)
         gate_name = "startup_alignment_gate_place_recognition"
         waiting = (
@@ -479,9 +483,13 @@ def _startup_launch_setup(context, *args, **kwargs):
     global _ACTIVE_STARTUP_STATUS_PERIOD_SEC
     global _ACTIVE_STARTUP_REQUIRED_RESULTS
     global _ACTIVE_STARTUP_CLOUD_TOPICS
+    global _active_alignment_config_file
 
     _ACTIVE_STARTUP_GATE = _startup_gate_enabled(context)
     _ACTIVE_STARTUP_TOPIC = _startup_topic(context)
+    _active_alignment_config_file = _ORIGINAL_VALUE(
+        context, "alignment_config_file"
+    ).strip()
     if _ACTIVE_STARTUP_GATE:
         _ACTIVE_STARTUP_TIMEOUT_SEC = _positive_float_argument(
             context, "startup_alignment_timeout_sec"

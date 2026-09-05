@@ -68,6 +68,8 @@ install(
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
+    scripts/run_two_live_combined_bag.sh
+    scripts/run_two_mid360_2d_mapping_bag.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -249,6 +251,12 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_two_live_combined_bag_runner
     test/test_two_live_combined_bag_runner.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
+  ament_add_pytest_test(
+    test_two_mid360_bag_runner
+    test/test_two_mid360_bag_runner.py
     PYTHON_EXECUTABLE /usr/bin/python3
   )
 

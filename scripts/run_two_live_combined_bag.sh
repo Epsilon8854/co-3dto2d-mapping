@@ -12,9 +12,10 @@ playback_rate="0.5"
 domain_id="${ROS_DOMAIN_ID:-72}"
 startup_delay_seconds="5"
 sensor_warmup_seconds="10"
-alignment_warmup_seconds="3"
+alignment_warmup_seconds="1"
 alignment_period_seconds="2"
 imu_source="auto"
+place_recognition_enabled=false
 robot0_lidar_source="/r0/livox/lidar"
 robot0_imu_source=""
 robot1_lidar_source="/r1/livox/lidar"
@@ -40,9 +41,11 @@ usage() {
     "  --domain-id ID         Isolated ROS domain (default: ROS_DOMAIN_ID or 72)" \
     "  --startup-delay SEC    Launch head start before bag playback (default: 5)" \
     "  --sensor-warmup SEC    Recorded-time warm-up before odometry starts (default: 10)" \
-    "  --alignment-warmup SEC Recorded-time map accumulation before ICP (default: 3)" \
+    "  --alignment-warmup SEC Recorded-time map accumulation before ICP (default: 1)" \
     "  --alignment-period SEC Recorded-time interval between ICP attempts (default: 2)" \
     "  --imu-source MODE      auto, raw, or filtered (default: auto)" \
+    "  --enable-place-recognition" \
+    "                         Run later occupancy place recognition (default: off)" \
     "  --robot0-lidar-source TOPIC" \
     "                         Recorded PointCloud2 topic for r0" \
     "  --robot0-imu-source TOPIC" \
@@ -111,6 +114,10 @@ while (($# > 0)); do
       (($# >= 2)) || die "--imu-source requires auto, raw, or filtered"
       imu_source="$2"
       shift 2
+      ;;
+    --enable-place-recognition)
+      place_recognition_enabled=true
+      shift
       ;;
     --robot0-lidar-source)
       (($# >= 2)) || die "--robot0-lidar-source requires a topic"
@@ -348,7 +355,10 @@ alignment_recompute_period_seconds="$(
 )"
 
 mapping_command=(
-  ros2 launch co_3dto2d_mapping two_live_combined_bag_mapping.launch.py
+  ros2 launch co_3dto2d_mapping two_live_mapping.launch.py
+  "enable_robot0_pipeline:=true"
+  "enable_robot1_pipeline:=true"
+  "enable_fusion:=true"
   "robot0_lidar_topic:=${R0_LIDAR_TOPIC}"
   "robot0_imu_topic:=${R0_IMU_TOPIC}"
   "robot1_lidar_topic:=${R1_LIDAR_TOPIC}"
@@ -357,6 +367,9 @@ mapping_command=(
   "robot1_imu_input_is_filtered:=${r1_imu_input_is_filtered}"
   "wait_imu_to_init:=false"
   "expected_update_rate:=0.0"
+  "publish_sensor_static_tf:=true"
+  "wait_for_initial_alignment:=true"
+  "enable_place_recognition:=${place_recognition_enabled}"
   "mapping_startup_delay_sec:=${mapping_startup_delay_seconds}"
   "alignment_startup_delay_sec:=${alignment_startup_delay_seconds}"
   "alignment_recompute_period_sec:=${alignment_recompute_period_seconds}"
@@ -397,6 +410,7 @@ printf '%s\n' \
   "INPUT_R1_IMU=${r1_imu_source} (${r1_imu_count} messages, ${r1_imu_stage})" \
   "R0_FILTERED_IMU_BYPASS=${r0_imu_input_is_filtered}" \
   "R1_FILTERED_IMU_BYPASS=${r1_imu_input_is_filtered}" \
+  "PLACE_RECOGNITION=${place_recognition_enabled}" \
   "RECORDED_SENSOR_WARMUP=${sensor_warmup_seconds}s" \
   "MAPPING_STARTUP_DELAY_WALL=${mapping_startup_delay_seconds}s" \
   "RECORDED_ALIGNMENT_WARMUP=${alignment_warmup_seconds}s" \
@@ -411,4 +425,5 @@ if ${dry_run}; then
 fi
 
 # shellcheck source=lib/two_live_runtime.bash
+require_place_recognition="${place_recognition_enabled}"
 source "${SCRIPT_DIR}/lib/two_live_runtime.bash"

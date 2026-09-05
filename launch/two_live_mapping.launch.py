@@ -122,6 +122,9 @@ def _robot_actions(
             "scan_cloud_topic": scan_cloud_topic,
             "imu_raw_topic": imu_input_topic,
             "imu_filtered_topic": imu_filtered_topic,
+            "imu_input_is_filtered": _value(
+                context, input_prefix + "_imu_input_is_filtered"
+            ),
             "alignment_topic": _value(context, "alignment_topic"),
             "transform_cloud_to_local_frame": _value(
                 context, "transform_cloud_to_local_frame"
@@ -211,6 +214,7 @@ def launch_setup(context, *args, **kwargs):
     enable_robot0_pipeline = _bool_value(context, "enable_robot0_pipeline")
     enable_robot1_pipeline = _bool_value(context, "enable_robot1_pipeline")
     enable_fusion = _bool_value(context, "enable_fusion")
+    enable_place_recognition = _bool_value(context, "enable_place_recognition")
     if not (enable_robot0_pipeline or enable_robot1_pipeline or enable_fusion):
         raise RuntimeError(
             "at least one robot pipeline or the fusion pipeline must be enabled"
@@ -336,7 +340,7 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
-    if enable_fusion:
+    if enable_fusion and enable_place_recognition:
         actions.insert(0, alignment_node)
     if enable_fusion and enable_record_republisher:
         actions.insert(
@@ -376,6 +380,14 @@ def generate_launch_description():
             DeclareLaunchArgument("enable_robot1_pipeline", default_value="true"),
             DeclareLaunchArgument("enable_fusion", default_value="true"),
             DeclareLaunchArgument(
+                "enable_place_recognition",
+                default_value="false",
+                description=(
+                    "Run occupancy place recognition after startup ICP. Keep this "
+                    "off when both robots begin at the same place."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "robot0_lidar_topic",
                 default_value="/r0/livox/lidar",
                 description="Absolute live PointCloud2 topic for robot 0",
@@ -394,6 +406,12 @@ def generate_launch_description():
                 "robot1_imu_topic",
                 default_value="/r1/livox/imu",
                 description="Absolute live Imu topic for robot 1",
+            ),
+            DeclareLaunchArgument(
+                "robot0_imu_input_is_filtered", default_value="false"
+            ),
+            DeclareLaunchArgument(
+                "robot1_imu_input_is_filtered", default_value="false"
             ),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
@@ -434,6 +452,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "alignment_topic", default_value="/toy/initial_xy_alignment"
             ),
+            DeclareLaunchArgument("alignment_config_file", default_value=""),
             DeclareLaunchArgument(
                 "alignment_startup_delay_sec",
                 default_value="3.0",

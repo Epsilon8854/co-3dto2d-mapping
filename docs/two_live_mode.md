@@ -55,6 +55,16 @@ bash scripts/run_two_mid360_2d_mapping.sh --robot-number 1
 bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
 ```
 
+두 로봇이 시작할 때 같은 장소에 함께 서 있다는 운영 조건을 기본으로 합니다.
+startup ICP가 초기 `map <- r1/odom` 변환을 만든 뒤에는 occupancy place recognition을
+실행하지 않습니다. 시작 위치가 다르거나 주행 중 재정렬이 필요한 경우에만 fusion
+host에서 다음 옵션을 추가합니다.
+
+```bash
+bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host \
+  --enable-place-recognition
+```
+
 내부적으로 로봇 1은 `enable_robot0_pipeline:=true`, 로봇 2는
 `enable_robot1_pipeline:=true`만 사용합니다. fusion host는 추가로
 `enable_fusion:=true`를 사용하지만 다른 로봇의 sensor pipeline을 중복 실행하지

@@ -1,0 +1,8 @@
+/**:
+  ros__parameters:
+    # airoom_chair_r2 has one effectively stationary robot. Its first verified
+    # place pair is high quality, but cannot meet the generic motion-separated
+    # multi-keyframe policy before the recording ends.
+    min_known_ratio: 0.09
+    consensus_min_measurements: 1
+    consensus_min_distinct_keyframes: 1

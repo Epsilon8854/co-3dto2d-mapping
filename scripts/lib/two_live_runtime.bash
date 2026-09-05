@@ -143,11 +143,22 @@ if grep -Eq '\[ERROR\]|Traceback|process has died' "${log_directory}/mapping.log
   grep -E '\[ERROR\]|Traceback|process has died' "${log_directory}/mapping.log" | tail -n 40 >&2
   exit 1
 fi
-if ! grep -q 'Periodic map XY ICP alignment accepted' "${log_directory}/mapping.log"; then
-  printf 'Mapping produced no accepted two-robot XY ICP alignment. Logs: %s\n' \
+if [[ "${require_place_recognition:-false}" == "true" ]]; then
+  if ! grep -q 'Inter-robot occupancy alignment accepted' "${log_directory}/mapping.log"; then
+    printf 'Mapping produced no accepted two-robot occupancy alignment. Logs: %s\n' \
+      "${log_directory}" >&2
+    exit 1
+  fi
+  printf 'Bag replay produced two-robot mapping and accepted occupancy alignment. Logs: %s\n' \
+    "${log_directory}"
+  exit 0
+fi
+
+if ! grep -q 'Startup alignment received:' "${log_directory}/mapping.log"; then
+  printf 'Mapping produced no accepted startup ICP alignment. Logs: %s\n' \
     "${log_directory}" >&2
   exit 1
 fi
 
-printf 'Bag replay produced two-robot mapping and accepted XY ICP alignment. Logs: %s\n' \
+printf 'Bag replay produced two-robot mapping with startup ICP alignment. Logs: %s\n' \
   "${log_directory}"
