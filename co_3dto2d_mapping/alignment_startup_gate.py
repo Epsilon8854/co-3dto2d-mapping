@@ -16,6 +16,10 @@ class AlignmentStartupGate(Node):
     def __init__(self) -> None:
         super().__init__("alignment_startup_gate")
         self.declare_parameter("alignment_topic", "/toy/startup_xy_alignment")
+        # Generic input names are used by the LiDAR-slice map path.  The cloud
+        # names remain as a backwards-compatible fallback for older launch files.
+        self.declare_parameter("robot0_input_topic", "")
+        self.declare_parameter("robot1_input_topic", "")
         self.declare_parameter("robot0_cloud_topic", "/r0/mapping/lidar")
         self.declare_parameter("robot1_cloud_topic", "/r1/mapping/lidar")
         self.declare_parameter("timeout_sec", 0.0)
@@ -23,10 +27,20 @@ class AlignmentStartupGate(Node):
 
         value = lambda name: self.get_parameter(name).value
         self.alignment_topic = str(value("alignment_topic"))
-        self.cloud_topics = (
+        generic_topics = (
+            str(value("robot0_input_topic")),
+            str(value("robot1_input_topic")),
+        )
+        legacy_topics = (
             str(value("robot0_cloud_topic")),
             str(value("robot1_cloud_topic")),
         )
+        self.input_topics = tuple(
+            generic or legacy for generic, legacy in zip(generic_topics, legacy_topics)
+        )
+        # Preserve this attribute for source-level compatibility with existing
+        # tests and external launch wrappers.
+        self.cloud_topics = self.input_topics
         self.timeout_sec = float(value("timeout_sec"))
         self.status_period_sec = float(value("status_period_sec"))
         self._validate_parameters()
@@ -47,19 +61,19 @@ class AlignmentStartupGate(Node):
         self.last_status_monotonic = self.started_monotonic - self.status_period_sec
         self.get_logger().info(
             "Waiting for accepted startup alignment on %s; timeout=%s, "
-            "input_clouds=(%s, %s)."
+            "input_topics=(%s, %s)."
             % (
                 self.alignment_topic,
                 self._timeout_label(),
-                *self.cloud_topics,
+                *self.input_topics,
             )
         )
 
     def _validate_parameters(self) -> None:
         if not self.alignment_topic.startswith("/"):
             raise ValueError("alignment_topic must be absolute")
-        if not all(topic.startswith("/") for topic in self.cloud_topics):
-            raise ValueError("robot cloud topics must be absolute")
+        if not all(topic.startswith("/") for topic in self.input_topics):
+            raise ValueError("robot input topics must be absolute")
         if not math.isfinite(self.timeout_sec) or self.timeout_sec < 0.0:
             raise ValueError("timeout_sec must be non-negative and finite")
         if (
@@ -101,14 +115,14 @@ class AlignmentStartupGate(Node):
             self.timed_out = True
             self.get_logger().error(
                 "Startup alignment timed out after %.1fs. alignment_publishers=%d, "
-                "cloud_publishers=(%s:%d, %s:%d)."
+                "input_publishers=(%s:%d, %s:%d)."
                 % (
                     elapsed,
                     self.count_publishers(self.alignment_topic),
-                    self.cloud_topics[0],
-                    self.count_publishers(self.cloud_topics[0]),
-                    self.cloud_topics[1],
-                    self.count_publishers(self.cloud_topics[1]),
+                    self.input_topics[0],
+                    self.count_publishers(self.input_topics[0]),
+                    self.input_topics[1],
+                    self.count_publishers(self.input_topics[1]),
                 )
             )
             return
@@ -117,15 +131,15 @@ class AlignmentStartupGate(Node):
         self.last_status_monotonic = now
         self.get_logger().info(
             "Still waiting for startup alignment: elapsed=%.1fs timeout=%s, "
-            "alignment_publishers=%d, cloud_publishers=(%s:%d, %s:%d)."
+            "alignment_publishers=%d, input_publishers=(%s:%d, %s:%d)."
             % (
                 elapsed,
                 self._timeout_label(),
                 self.count_publishers(self.alignment_topic),
-                self.cloud_topics[0],
-                self.count_publishers(self.cloud_topics[0]),
-                self.cloud_topics[1],
-                self.count_publishers(self.cloud_topics[1]),
+                self.input_topics[0],
+                self.count_publishers(self.input_topics[0]),
+                self.input_topics[1],
+                self.count_publishers(self.input_topics[1]),
             )
         )
 

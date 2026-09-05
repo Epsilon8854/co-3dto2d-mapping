@@ -46,15 +46,17 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-# Preserve the original two-live implementation under an internal name, then
-# expose the shared-floor/place-recognition wrapper through the public launch.
+# Preserve the original two-live implementation under an internal name.  The
+# public launch layers LiDAR-slice startup maps over
+# launch/two_live_plane_height_mapping.launch.py, retaining its current
+# ground-plane/local-window/place-recognition pipeline after startup.
 install(
   FILES launch/two_live_mapping.launch.py
   DESTINATION share/${PROJECT_NAME}/launch
   RENAME two_live_mapping_base.launch.py
 )
 install(
-  FILES launch/two_live_plane_height_mapping.launch.py
+  FILES launch/two_live_lidar_slice_mapping.launch.py
   DESTINATION share/${PROJECT_NAME}/launch
   RENAME two_live_mapping.launch.py
 )
@@ -66,6 +68,8 @@ install(
     co_3dto2d_mapping/imu_frame_republisher.py
     co_3dto2d_mapping/inter_robot_place_alignment.py
     co_3dto2d_mapping/occupancy_png_exporter.py
+    co_3dto2d_mapping/startup_lidar_occupancy.py
+    co_3dto2d_mapping/startup_alignment_relay.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh
@@ -82,8 +86,8 @@ install(
   RENAME gravity_plane_pose_fusion.py
 )
 
-# Retain the cropped-cloud aligner as a legacy fallback/baseline. Public live
-# and combined-bag paths select inter_robot_place_alignment.py instead.
+# Retain the cropped-cloud aligner as a legacy fallback/baseline.  Its
+# global_occupancy mode is the active startup path in the public live launch.
 install(
   PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
   DESTINATION lib/${PROJECT_NAME}
@@ -214,6 +218,13 @@ if(BUILD_TESTING)
     test_two_live_startup_gating
     test/test_two_live_startup_gating.py
     PYTHON_EXECUTABLE /usr/bin/python3
+  )
+
+  ament_add_pytest_test(
+    test_startup_lidar_slice
+    test/test_startup_lidar_slice.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )
 
   ament_add_pytest_test(
