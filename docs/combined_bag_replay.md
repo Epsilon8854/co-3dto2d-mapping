@@ -55,6 +55,13 @@ bash scripts/run_two_live_combined_bag.sh \
   --enable-place-recognition
 ```
 
+## PNG 결과
+
+매 실행은 `results/<YYYYmmdd_HHMMSS_nanoseconds>/output/`에 별도 결과를 만들므로
+이전 실행의 지도와 섞이지 않습니다. 이 폴더에는 기존 grayscale occupancy PNG 세 장과
+각 로봇 궤적을 겹친 RGB PNG 세 장이 저장됩니다. merged 궤적 PNG는 r0을 빨강으로,
+startup ICP로 `map` 좌표계에 변환한 r1을 파랑으로 표시합니다.
+
 먼저 실제 ROS 프로세스를 시작하지 않고 선택 결과를 확인할 수 있습니다.
 
 ```bash

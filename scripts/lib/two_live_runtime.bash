@@ -36,7 +36,10 @@ fi
 export ROS_DOMAIN_ID="${domain_id}"
 export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-1}"
 
-occupancy_png_output_dir="${occupancy_png_output_dir:-${workspace}/output}"
+if [[ -z "${occupancy_png_output_dir:-}" ]]; then
+  run_timestamp="$(date +%Y%m%d_%H%M%S_%N)"
+  occupancy_png_output_dir="${workspace}/results/${run_timestamp}/output"
+fi
 mkdir -p "${occupancy_png_output_dir}"
 
 log_directory="$(mktemp -d "${TMPDIR:-/tmp}/co3dto2d-two-live.XXXXXX")"

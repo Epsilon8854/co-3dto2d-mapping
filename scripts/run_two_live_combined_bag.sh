@@ -377,6 +377,9 @@ mapping_command=(
 )
 mapping_command+=("${extra_launch_args[@]}")
 
+run_timestamp="$(date +%Y%m%d_%H%M%S_%N)"
+occupancy_png_output_dir="${OCCUPANCY_PNG_OUTPUT_DIR:-${workspace}/results/${run_timestamp}/output}"
+
 bag_command=(
   ros2 bag play "${bag}" --storage "${storage}" --rate "${playback_rate}"
   --topics
@@ -412,7 +415,7 @@ printf '%s\n' \
   "R0_FILTERED_IMU_BYPASS=${r0_imu_input_is_filtered}" \
   "R1_FILTERED_IMU_BYPASS=${r1_imu_input_is_filtered}" \
   "PLACE_RECOGNITION=${place_recognition_enabled}" \
-  "OCCUPANCY_PNG_OUTPUT=${workspace}/output" \
+  "OCCUPANCY_PNG_OUTPUT=${occupancy_png_output_dir}" \
   "RECORDED_SENSOR_WARMUP=${sensor_warmup_seconds}s" \
   "MAPPING_STARTUP_DELAY_WALL=${mapping_startup_delay_seconds}s" \
   "RECORDED_ALIGNMENT_WARMUP=${alignment_warmup_seconds}s" \
@@ -428,5 +431,4 @@ fi
 
 # shellcheck source=lib/two_live_runtime.bash
 require_place_recognition="${place_recognition_enabled}"
-occupancy_png_output_dir="${workspace}/output"
 source "${SCRIPT_DIR}/lib/two_live_runtime.bash"

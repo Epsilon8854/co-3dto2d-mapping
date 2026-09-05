@@ -200,9 +200,13 @@ bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
 양쪽 raw topic이 모두 보이지만 각 노트북의 local pipeline은 자기 `/rN/livox/*`
 만 소비합니다. mapping host는 최신 `/r0/toy/global_occupancy`,
 `/r1/toy/global_occupancy`, `/toy_record/merged_global_occupancy`를 각각
-`output/r0_global_occupancy.png`, `output/r1_global_occupancy.png`,
-`output/merged_global_occupancy.png`로 저장합니다. startup ICP는 처음 승인된 결과
-한 번으로 odom/mapping gate를 열며, 기본 deadline은 없습니다.
+`results/<YYYYmmdd_HHMMSS_nanoseconds>/output/` 아래에 저장합니다. 기본 occupancy
+PNG(`r0_global_occupancy.png`, `r1_global_occupancy.png`,
+`merged_global_occupancy.png`)와 함께 궤적을 겹친 RGB PNG
+(`r0_global_occupancy_trajectory.png`, `r1_global_occupancy_trajectory.png`,
+`merged_global_occupancy_trajectories.png`)도 생성합니다. merged 이미지에서는
+r0은 빨강, startup ICP로 `map` 좌표에 변환한 r1은 파랑입니다. startup ICP는 처음
+승인된 결과 한 번으로 odom/mapping gate를 열며, 기본 deadline은 없습니다.
 입력만 구독합니다.
 기존 배포 구조의 `aibot/bash/mid360.env`가 있으면 `ROBOT_ID`를 자동으로
 읽으므로 `--robot-number`를 생략할 수 있으며, 다른 환경 파일은
