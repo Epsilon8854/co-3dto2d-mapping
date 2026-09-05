@@ -1,4 +1,4 @@
-"""Launch helpers wiring startup LiDAR occupancy maps into planar ICP."""
+"""Launch helpers wiring distributed startup LiDAR maps into planar ICP."""
 
 from __future__ import annotations
 
@@ -44,6 +44,43 @@ def gate_process(layer, topic: str, name: str):
     )
 
 
+def local_startup_map_nodes(layer, source_cloud_topic, context):
+    """Create only the startup map belonging to each locally enabled robot.
+
+    In distributed operation every robot laptop publishes its own small
+    OccupancyGrid.  The fusion host therefore receives maps rather than
+    subscribing to the other robot's full PointCloud2 stream for startup ICP.
+    Centralized operation still creates both builders because both local
+    pipelines are enabled in the same launch.
+    """
+
+    if not layer._startup_gate_enabled(context):
+        return []
+
+    occupancy_file = layer._ORIGINAL_VALUE(context, "occupancy_config_file")
+    occupancy = layer._load_occupancy_parameters(occupancy_file)
+    actions = []
+    for robot_id in (0, 1):
+        enabled = layer._parse_bool(
+            layer._ORIGINAL_VALUE(
+                context, "enable_robot%d_pipeline" % robot_id
+            ),
+            "enable_robot%d_pipeline" % robot_id,
+        )
+        if not enabled:
+            continue
+        actions.append(
+            startup_map_node(
+                layer,
+                source_cloud_topic,
+                context,
+                robot_id,
+                occupancy,
+            )
+        )
+    return actions
+
+
 def startup_alignment_relay(layer, context):
     return layer._ORIGINAL_NODE(
         package="co_3dto2d_mapping",
@@ -61,14 +98,11 @@ def startup_alignment_relay(layer, context):
     )
 
 
-def startup_2d_map_icp_node(layer, source_cloud_topic, context):
-    """Replace cropped-XYZ startup ICP with LiDAR-map SE(2) ICP."""
+def startup_2d_map_icp_node(layer, _source_cloud_topic, context):
+    """Replace cropped-XYZ startup ICP with distributed-map SE(2) ICP."""
 
     occupancy_file = layer._ORIGINAL_VALUE(context, "occupancy_config_file")
-    occupancy = layer._load_occupancy_parameters(occupancy_file)
     actions = [
-        startup_map_node(layer, source_cloud_topic, context, 0, occupancy),
-        startup_map_node(layer, source_cloud_topic, context, 1, occupancy),
         layer._ORIGINAL_NODE(
             package="co_3dto2d_mapping",
             executable="initial_xy_icp_alignment.py",
@@ -92,7 +126,7 @@ def startup_2d_map_icp_node(layer, source_cloud_topic, context):
                         layer._ORIGINAL_VALUE(context, "alignment_invert_result"),
                         "alignment_invert_result",
                     ),
-                    # All filtering is already applied while constructing maps.
+                    # Filtering is completed before the OccupancyGrid is sent.
                     "center_box_half_extent_m": 0.0,
                     "voxel_size": float(
                         layer._ORIGINAL_VALUE(context, "alignment_voxel_size")
@@ -129,8 +163,8 @@ def startup_2d_map_icp_node(layer, source_cloud_topic, context):
                             context, "alignment_occupied_threshold"
                         )
                     ),
-                    # Settle delay and frame accumulation belong to map builders;
-                    # init_xy now waits only for OccupancyGrid messages.
+                    # Settle delay and frame accumulation belong to each local
+                    # map builder; init_xy waits only for OccupancyGrid messages.
                     "startup_delay_sec": 0.0,
                     "retry_on_failure": True,
                     "lock_after_first_alignment": True,
