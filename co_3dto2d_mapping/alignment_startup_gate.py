@@ -18,7 +18,7 @@ class AlignmentStartupGate(Node):
         self.declare_parameter("alignment_topic", "/toy/startup_xy_alignment")
         self.declare_parameter("robot0_cloud_topic", "/r0/mapping/lidar")
         self.declare_parameter("robot1_cloud_topic", "/r1/mapping/lidar")
-        self.declare_parameter("timeout_sec", 60.0)
+        self.declare_parameter("timeout_sec", 0.0)
         self.declare_parameter("status_period_sec", 2.0)
 
         value = lambda name: self.get_parameter(name).value
@@ -46,11 +46,11 @@ class AlignmentStartupGate(Node):
         self.started_monotonic = time.monotonic()
         self.last_status_monotonic = self.started_monotonic - self.status_period_sec
         self.get_logger().info(
-            "Waiting for accepted startup alignment on %s; timeout=%.1fs, "
+            "Waiting for accepted startup alignment on %s; timeout=%s, "
             "input_clouds=(%s, %s)."
             % (
                 self.alignment_topic,
-                self.timeout_sec,
+                self._timeout_label(),
                 *self.cloud_topics,
             )
         )
@@ -60,8 +60,8 @@ class AlignmentStartupGate(Node):
             raise ValueError("alignment_topic must be absolute")
         if not all(topic.startswith("/") for topic in self.cloud_topics):
             raise ValueError("robot cloud topics must be absolute")
-        if not math.isfinite(self.timeout_sec) or self.timeout_sec <= 0.0:
-            raise ValueError("timeout_sec must be positive and finite")
+        if not math.isfinite(self.timeout_sec) or self.timeout_sec < 0.0:
+            raise ValueError("timeout_sec must be non-negative and finite")
         if (
             not math.isfinite(self.status_period_sec)
             or self.status_period_sec <= 0.0
@@ -89,12 +89,15 @@ class AlignmentStartupGate(Node):
             )
         )
 
+    def _timeout_label(self) -> str:
+        return "disabled" if self.timeout_sec == 0.0 else "%.1fs" % self.timeout_sec
+
     def poll(self) -> None:
         if self.received or self.timed_out:
             return
         now = time.monotonic()
         elapsed = now - self.started_monotonic
-        if elapsed >= self.timeout_sec:
+        if self.timeout_sec > 0.0 and elapsed >= self.timeout_sec:
             self.timed_out = True
             self.get_logger().error(
                 "Startup alignment timed out after %.1fs. alignment_publishers=%d, "
@@ -113,11 +116,11 @@ class AlignmentStartupGate(Node):
             return
         self.last_status_monotonic = now
         self.get_logger().info(
-            "Still waiting for startup alignment: elapsed=%.1fs/%.1fs, "
+            "Still waiting for startup alignment: elapsed=%.1fs timeout=%s, "
             "alignment_publishers=%d, cloud_publishers=(%s:%d, %s:%d)."
             % (
                 elapsed,
-                self.timeout_sec,
+                self._timeout_label(),
                 self.count_publishers(self.alignment_topic),
                 self.cloud_topics[0],
                 self.count_publishers(self.cloud_topics[0]),

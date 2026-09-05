@@ -39,6 +39,7 @@ DRIVER_CONFIG="${LIVOX_CONFIG:-}"
 MAPPING_WORKSPACE="${MAPPING_WORKSPACE:-${REPOSITORY_DIR}}"
 MAPPING_CONFIG="${MAPPING_CONFIG:-}"
 RVIZ_CONFIG="${RVIZ_CONFIG:-}"
+OCCUPANCY_PNG_OUTPUT_DIR="${OCCUPANCY_PNG_OUTPUT_DIR:-}"
 DOMAIN_ID="${ROS_DOMAIN_ID:-72}"
 EXPECTED_UPDATE_RATE="${EXPECTED_UPDATE_RATE:-11.0}"
 ROBOT0_LIDAR_TOPIC="/r0/livox/lidar"
@@ -272,6 +273,7 @@ DRIVER_CONFIG="${DRIVER_CONFIG:-${LIVOX_WORKSPACE}/src/livox_ros_driver2/config/
 MAPPING_CONFIG="${MAPPING_CONFIG:-${MAPPING_WORKSPACE}/config/occupancy.yaml}"
 RVIZ_CONFIG="${RVIZ_CONFIG:-${MAPPING_WORKSPACE}/rviz/two_robot_mapping.rviz}"
 MAPPING_SETUP="${MAPPING_WORKSPACE}/install/local_setup.bash"
+OCCUPANCY_PNG_OUTPUT_DIR="${OCCUPANCY_PNG_OUTPUT_DIR:-${MAPPING_WORKSPACE}/output}"
 LOCAL_DRIVER_SCRIPT="${SCRIPT_DIR}/run_livox_robot.sh"
 
 required_files=(
@@ -401,6 +403,7 @@ printf '%s\n' \
   "  local mapping:       ${RUN_LOCAL_MAPPING}" \
   "  fusion host:         ${RUN_FUSION}" \
   "  expected rate:       ${EXPECTED_UPDATE_RATE} Hz" \
+  "  occupancy PNG:       ${OCCUPANCY_PNG_OUTPUT_DIR}" \
   "  RViz:                ${RVIZ_STATUS}"
 
 start_process_group DRIVER_PID env \
@@ -435,8 +438,12 @@ if [[ "${RUN_LOCAL_MAPPING}" == true || "${RUN_FUSION}" == true ]]; then
     "publish_sensor_static_tf:=${PUBLISH_SENSOR_STATIC_TF}"
     "enable_place_recognition:=${ENABLE_PLACE_RECOGNITION}"
     "occupancy_config_file:=${MAPPING_CONFIG}"
+    "startup_alignment_timeout_sec:=0.0"
   )
   mapping_command+=("${EXTRA_LAUNCH_ARGS[@]}")
+  mkdir -p "${OCCUPANCY_PNG_OUTPUT_DIR}"
+  start_process_group MAP_EXPORTER_PID ros2 run co_3dto2d_mapping occupancy_png_exporter.py --ros-args \
+    -p "output_directory:=${OCCUPANCY_PNG_OUTPUT_DIR}"
   start_process_group MAPPING_PID env \
     "CO3DTO2D_STARTUP_DIRECT_LIDAR=true" \
     "${mapping_command[@]}"

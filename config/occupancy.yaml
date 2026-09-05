@@ -38,9 +38,9 @@
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 30
 
-    # Scan-to-submap ICP refines only x/y/yaw. The input odometry already carries
-    # the shared floor-derived z/roll/pitch when ground_plane_pose_enabled=true.
-    enable_local_window_icp: true
+    # Baseline default: scan-to-submap ICP is opt-in. The input odometry already
+    # carries the shared floor-derived z/roll/pitch when ground_plane_pose_enabled=true.
+    enable_local_window_icp: false
     icp_window_size: 10
     icp_min_window_frames: 3
     icp_voxel_size_m: 0.12

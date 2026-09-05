@@ -65,6 +65,7 @@ install(
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
     co_3dto2d_mapping/inter_robot_place_alignment.py
+    co_3dto2d_mapping/occupancy_png_exporter.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
     scripts/run_two_mid360_2d_mapping.sh

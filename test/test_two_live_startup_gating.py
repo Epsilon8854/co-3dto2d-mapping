@@ -33,7 +33,7 @@ def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
         '"startup_alignment_topic"',
         'default_value="/toy/startup_xy_alignment"',
         '"startup_alignment_timeout_sec"',
-        'default_value="60.0"',
+        'default_value="0.0"',
         '"startup_alignment_required_consistent_results"',
         'default_value="1"',
         'name == "mapping_startup_delay_sec"',
@@ -51,7 +51,7 @@ def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
         '"co_3dto2d_mapping.alignment_startup_gate"',
         'EmitEvent(event=Shutdown(reason=reason))',
         'odometry/mapping has not started.',
-        'starting odometry/mapping now.',
+        'odometry/mapping now.',
         'inter_robot_place_alignment.py',
         'startup_alignment_gate_record_republisher',
     )
@@ -71,7 +71,8 @@ def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
     ).read_text()
     for fragment in (
         "DurabilityPolicy.TRANSIENT_LOCAL",
-        'self.declare_parameter("timeout_sec", 60.0)',
+        'self.declare_parameter("timeout_sec", 0.0)',
+        "if self.timeout_sec > 0.0 and elapsed >= self.timeout_sec:",
         "self.count_publishers(self.alignment_topic)",
         "self.count_publishers(self.cloud_topics[0])",
         "raise SystemExit(exit_code)",

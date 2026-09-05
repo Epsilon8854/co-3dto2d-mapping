@@ -36,6 +36,9 @@ fi
 export ROS_DOMAIN_ID="${domain_id}"
 export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-1}"
 
+occupancy_png_output_dir="${occupancy_png_output_dir:-${workspace}/output}"
+mkdir -p "${occupancy_png_output_dir}"
+
 log_directory="$(mktemp -d "${TMPDIR:-/tmp}/co3dto2d-two-live.XXXXXX")"
 printf 'Logs: %s\n' "${log_directory}"
 
@@ -69,6 +72,11 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
+
+setsid ros2 run co_3dto2d_mapping occupancy_png_exporter.py --ros-args \
+  -p "output_directory:=${occupancy_png_output_dir}" \
+  >"${log_directory}/occupancy_png_exporter.log" 2>&1 &
+child_pids+=("$!")
 
 setsid "${mapping_command[@]}" >"${log_directory}/mapping.log" 2>&1 &
 mapping_pid=$!

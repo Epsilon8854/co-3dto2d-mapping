@@ -114,7 +114,7 @@ gravity_plane_pose_fusion.py
 
 | 파라미터 | 기본값 | 설명 |
 | --- | ---: | --- |
-| `enable_local_window_icp` | `true` | local-window ICP 활성화입니다. |
+| `enable_local_window_icp` | `false` | local-window ICP를 활성화합니다. 기본값에서는 raw odometry를 그대로 사용합니다. |
 | `icp_window_size` | `10` | submap에 유지할 최근 scan 수입니다. |
 | `icp_min_window_frames` | `3` | ICP 시작에 필요한 최소 window frame 수입니다. |
 | `icp_voxel_size_m` | `0.12` | source/submap XY voxel입니다. 크게 하면 빠르지만 정밀도가 낮아집니다. |

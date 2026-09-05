@@ -38,7 +38,7 @@
   uint32_t global_frame_index_ = 0;
   size_t dynamic_cells_cleared_total_ = 0;
 
-  bool enable_local_window_icp_ = true;
+  bool enable_local_window_icp_ = false;
   int icp_window_size_ = 10;
   int icp_min_window_frames_ = 3;
   double icp_voxel_size_m_ = 0.12;

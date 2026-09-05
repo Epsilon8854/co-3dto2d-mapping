@@ -65,6 +65,7 @@ def test_dry_run_replays_one_combined_bag_without_driver_processes(
     assert "two_live_mapping.launch.py" in result.stdout
     assert "two_live_combined_bag_mapping.launch.py" not in result.stdout
     assert "wait_for_initial_alignment:=true" in result.stdout
+    assert f"OCCUPANCY_PNG_OUTPUT={REPOSITORY_ROOT / 'output'}" in result.stdout
     assert "BAG_PLAYER= ros2 bag play" in result.stdout
     assert (
         "--topics /r0/livox/lidar /r0/livox/imu /r1/livox/lidar /r1/livox/imu"

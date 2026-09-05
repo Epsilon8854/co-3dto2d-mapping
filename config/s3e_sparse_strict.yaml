@@ -45,7 +45,7 @@
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 50
 
-    enable_local_window_icp: true
+    enable_local_window_icp: false
     icp_window_size: 15
     icp_min_window_frames: 4
     icp_voxel_size_m: 0.15

@@ -8,9 +8,9 @@ occupancy grid:
 2. temporal occupancy evidence prevents a one-frame obstacle from becoming a
    permanent wall and clears an occupied cell after repeated free-space rays.
 
-Both features are enabled by default in `config/occupancy.yaml` and are applied
-independently per mapper instance, so the two-live-robot launch keeps one local
-window and one evidence grid for each robot.
+Both features are opt-in in `config/occupancy.yaml` and are applied
+independently per mapper instance. With local-window ICP disabled, each mapper
+uses the incoming odometry pose directly and does not retain a scan submap.
 
 ## Temporal occupancy evidence
 
@@ -45,10 +45,11 @@ is governed by the evidence counters instead of immediate ray clearing.
 
 ## Local-window ICP odometry refinement
 
-The current filtered 2D scan is voxel-downsampled and matched to a submap made
-from up to `icp_window_size` recent corrected scans. Raw odometry is not
-replaced: its relative motion predicts the next pose and ICP only adds a bounded
-correction.
+When enabled, the current filtered 2D scan is voxel-downsampled and matched to
+a submap made from up to `icp_window_size` recent corrected scans. It is disabled
+by default, so raw odometry is used directly without maintaining the local scan
+window. When enabled, ICP only adds a bounded correction to the odometry
+prediction.
 
 The matcher uses:
 
@@ -74,7 +75,7 @@ fusion explicitly models the ICP correction uncertainty.
 
 | Parameter | Default | Effect |
 | --- | ---: | --- |
-| `enable_local_window_icp` | `true` | Enables scan-to-submap pose refinement. |
+| `enable_local_window_icp` | `false` | Enables scan-to-submap pose refinement. |
 | `icp_window_size` | `10` | Number of corrected scans retained in the submap. |
 | `icp_voxel_size_m` | `0.12` | 2D scan/submap downsampling resolution. |
 | `icp_max_correspondence_distance_m` | `0.45` | Maximum nearest-neighbour distance. |

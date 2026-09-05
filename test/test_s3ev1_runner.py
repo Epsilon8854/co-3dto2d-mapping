@@ -199,6 +199,43 @@ def test_master_baseline_defaults_disable_dynamic_and_plane_pose() -> None:
     assert 'declare_parameter("merged_temporal_filter_enabled", False)' in merged_temporal
 
 
+def test_mapping_profiles_disable_local_window_icp() -> None:
+    # Given: the default and sparse-strict mapping profiles.
+    inspection = (
+        "import sys, yaml; "
+        "print(*(yaml.safe_load(open(path, encoding='utf-8'))"
+        "['/**']['ros__parameters']['enable_local_window_icp'] "
+        "for path in sys.argv[1:]))"
+    )
+
+    # When: the machine-consumed mapping setting is loaded from both profiles.
+    result = subprocess.run(
+        [
+            "/usr/bin/python3",
+            "-c",
+            inspection,
+            str(DEFAULT_CONFIG),
+            str(S3EV1_CONFIG),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    # Then: scan-to-submap correction is opt-in for every supplied profile.
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False False"
+
+    mapper_parameters = (
+        REPOSITORY_ROOT
+        / "include"
+        / "co_3dto2d_mapping"
+        / "occupancy_mapper"
+        / "parameters.inc"
+    ).read_text(encoding="utf-8")
+    assert 'declare_parameter<bool>("enable_local_window_icp", false);' in mapper_parameters
+
+
 def test_environment_check_ignores_an_inherited_ros1_distro(
     tmp_path: Path,
 ) -> None:

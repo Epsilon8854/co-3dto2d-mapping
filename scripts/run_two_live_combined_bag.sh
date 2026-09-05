@@ -369,6 +369,7 @@ mapping_command=(
   "expected_update_rate:=0.0"
   "publish_sensor_static_tf:=true"
   "wait_for_initial_alignment:=true"
+  "startup_alignment_timeout_sec:=0.0"
   "enable_place_recognition:=${place_recognition_enabled}"
   "mapping_startup_delay_sec:=${mapping_startup_delay_seconds}"
   "alignment_startup_delay_sec:=${alignment_startup_delay_seconds}"
@@ -411,6 +412,7 @@ printf '%s\n' \
   "R0_FILTERED_IMU_BYPASS=${r0_imu_input_is_filtered}" \
   "R1_FILTERED_IMU_BYPASS=${r1_imu_input_is_filtered}" \
   "PLACE_RECOGNITION=${place_recognition_enabled}" \
+  "OCCUPANCY_PNG_OUTPUT=${workspace}/output" \
   "RECORDED_SENSOR_WARMUP=${sensor_warmup_seconds}s" \
   "MAPPING_STARTUP_DELAY_WALL=${mapping_startup_delay_seconds}s" \
   "RECORDED_ALIGNMENT_WARMUP=${alignment_warmup_seconds}s" \
@@ -426,4 +428,5 @@ fi
 
 # shellcheck source=lib/two_live_runtime.bash
 require_place_recognition="${place_recognition_enabled}"
+occupancy_png_output_dir="${workspace}/output"
 source "${SCRIPT_DIR}/lib/two_live_runtime.bash"

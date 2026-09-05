@@ -45,7 +45,7 @@
 
   void declareIcpParameters()
   {
-    declare_parameter<bool>("enable_local_window_icp", true);
+    declare_parameter<bool>("enable_local_window_icp", false);
     declare_parameter<int>("icp_window_size", 10);
     declare_parameter<int>("icp_min_window_frames", 3);
     declare_parameter<double>("icp_voxel_size_m", 0.12);

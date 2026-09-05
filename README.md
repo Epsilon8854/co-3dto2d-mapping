@@ -198,6 +198,11 @@ bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
 `--mapping-host`는 어느 노트북에 지정해도 되지만 두 곳에서 동시에 지정하면
 정렬·병합 node와 출력 토픽이 중복되므로 한 곳에서만 사용합니다. DDS graph에는
 양쪽 raw topic이 모두 보이지만 각 노트북의 local pipeline은 자기 `/rN/livox/*`
+만 소비합니다. mapping host는 최신 `/r0/toy/global_occupancy`,
+`/r1/toy/global_occupancy`, `/toy_record/merged_global_occupancy`를 각각
+`output/r0_global_occupancy.png`, `output/r1_global_occupancy.png`,
+`output/merged_global_occupancy.png`로 저장합니다. startup ICP는 처음 승인된 결과
+한 번으로 odom/mapping gate를 열며, 기본 deadline은 없습니다.
 입력만 구독합니다.
 기존 배포 구조의 `aibot/bash/mid360.env`가 있으면 `ROBOT_ID`를 자동으로
 읽으므로 `--robot-number`를 생략할 수 있으며, 다른 환경 파일은

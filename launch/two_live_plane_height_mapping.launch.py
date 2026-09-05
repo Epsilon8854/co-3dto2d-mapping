@@ -58,7 +58,7 @@ _ORIGINAL_LAUNCH_SETUP = _BASE.launch_setup
 
 _ACTIVE_STARTUP_GATE = False
 _ACTIVE_STARTUP_TOPIC = "/toy/startup_xy_alignment"
-_ACTIVE_STARTUP_TIMEOUT_SEC = 60.0
+_ACTIVE_STARTUP_TIMEOUT_SEC = 0.0
 _ACTIVE_STARTUP_STATUS_PERIOD_SEC = 2.0
 _ACTIVE_STARTUP_REQUIRED_RESULTS = 1
 _ACTIVE_STARTUP_CLOUD_TOPICS = (
@@ -101,6 +101,16 @@ def _positive_float_argument(context, name):
         raise RuntimeError("%s must be numeric" % name) from exc
     if value <= 0.0:
         raise RuntimeError("%s must be greater than zero" % name)
+    return value
+
+
+def _nonnegative_float_argument(context, name):
+    try:
+        value = float(LaunchConfiguration(name).perform(context))
+    except ValueError as exc:
+        raise RuntimeError("%s must be numeric" % name) from exc
+    if value < 0.0:
+        raise RuntimeError("%s must be non-negative" % name)
     return value
 
 
@@ -503,7 +513,7 @@ def _startup_launch_setup(context, *args, **kwargs):
         context, "alignment_config_file"
     ).strip()
     if _ACTIVE_STARTUP_GATE:
-        _ACTIVE_STARTUP_TIMEOUT_SEC = _positive_float_argument(
+        _ACTIVE_STARTUP_TIMEOUT_SEC = _nonnegative_float_argument(
             context, "startup_alignment_timeout_sec"
         )
         _ACTIVE_STARTUP_STATUS_PERIOD_SEC = _positive_float_argument(
@@ -529,13 +539,17 @@ def _startup_launch_setup(context, *args, **kwargs):
             LogInfo(
                 msg=(
                     "Startup ICP is active on %s using clouds=(%s, %s), "
-                    "timeout=%.1fs, accepted_results=%d. Legacy fixed/inverted "
+                    "timeout=%s, accepted_results=%d. Legacy fixed/inverted "
                     "Z slicing is disabled; occupancy.yaml supplies the body/range "
                     "crop."
                     % (
                         _ACTIVE_STARTUP_TOPIC,
                         *_ACTIVE_STARTUP_CLOUD_TOPICS,
-                        _ACTIVE_STARTUP_TIMEOUT_SEC,
+                        (
+                            "disabled"
+                            if _ACTIVE_STARTUP_TIMEOUT_SEC == 0.0
+                            else "%.1fs" % _ACTIVE_STARTUP_TIMEOUT_SEC
+                        ),
                         _ACTIVE_STARTUP_REQUIRED_RESULTS,
                     )
                 )
@@ -573,10 +587,10 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "startup_alignment_timeout_sec",
-                default_value="60.0",
+                default_value="0.0",
                 description=(
-                    "Fail the launch instead of waiting forever when no accepted "
-                    "startup alignment arrives."
+                    "Startup alignment deadline in seconds. Zero waits without a "
+                    "deadline."
                 ),
             ),
             DeclareLaunchArgument(

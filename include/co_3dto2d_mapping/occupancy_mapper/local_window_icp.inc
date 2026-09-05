@@ -35,6 +35,10 @@
       const std::vector<Point2> &scan_points,
       const builtin_interfaces::msg::Time &stamp)
   {
+    if (!enable_local_window_icp_) {
+      return raw_pose;
+    }
+
     const int64_t stamp_ns = stampToNanoseconds(stamp);
     if (last_icp_stamp_ns_ != 0 && stamp_ns <= last_icp_stamp_ns_) {
       resetIcpState("non-monotonic sensor timestamp");
@@ -123,4 +127,3 @@
     }
     return corrected_pose;
   }
-
