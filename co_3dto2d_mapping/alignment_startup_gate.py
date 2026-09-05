@@ -120,9 +120,9 @@ class AlignmentStartupGate(Node):
                     elapsed,
                     self.count_publishers(self.alignment_topic),
                     self.input_topics[0],
-                    self.count_publishers(self.input_topics[0]),
+                    self.count_publishers(self.cloud_topics[0]),
                     self.input_topics[1],
-                    self.count_publishers(self.input_topics[1]),
+                    self.count_publishers(self.cloud_topics[1]),
                 )
             )
             return
@@ -137,9 +137,9 @@ class AlignmentStartupGate(Node):
                 self._timeout_label(),
                 self.count_publishers(self.alignment_topic),
                 self.input_topics[0],
-                self.count_publishers(self.input_topics[0]),
+                self.count_publishers(self.cloud_topics[0]),
                 self.input_topics[1],
-                self.count_publishers(self.input_topics[1]),
+                self.count_publishers(self.cloud_topics[1]),
             )
         )
 
