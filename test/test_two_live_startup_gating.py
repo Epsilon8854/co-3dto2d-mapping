@@ -84,6 +84,31 @@ def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
     assert "RENAME two_live_mapping.launch.py" in cmake
 
 
+def test_startup_icp_uses_driver_lidar_without_waiting_for_sensor_tf():
+    # Given: both robots use the same MID-360 extrinsic configuration.
+    public_wrapper = (
+        LAUNCH_DIR / "two_live_plane_height_mapping.launch.py"
+    ).read_text()
+    live_runner = (PACKAGE / "scripts" / "run_two_mid360_2d_mapping.sh").read_text()
+
+    # When: the physical live runner starts the fusion host.
+
+    # Then: startup ICP consumes each driver's DDS cloud directly and does not
+    # block on the remote robot's static sensor transform, while bag replay
+    # keeps its transform-aware default path.
+    assert "CO3DTO2D_STARTUP_DIRECT_LIDAR=true" in live_runner
+    assert (
+        'os.environ.get("CO3DTO2D_STARTUP_DIRECT_LIDAR", "false")'
+        in public_wrapper
+    )
+    assert (
+        'return _ORIGINAL_VALUE(context, "robot%d_lidar_topic" % robot_id)'
+        in public_wrapper
+    )
+    assert '"transform_cloud_to_local_frame": (' in public_wrapper
+    assert "transform_to_local and not _startup_uses_direct_lidar()" in public_wrapper
+
+
 def test_two_live_alignment_uses_cropped_xyz_rtabmap_clouds():
     two_live = (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
     required_launch_fragments = (

@@ -6,8 +6,9 @@ odometry/mapping pipeline only after an accepted startup transform is observed.
 The later CPU-only occupancy place-recognition node remains the final inter-robot
 map alignment stage.
 
-Startup ICP preprocessing is derived from ``occupancy_config_file`` for the
-shared body/range/TF crop. The legacy fixed-Z and inverted-Z slice is disabled.
+The physical live runner can make startup ICP consume each driver's LiDAR
+directly, assuming the two robots use the same sensor extrinsic. This avoids
+waiting for cross-host sensor TF while retaining the occupancy range/body crop.
 Plane-height filtering remains in the post-odometry mapping pipeline because it
 is synchronized with odometry by design.
 """
@@ -368,7 +369,16 @@ def _occupancy_float(parameters, name, default):
         raise RuntimeError("occupancy parameter %s must be numeric" % name) from exc
 
 
+def _startup_uses_direct_lidar():
+    return _parse_bool(
+        os.environ.get("CO3DTO2D_STARTUP_DIRECT_LIDAR", "false"),
+        "CO3DTO2D_STARTUP_DIRECT_LIDAR",
+    )
+
+
 def _prealignment_cloud_topic(context, robot_id):
+    if _startup_uses_direct_lidar():
+        return _ORIGINAL_VALUE(context, "robot%d_lidar_topic" % robot_id)
     rear_filter = _parse_bool(
         _ORIGINAL_VALUE(context, "enable_rear_lidar_filter"),
         "enable_rear_lidar_filter",
@@ -390,9 +400,9 @@ def _startup_icp_node(context):
         "transform_cloud_to_local_frame",
     )
 
-    # Startup ICP runs before odometry, so it cannot consume the synchronized
-    # plane-height cloud. It uses the occupancy YAML's static TF/body/range crop
-    # and deliberately disables the obsolete fixed/inverted-Z path.
+    # Startup ICP runs before odometry. The physical runner selects driver
+    # streams directly so the remote robot only needs to deliver LiDAR DDS data.
+    # Matching MID-360 extrinsics make those coordinates a valid local basis.
     overrides = {
         "robot0_cloud_topic": _prealignment_cloud_topic(context, 0),
         "robot1_cloud_topic": _prealignment_cloud_topic(context, 1),
@@ -405,7 +415,9 @@ def _startup_icp_node(context):
         "local_frame_id": "base_link",
         "robot0_local_frame_id": "r0/base_link",
         "robot1_local_frame_id": "r1/base_link",
-        "transform_cloud_to_local_frame": transform_to_local,
+        "transform_cloud_to_local_frame": (
+            transform_to_local and not _startup_uses_direct_lidar()
+        ),
         "use_z_filter": False,
         "slice_z_in_cloud_frame": _parse_bool(
             occupancy.get("slice_z_in_cloud_frame", True),
@@ -518,8 +530,8 @@ def _startup_launch_setup(context, *args, **kwargs):
                 msg=(
                     "Startup ICP is active on %s using clouds=(%s, %s), "
                     "timeout=%.1fs, accepted_results=%d. Legacy fixed/inverted "
-                    "Z slicing is disabled; occupancy.yaml supplies the static "
-                    "TF/body/range crop."
+                    "Z slicing is disabled; occupancy.yaml supplies the body/range "
+                    "crop."
                     % (
                         _ACTIVE_STARTUP_TOPIC,
                         *_ACTIVE_STARTUP_CLOUD_TOPICS,

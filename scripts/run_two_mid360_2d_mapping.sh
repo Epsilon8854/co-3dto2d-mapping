@@ -437,7 +437,9 @@ if [[ "${RUN_LOCAL_MAPPING}" == true || "${RUN_FUSION}" == true ]]; then
     "occupancy_config_file:=${MAPPING_CONFIG}"
   )
   mapping_command+=("${EXTRA_LAUNCH_ARGS[@]}")
-  start_process_group MAPPING_PID "${mapping_command[@]}"
+  start_process_group MAPPING_PID env \
+    "CO3DTO2D_STARTUP_DIRECT_LIDAR=true" \
+    "${mapping_command[@]}"
 
   if [[ "${RUN_FUSION}" == true && "${START_RVIZ}" == true ]]; then
     start_process_group RVIZ_PID rviz2 -d "${RVIZ_CONFIG}"
