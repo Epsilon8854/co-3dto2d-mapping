@@ -9,14 +9,15 @@ def test_public_two_live_launch_selects_fixed_occupancy_alignment():
     wrapper = (
         PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py"
     ).read_text()
+    implementation = (PACKAGE / "launch" / "two_live_mapping.launch.py").read_text()
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
 
-    assert "_place_recognition_node" in wrapper
-    assert 'rewritten["executable"] = "inter_robot_place_alignment.py"' in wrapper
-    assert '"config", "place_recognition.yaml"' in wrapper
-    assert '"robot0_odom_topic": "/r0/toy/corrected_odometry"' in wrapper
-    assert '"robot1_odom_topic": "/r1/toy/corrected_odometry"' in wrapper
-    assert "_BASE.Node = _place_recognition_node" in wrapper
+    assert "_BASE.generate_launch_description().entities" in wrapper
+    assert 'executable="inter_robot_place_alignment.py"' in implementation
+    assert '"config", "place_recognition.yaml"' in implementation
+    assert '"robot0_odom_topic": "/r0/toy/corrected_odometry"' in implementation
+    assert '"robot1_odom_topic": "/r1/toy/corrected_odometry"' in implementation
+    assert "_BASE.Node =" not in wrapper
     assert "co_3dto2d_mapping/inter_robot_place_alignment.py" in cmake
 
 
@@ -30,7 +31,7 @@ def test_combined_bag_launch_uses_profile_then_explicit_overrides():
     assert "alignment_parameters = [place_config_file]" in text
     assert "alignment_parameters.append(alignment_config_file)" in text
     assert "alignment_parameters.append(alignment_overrides)" in text
-    assert '"processing_period_sec": float(' in text
+    assert '\"processing_period_sec\": float(' in text
 
 
 def test_default_consensus_requires_motion_separated_support_and_locks():

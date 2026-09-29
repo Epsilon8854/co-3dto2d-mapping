@@ -80,15 +80,15 @@ def test_public_record_republisher_uses_fixed_common_world_frame():
     assert "self._refresh_odometry_selection()" in wrapper
 
 
-def test_two_live_public_launch_aligns_plane_filtered_clouds():
+def test_two_live_public_launch_aligns_maps_not_plane_filtered_clouds():
     cmake = (PACKAGE / "CMakeLists.txt").read_text()
-    wrapper = (
-        PACKAGE
-        / "launch"
-        / "two_live_plane_height_mapping.launch.py"
-    ).read_text()
+    wrapper = (PACKAGE / "launch" / "two_live_plane_height_mapping.launch.py").read_text()
+    implementation = (PACKAGE / "launch" / "two_live_mapping.launch.py").read_text()
     assert "RENAME two_live_mapping_base.launch.py" in cmake
     assert "RENAME two_live_mapping.launch.py" in cmake
-    assert 'filtered_topic = "/r%d%s"' in wrapper
-    assert 'name == "alignment_use_z_filter"' in wrapper
-    assert "return False" in wrapper
+    assert "_BASE.generate_launch_description().entities" in wrapper
+    assert 'executable="inter_robot_place_alignment.py"' in implementation
+    assert '"robot0_map_topic": "/r0/toy/global_occupancy"' in implementation
+    assert '"robot1_map_topic": "/r1/toy/global_occupancy"' in implementation
+    assert "robot0_cloud_topic" not in implementation
+    assert "robot1_cloud_topic" not in implementation
