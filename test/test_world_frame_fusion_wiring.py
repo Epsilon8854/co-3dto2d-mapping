@@ -34,13 +34,13 @@ def test_combined_bag_launch_uses_profile_then_explicit_overrides():
     assert '\"processing_period_sec\": float(' in text
 
 
-def test_default_alignment_registers_latest_pair_directly_and_locks():
+def test_default_alignment_registers_latest_pair_directly_and_tracks_updates():
     profile = yaml.safe_load(
         (PACKAGE / "config" / "place_recognition.yaml").read_text()
     )["/**"]["ros__parameters"]
     assert profile["direct_latest_pair"] is True
-    assert profile["lock_after_consensus"] is True
-    assert profile["stop_processing_after_lock"] is True
+    assert profile["lock_after_consensus"] is False
+    assert profile["stop_processing_after_lock"] is False
 
 
 def test_s3e_profile_selects_single_floor_and_stricter_fixed_alignment():

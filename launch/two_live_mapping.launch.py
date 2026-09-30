@@ -230,6 +230,9 @@ def launch_setup(context, *args, **kwargs):
                 "target_frame_id": "odom",
                 "common_frame_id": common_frame_id,
                 "alignment_topic": alignment_topic,
+                "lock_world_alignment": _bool_value(
+                    context, "alignment_lock_after_first"
+                ),
                 "publish_period_ms": int(_value(context, "record_publish_period_ms")),
                 "output_prefix": _value(context, "record_output_prefix"),
                 "robot_ids": [0, 1],
@@ -289,7 +292,7 @@ def generate_launch_description():
             description="Settle time inside the 2-D aligner after maps and odometry arrive; not a mapping gate.",
         ),
         DeclareLaunchArgument("alignment_occupied_threshold", default_value="50"),
-        DeclareLaunchArgument("alignment_lock_after_first", default_value="true"),
+        DeclareLaunchArgument("alignment_lock_after_first", default_value="false"),
         # Retain the old cloud-ICP CLI names so existing runners still launch.
         # They are deliberately NOT forwarded to the occupancy-only aligner.
         # Configure registration/consensus thresholds via alignment_config_file.

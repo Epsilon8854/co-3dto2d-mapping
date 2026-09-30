@@ -240,10 +240,25 @@ def test_profile_precedes_frame_contract_and_preserves_consensus(load_launch):
     parameters = nodes(actions, "inter_robot_place_alignment.py")[0].kwargs["parameters"]
     assert parameters[0].endswith("/config/place_recognition.yaml")
     assert parameters[1] == "/profiles/strict.yaml"
-    assert settings["lock_after_consensus"] is True
-    assert settings["stop_processing_after_lock"] is True
+    assert settings["lock_after_consensus"] is False
+    assert settings["stop_processing_after_lock"] is False
     assert "consensus_min_measurements" not in settings
     assert "registration_min_symmetric_overlap" not in settings
+
+
+def test_enabled_place_recognition_updates_alignment_and_merge_continuously(
+    load_launch,
+):
+    actions, context = load_launch(enable_place_recognition="true")
+
+    alignment = nodes(actions, "inter_robot_place_alignment.py")[0]
+    alignment_settings = alignment.kwargs["parameters"][-1]
+    record = nodes(actions, "record_republisher.py")[0]
+    record_settings = record.kwargs["parameters"][0]
+    assert context["alignment_lock_after_first"] == "false"
+    assert alignment_settings["lock_after_consensus"] is False
+    assert alignment_settings["stop_processing_after_lock"] is False
+    assert record_settings["lock_world_alignment"] is False
 
 
 def test_disable_record_does_not_disable_map_alignment(load_launch):

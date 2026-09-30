@@ -88,5 +88,5 @@
     consensus_min_distinct_keyframes: 2
     consensus_max_translation_rms_m: 0.18
     consensus_max_yaw_rms_rad: 0.03490658503988659  # 2 deg
-    lock_after_consensus: true
-    stop_processing_after_lock: true
+    lock_after_consensus: false
+    stop_processing_after_lock: false

@@ -582,6 +582,8 @@ class InterRobotPlaceAlignment(Node):
         previous = frames[-1]
         if stamp_ns > 0 and previous.stamp_ns > 0 and stamp_ns <= previous.stamp_ns:
             return False
+        if self.direct_latest_pair:
+            return True
         elapsed = (now_ns - previous.created_ns) / 1e9
         if elapsed < self.keyframe_min_interval_sec:
             return False
@@ -1182,15 +1184,20 @@ class InterRobotPlaceAlignment(Node):
         if not self._inputs_ready(now_ns):
             self._publish_status(now_ns)
             return
+        new_keyframes: List[OccupancyKeyframe] = []
         for robot_id in (0, 1):
             keyframe = self._create_keyframe(robot_id, now_ns)
             if keyframe is not None:
-                self._match_new_keyframe(keyframe, now_ns)
+                new_keyframes.append(keyframe)
+                if not self.direct_latest_pair:
+                    self._match_new_keyframe(keyframe, now_ns)
             if (
                 self.alignment_message is not None
                 and self.stop_processing_after_lock
             ):
                 break
+        if self.direct_latest_pair and new_keyframes:
+            self._match_new_keyframe(new_keyframes[-1], now_ns)
         if not self.direct_latest_pair:
             self._update_consensus(now_ns)
         self._publish_status(now_ns)
