@@ -299,10 +299,12 @@ passthrough:
 | `wait_imu_to_init` | `true` | 첫 scan 전 IMU 초기화를 기다립니다. |
 | `expected_update_rate` | `10.0` | 입력률 watchdog입니다. 느린 bag replay는 0으로 끕니다. |
 | `startup_delay_sec` | `0.0` | odometry node 시작 지연입니다. two-live 기본은 10초입니다. |
-| `qos`, `qos_imu` | `0`, `0` | RTAB-Map wrapper QoS 값입니다. |
+| `odometry_config_file` | `config/lidar_odometry.yaml` | RTAB-Map ICP와 QoS 설정 파일입니다. |
 | `publish_tf` | `true` | odometry TF publish 여부입니다. two-live는 frame 충돌 방지를 위해 false입니다. |
 
-현재 launch의 주요 고정 RTAB-Map 값은 다음과 같습니다.
+주요 RTAB-Map 값은 `config/lidar_odometry.yaml`에서 조정합니다. YAML이 먼저
+적용되고 frame, simulation clock, IMU 초기화, 입력률 같은 실행별 값은 launch가
+뒤에서 덮어씁니다.
 
 ```text
 Icp/PointToPlane=true
@@ -321,7 +323,15 @@ OdomF2M/ScanMaxSize=15000
 OdomF2M/BundleAdjustment=false
 ```
 
-이 값들은 현재 `occupancy.yaml`이 아니라 launch 딕셔너리에 있습니다.
+물리 LiDAR 실행에서 별도 파일을 선택하려면 다음 옵션을 사용합니다.
+
+```bash
+bash scripts/run_two_mid360_2d_mapping.sh \
+  --robot-number 1 \
+  --odometry-config /absolute/path/to/lidar_odometry.yaml
+```
+
+두 PC가 같은 odometry 동작을 사용해야 한다면 동일한 YAML을 각각 지정합니다.
 
 ---
 

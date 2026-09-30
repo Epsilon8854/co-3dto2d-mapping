@@ -1,3 +1,6 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration
@@ -16,35 +19,26 @@ def launch_setup(context, *args, **kwargs):
     if startup_delay_sec < 0.0:
         raise RuntimeError("startup_delay_sec must be non-negative")
 
-    parameters = [{
+    odometry_config_file = LaunchConfiguration("odometry_config_file").perform(
+        context
+    )
+    if not os.path.isfile(odometry_config_file):
+        raise RuntimeError(
+            "odometry_config_file does not exist: %s" % odometry_config_file
+        )
+
+    runtime_parameters = {
         "frame_id": LaunchConfiguration("frame_id").perform(context),
         "odom_frame_id": LaunchConfiguration("odom_topic").perform(context),
         "publish_tf": LaunchConfiguration("publish_tf").perform(context).lower() == "true",
         "use_sim_time": use_sim_time,
-        "wait_for_transform": 0.2,
         "expected_update_rate": float(
             LaunchConfiguration("expected_update_rate").perform(context)
         ),
         "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(
             context
         ).lower() == "true",
-        "qos": int(LaunchConfiguration("qos").perform(context)),
-        "qos_imu": int(LaunchConfiguration("qos_imu").perform(context)),
-        "Icp/PointToPlane": "true",
-        "Icp/Iterations": "10",
-        "Icp/VoxelSize": "0.1",
-        "Icp/Epsilon": "0.001",
-        "Icp/PointToPlaneK": "20",
-        "Icp/MaxTranslation": "2",
-        "Icp/MaxCorrespondenceDistance": "1",
-        "Icp/Strategy": "1",
-        "Icp/OutlierRatio": "0.7",
-        "Icp/CorrespondenceRatio": "0.01",
-        "Odom/ScanKeyFrameThr": "0.4",
-        "OdomF2M/ScanSubtractRadius": "0.1",
-        "OdomF2M/ScanMaxSize": "15000",
-        "OdomF2M/BundleAdjustment": "false",
-    }]
+    }
 
     odometry_node = Node(
         package="rtabmap_odom",
@@ -52,7 +46,9 @@ def launch_setup(context, *args, **kwargs):
         output="screen",
         name="mid360_icp_odometry",
         namespace=namespace,
-        parameters=parameters,
+        # Later dictionaries override YAML values. Only per-run frame, timing,
+        # and topic-adjacent settings belong in runtime_parameters.
+        parameters=[odometry_config_file, runtime_parameters],
         remappings=[
             ("scan_cloud", LaunchConfiguration("scan_cloud_topic").perform(context)),
             ("imu", LaunchConfiguration("imu_topic").perform(context)),
@@ -65,6 +61,7 @@ def launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
+    package_share = get_package_share_directory("co_3dto2d_mapping")
     return LaunchDescription(
         [
             DeclareLaunchArgument("namespace", default_value="/r0"),
@@ -76,8 +73,12 @@ def generate_launch_description():
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
             DeclareLaunchArgument("startup_delay_sec", default_value="0.0"),
-            DeclareLaunchArgument("qos", default_value="0"),
-            DeclareLaunchArgument("qos_imu", default_value="0"),
+            DeclareLaunchArgument(
+                "odometry_config_file",
+                default_value=os.path.join(
+                    package_share, "config", "lidar_odometry.yaml"
+                ),
+            ),
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             OpaqueFunction(function=launch_setup),
         ]

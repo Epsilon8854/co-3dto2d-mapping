@@ -100,6 +100,7 @@ def _robot_actions(context, robot_id, live_launch_path, enable_rear_lidar_filter
             "sensor_tf_pitch": _value(context, "sensor_tf_pitch_%d" % robot_id),
             "sensor_tf_roll": _value(context, "sensor_tf_roll_%d" % robot_id),
             "expected_update_rate": _value(context, "expected_update_rate"),
+            "odometry_config_file": _value(context, "odometry_config_file"),
             "wait_imu_to_init": _value(context, "wait_imu_to_init"),
             "mapping_startup_delay_sec": _value(context, "mapping_startup_delay_sec"),
             "enable_rear_lidar_filter": _value(context, "enable_rear_lidar_filter"),
@@ -262,6 +263,12 @@ def generate_launch_description():
         DeclareLaunchArgument("robot0_imu_input_is_filtered", default_value="false"),
         DeclareLaunchArgument("robot1_imu_input_is_filtered", default_value="false"),
         DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+        DeclareLaunchArgument(
+            "odometry_config_file",
+            default_value=os.path.join(
+                package_share, "config", "lidar_odometry.yaml"
+            ),
+        ),
         DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
         DeclareLaunchArgument(
             "mapping_startup_delay_sec", default_value="10.0",

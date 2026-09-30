@@ -38,6 +38,7 @@ LIVOX_SETUP="${LIVOX_SETUP:-}"
 DRIVER_CONFIG="${LIVOX_CONFIG:-}"
 MAPPING_WORKSPACE="${MAPPING_WORKSPACE:-${REPOSITORY_DIR}}"
 MAPPING_CONFIG="${MAPPING_CONFIG:-}"
+ODOMETRY_CONFIG="${ODOMETRY_CONFIG:-}"
 RVIZ_CONFIG="${RVIZ_CONFIG:-}"
 OCCUPANCY_PNG_OUTPUT_DIR="${OCCUPANCY_PNG_OUTPUT_DIR:-}"
 DOMAIN_ID="${ROS_DOMAIN_ID:-72}"
@@ -81,6 +82,7 @@ Options:
   --driver-config FILE         This laptop's MID360_config.json
   --mapping-workspace DIR      Built mapping workspace (default: ${MAPPING_WORKSPACE})
   --mapping-config FILE        Occupancy YAML
+  --odometry-config FILE       RTAB-Map LiDAR odometry YAML
   --expected-update-rate HZ    RTAB-Map input-rate ceiling (default: ${EXPECTED_UPDATE_RATE})
   --rviz-config FILE           Two-robot RViz config
   --robot0-lidar-topic TOPIC   r0 LiDAR input (default: ${ROBOT0_LIDAR_TOPIC})
@@ -170,6 +172,11 @@ while (($# > 0)); do
     --mapping-config)
       require_value "$1" "${2:-}"
       MAPPING_CONFIG=$2
+      shift 2
+      ;;
+    --odometry-config)
+      require_value "$1" "${2:-}"
+      ODOMETRY_CONFIG=$2
       shift 2
       ;;
     --expected-update-rate)
@@ -271,6 +278,7 @@ fi
 LIVOX_SETUP="${LIVOX_SETUP:-${LIVOX_WORKSPACE}/install/local_setup.bash}"
 DRIVER_CONFIG="${DRIVER_CONFIG:-${LIVOX_WORKSPACE}/src/livox_ros_driver2/config/MID360_config.json}"
 MAPPING_CONFIG="${MAPPING_CONFIG:-${MAPPING_WORKSPACE}/config/occupancy.yaml}"
+ODOMETRY_CONFIG="${ODOMETRY_CONFIG:-${MAPPING_WORKSPACE}/config/lidar_odometry.yaml}"
 RVIZ_CONFIG="${RVIZ_CONFIG:-${MAPPING_WORKSPACE}/rviz/two_robot_mapping.rviz}"
 MAPPING_SETUP="${MAPPING_WORKSPACE}/install/local_setup.bash"
 OUTPUT_RUN_TIMESTAMP="$(date +%Y%m%d_%H%M%S_%N)"
@@ -284,7 +292,7 @@ required_files=(
   "${LOCAL_DRIVER_SCRIPT}"
 )
 if [[ "${RUN_LOCAL_MAPPING}" == true || "${RUN_FUSION}" == true ]]; then
-  required_files+=("${MAPPING_SETUP}" "${MAPPING_CONFIG}")
+  required_files+=("${MAPPING_SETUP}" "${MAPPING_CONFIG}" "${ODOMETRY_CONFIG}")
   if [[ "${RUN_FUSION}" == true && "${START_RVIZ}" == true ]]; then
     required_files+=("${RVIZ_CONFIG}")
   fi
@@ -404,6 +412,7 @@ printf '%s\n' \
   "  local mapping:       ${RUN_LOCAL_MAPPING}" \
   "  fusion host:         ${RUN_FUSION}" \
   "  expected rate:       ${EXPECTED_UPDATE_RATE} Hz" \
+  "  odometry config:     ${ODOMETRY_CONFIG}" \
   "  occupancy PNG:       ${OCCUPANCY_PNG_OUTPUT_DIR}" \
   "  RViz:                ${RVIZ_STATUS}"
 
@@ -436,6 +445,7 @@ if [[ "${RUN_LOCAL_MAPPING}" == true || "${RUN_FUSION}" == true ]]; then
     "robot1_lidar_topic:=${ROBOT1_LIDAR_TOPIC}"
     "robot1_imu_topic:=${ROBOT1_IMU_TOPIC}"
     "expected_update_rate:=${EXPECTED_UPDATE_RATE}"
+    "odometry_config_file:=${ODOMETRY_CONFIG}"
     "publish_sensor_static_tf:=${PUBLISH_SENSOR_STATIC_TF}"
     "enable_place_recognition:=${ENABLE_PLACE_RECOGNITION}"
     "occupancy_config_file:=${MAPPING_CONFIG}"

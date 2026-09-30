@@ -261,6 +261,23 @@ def test_enabled_place_recognition_updates_alignment_and_merge_continuously(
     assert record_settings["lock_world_alignment"] is False
 
 
+def test_two_live_forwards_custom_lidar_odometry_profile(load_launch):
+    actions, _ = load_launch(
+        odometry_config_file="/profiles/robot_odom.yaml",
+    )
+
+    pipelines = [
+        action
+        for action in actions
+        if isinstance(action, IncludeLaunchDescription)
+    ]
+    assert len(pipelines) == 2
+    assert {
+        pipeline.launch_arguments["odometry_config_file"]
+        for pipeline in pipelines
+    } == {"/profiles/robot_odom.yaml"}
+
+
 def test_disable_record_does_not_disable_map_alignment(load_launch):
     actions, _ = load_launch(
         enable_record_republisher="false",

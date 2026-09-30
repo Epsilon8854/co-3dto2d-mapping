@@ -87,6 +87,9 @@ def launch_setup(context, *args, **kwargs):
             "expected_update_rate": LaunchConfiguration(
                 "expected_update_rate"
             ).perform(context),
+            "odometry_config_file": LaunchConfiguration(
+                "odometry_config_file"
+            ).perform(context),
             "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(
                 context
             ),
@@ -236,6 +239,12 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_pitch", default_value="0"),
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+            DeclareLaunchArgument(
+                "odometry_config_file",
+                default_value=os.path.join(
+                    package_share, "config", "lidar_odometry.yaml"
+                ),
+            ),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
             DeclareLaunchArgument("mapping_startup_delay_sec", default_value="0.0"),
             DeclareLaunchArgument("imu_input_is_filtered", default_value="false"),
