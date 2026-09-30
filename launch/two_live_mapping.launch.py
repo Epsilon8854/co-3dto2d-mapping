@@ -15,6 +15,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+from co_3dto2d_mapping.dynamic_filter_config import merged_dynamic_parameters
+
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
@@ -233,6 +235,7 @@ def launch_setup(context, *args, **kwargs):
             name="toy_record_republisher",
             output="screen",
             parameters=[{
+                **merged_dynamic_parameters(_value(context, "occupancy_config_file")),
                 "target_frame_id": "odom",
                 "common_frame_id": common_frame_id,
                 "alignment_topic": alignment_topic,

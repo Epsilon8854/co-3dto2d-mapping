@@ -30,13 +30,19 @@
     raycast_clear_occupied: false
     occupied_threshold_points: 1
 
-    # Baseline default: temporal dynamic filtering is opt-in. Set this to true
-    # for repeated occupied/free evidence and stale-obstacle cleanup.
+    # ONE switch for robot global maps AND the two-robot merged map.
+    # Set true to clear old occupied cells using repeated fresh free rays.
+    # Set the same value on both PCs, then restart mapping/fusion.
+    # This is not runtime ros2 param set support or object segmentation.
+    # Keep enable_raycast_free_space=true and raycast_clear_occupied=false.
+    # Counts are observations, not seconds; unseen cells are not deleted.
     dynamic_filter_enabled: false
     dynamic_free_clear_count: 10
     dynamic_occupied_confirm_count: 1
     dynamic_counter_decay: 1
     dynamic_evidence_timeout_frames: 30
+    # Do not expand free rays into neighbouring unobserved cells by default.
+    merged_free_observation_inflation_m: 0.0
 
     # Baseline default: scan-to-submap ICP is opt-in. The input odometry already
     # carries the shared floor-derived z/roll/pitch when ground_plane_pose_enabled=true.

@@ -69,6 +69,10 @@ def load_launch(monkeypatch, tmp_path):
     (installed / "launch" / "two_live_mapping_base.launch.py").write_text(
         (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
     )
+    (installed / "config").mkdir()
+    (installed / "config" / "occupancy.yaml").write_text(
+        (PACKAGE / "config" / "occupancy.yaml").read_text()
+    )
     modules = {
         "ament_index_python": {},
         "ament_index_python.packages": {

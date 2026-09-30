@@ -8,6 +8,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+from co_3dto2d_mapping.dynamic_filter_config import merged_dynamic_parameters
+
 
 def launch_setup(context, *args, **kwargs):
     package_share = get_package_share_directory("co_3dto2d_mapping")
@@ -207,6 +209,7 @@ def launch_setup(context, *args, **kwargs):
         output="screen",
         parameters=[
             {
+                **merged_dynamic_parameters(occupancy_config_file),
                 "target_frame_id": "odom",
                 "common_frame_id": "map",
                 "alignment_topic": alignment_topic,
