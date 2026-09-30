@@ -17,6 +17,7 @@ from co_3dto2d_mapping.polar_occupancy_context import (
 )
 from co_3dto2d_mapping.se2_map_registration import (
     RegistrationConfig,
+    register_submaps_direct,
     register_submaps,
 )
 
@@ -196,3 +197,45 @@ def test_geometric_verification_rejects_incompatible_free_space():
         "free_space_conflict",
         "insufficient_correspondences",
     }
+
+
+def test_direct_registration_ignores_quality_acceptance_thresholds():
+    grid, geometry = make_world()
+    target = extract_local_patch(grid, geometry, (0.0, 0.0, 0.0), 8.0)
+    source = extract_local_patch(
+        grid, geometry, (0.5, -0.3, math.radians(4.0)), 8.0
+    )
+
+    result = register_submaps_direct(
+        target,
+        source,
+        math.radians(4.0),
+        registration_config(
+            min_correspondences=10_000,
+            min_symmetric_overlap=1.0,
+            max_symmetric_rmse_m=1e-9,
+            max_free_conflict_ratio=0.0,
+        ),
+    )
+
+    assert result is not None
+    assert all(math.isfinite(value) for value in result.transform)
+    assert result.accepted
+    assert math.isnan(result.symmetric_rmse_m)
+    assert math.isnan(result.symmetric_overlap)
+    assert math.isnan(result.free_conflict_ratio)
+
+
+def test_direct_registration_only_fails_when_no_boundary_can_be_registered():
+    empty = np.zeros((20, 20), dtype=np.int8)
+    geometry = GridGeometry(
+        resolution=0.1,
+        width=20,
+        height=20,
+        origin_x=-1.0,
+        origin_y=-1.0,
+    )
+    target = extract_local_patch(empty, geometry, (0.0, 0.0, 0.0), 0.9)
+    source = extract_local_patch(empty, geometry, (0.0, 0.0, 0.0), 0.9)
+
+    assert register_submaps_direct(target, source, 0.0) is None

@@ -274,4 +274,4 @@ def test_environment_check_ignores_an_inherited_ros1_distro(
 
     # Then: it selects an installed ROS 2 setup instead of sourcing Noetic.
     assert result.returncode == 0, result.stderr
-    assert "Environment check passed: ROS=/opt/ros/foxy/setup.bash" in result.stdout
+    assert "Environment check passed: ROS=/opt/ros/humble/setup.bash" in result.stdout

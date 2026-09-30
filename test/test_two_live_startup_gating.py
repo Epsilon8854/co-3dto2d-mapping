@@ -147,7 +147,9 @@ def assert_map_only(actions):
 
 @pytest.mark.parametrize("public", [False, True])
 def test_both_entry_points_use_2d_maps_without_startup_gate(load_launch, public):
-    actions, context = load_launch(public=public)
+    actions, context = load_launch(
+        public=public, enable_place_recognition="true"
+    )
     assert_map_only(actions)
     pipelines = [a for a in actions if isinstance(a, IncludeLaunchDescription)]
     assert len(pipelines) == 2
@@ -186,6 +188,7 @@ def test_distributed_fusion_only_reads_its_own_sensor(load_launch, rid):
     actions, _ = load_launch(**{
         "enable_robot0_pipeline": str(rid == 0).lower(),
         "enable_robot1_pipeline": str(rid == 1).lower(),
+        "enable_place_recognition": "true",
     })
     assert_map_only(actions)
     relays = nodes(actions, "pointcloud_frame_republisher.py")
@@ -194,28 +197,45 @@ def test_distributed_fusion_only_reads_its_own_sensor(load_launch, rid):
 
 
 def test_fusion_only_host_does_not_create_sensor_consumers(load_launch):
-    actions, _ = load_launch(enable_robot0_pipeline="false", enable_robot1_pipeline="false")
+    actions, _ = load_launch(
+        enable_robot0_pipeline="false",
+        enable_robot1_pipeline="false",
+        enable_place_recognition="true",
+    )
     assert_map_only(actions)
     assert not nodes(actions, "pointcloud_frame_republisher.py")
     assert not any(isinstance(a, IncludeLaunchDescription) for a in actions)
 
 
-def test_old_runner_flags_cannot_reenable_cloud_icp(load_launch, monkeypatch):
+def test_place_recognition_false_does_not_start_an_alignment_node(
+    load_launch, monkeypatch
+):
     monkeypatch.setenv("CO3DTO2D_STARTUP_DIRECT_LIDAR", "true")
     actions, _ = load_launch(
         wait_for_initial_alignment="true",
         startup_alignment_timeout_sec="0.0",
         enable_place_recognition="false",
     )
-    assert_map_only(actions)
+    assert not nodes(actions, "inter_robot_place_alignment.py")
+    assert not nodes(actions, "initial_xy_icp_alignment.py")
     assert len([a for a in actions if isinstance(a, IncludeLaunchDescription)]) == 2
     notices = " ".join(a.msg for a in actions if isinstance(a, LogInfo))
     assert "wait_for_initial_alignment is deprecated" in notices
-    assert "enable_place_recognition:=false is deprecated" in notices
+    assert "enable_place_recognition:=false is deprecated" not in notices
+
+
+def test_place_recognition_defaults_to_disabled(load_launch):
+    actions, context = load_launch()
+
+    assert context["enable_place_recognition"] == "false"
+    assert not nodes(actions, "inter_robot_place_alignment.py")
 
 
 def test_profile_precedes_frame_contract_and_preserves_consensus(load_launch):
-    actions, _ = load_launch(alignment_config_file="/profiles/strict.yaml")
+    actions, _ = load_launch(
+        alignment_config_file="/profiles/strict.yaml",
+        enable_place_recognition="true",
+    )
     settings = assert_map_only(actions)
     parameters = nodes(actions, "inter_robot_place_alignment.py")[0].kwargs["parameters"]
     assert parameters[0].endswith("/config/place_recognition.yaml")
@@ -227,7 +247,10 @@ def test_profile_precedes_frame_contract_and_preserves_consensus(load_launch):
 
 
 def test_disable_record_does_not_disable_map_alignment(load_launch):
-    actions, _ = load_launch(enable_record_republisher="false")
+    actions, _ = load_launch(
+        enable_record_republisher="false",
+        enable_place_recognition="true",
+    )
     assert_map_only(actions)
     assert not nodes(actions, "record_republisher.py")
 
@@ -251,7 +274,10 @@ def test_input_validation_is_preserved(load_launch, overrides):
 
 
 def test_local_warmup_is_configurable_and_not_an_alignment_barrier(load_launch):
-    actions, _ = load_launch(mapping_startup_delay_sec="0.0")
+    actions, _ = load_launch(
+        mapping_startup_delay_sec="0.0",
+        enable_place_recognition="true",
+    )
     assert_map_only(actions)
     for pipeline in (a for a in actions if isinstance(a, IncludeLaunchDescription)):
         assert pipeline.launch_arguments["mapping_startup_delay_sec"] == "0.0"

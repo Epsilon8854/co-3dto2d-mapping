@@ -11,6 +11,10 @@
     target_frame_id: "map"
     source_frame_id: "r1/odom"
     strict_frame_validation: true
+    # Register the newest r0/r1 occupancy maps immediately. This mode bypasses
+    # observed-area, descriptor retrieval, geometric-quality, and consensus
+    # acceptance gates; only an uncomputable/non-finite transform is rejected.
+    direct_latest_pair: true
 
     processing_period_sec: 1.0
     startup_delay_sec: 3.0

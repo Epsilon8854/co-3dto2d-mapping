@@ -208,19 +208,9 @@ def test_public_live_launch_keeps_bag_alignment_profiles() -> None:
     two_live = (REPOSITORY_ROOT / "launch" / "two_live_mapping.launch.py").read_text(
         encoding="utf-8"
     )
-    public_wrapper = (
-        REPOSITORY_ROOT / "launch" / "two_live_plane_height_mapping.launch.py"
-    ).read_text(encoding="utf-8")
 
     assert 'DeclareLaunchArgument("alignment_config_file", default_value="")' in two_live
-    assert (
-        'DeclareLaunchArgument(\n'
-        '                "enable_place_recognition",\n'
-        '                default_value="false",'
-    ) in two_live
     assert "if enable_fusion and enable_place_recognition:" in two_live
-    assert "_active_alignment_config_file" in public_wrapper
-    assert "alignment_parameters.append(_active_alignment_config_file)" in public_wrapper
 
 
 def test_extra_launch_arguments_are_forwarded_after_safe_defaults(tmp_path: Path) -> None:

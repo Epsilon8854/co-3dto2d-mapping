@@ -52,6 +52,7 @@ from co_3dto2d_mapping.se2_map_registration import (
     RegistrationConfig,
     RegistrationResult,
     register_submaps,
+    register_submaps_direct,
 )
 
 
@@ -67,6 +68,8 @@ PARAMETER_DEFAULTS = {
     "target_frame_id": "map",
     "source_frame_id": "r1/odom",
     "strict_frame_validation": True,
+    # Pair the latest maps directly, bypassing descriptor and quality gates.
+    "direct_latest_pair": True,
     # Scheduling and time matching.
     "processing_period_sec": 1.0,
     "startup_delay_sec": 3.0,
@@ -155,7 +158,7 @@ class OccupancyKeyframe:
     pose: PlanarTransform
     frame_id: str
     patch: LocalOccupancyPatch
-    context: PolarContext
+    context: Optional[PolarContext]
 
 
 @dataclass(frozen=True)
@@ -234,12 +237,13 @@ class InterRobotPlaceAlignment(Node):
         )
         self.get_logger().info(
             "2-D occupancy place alignment started. maps=(%s, %s) "
-            "odom=(%s, %s) descriptor=%dx%d radius=%.1fm "
+            "odom=(%s, %s) mode=%s descriptor=%dx%d radius=%.1fm "
             "keyframe=%.2fm/%.1fdeg stationary=%.1fs consensus=%d/%d "
             "output=%s (%s <- %s), lock=%s"
             % (
                 *self.robot_map_topics,
                 *self.robot_odom_topics,
+                "direct_latest_pair" if self.direct_latest_pair else "place_search",
                 self.context_config.num_rings,
                 self.context_config.num_sectors,
                 self.submap_radius_m,
@@ -277,6 +281,7 @@ class InterRobotPlaceAlignment(Node):
         ):
             setattr(self, name, str(p(name)))
         self.strict_frame_validation = bool(p("strict_frame_validation"))
+        self.direct_latest_pair = bool(p("direct_latest_pair"))
 
         float_names = (
             "processing_period_sec",
@@ -643,7 +648,7 @@ class InterRobotPlaceAlignment(Node):
                 % (robot_id, exc),
             )
             return None
-        if patch.known_ratio < self.min_known_ratio:
+        if not self.direct_latest_pair and patch.known_ratio < self.min_known_ratio:
             self._warn_throttled(
                 f"known_{robot_id}",
                 "r%d keyframe is only %.1f%% observed; need %.1f%%."
@@ -654,7 +659,10 @@ class InterRobotPlaceAlignment(Node):
                 ),
             )
             return None
-        if patch.occupied_boundary_count < self.min_boundary_points:
+        if (
+            not self.direct_latest_pair
+            and patch.occupied_boundary_count < self.min_boundary_points
+        ):
             self._warn_throttled(
                 f"boundary_{robot_id}",
                 "r%d keyframe has %d boundary cells; need %d."
@@ -674,7 +682,11 @@ class InterRobotPlaceAlignment(Node):
             pose=odom.pose,
             frame_id=self._expected_odom_frame(robot_id),
             patch=patch,
-            context=build_polar_context(patch, self.context_config),
+            context=(
+                None
+                if self.direct_latest_pair
+                else build_polar_context(patch, self.context_config)
+            ),
         )
         self.next_keyframe_ids[robot_id] += 1
         frames = self.keyframes[robot_id]
@@ -701,9 +713,13 @@ class InterRobotPlaceAlignment(Node):
         if not self.require_mutual_best_match:
             return True
         query = candidate.source
+        if query.context is None:
+            return False
         best_id = None
         best_distance = float("inf")
         for target in self.keyframes[0]:
+            if target.context is None:
+                continue
             match = match_polar_context(
                 target.context, query.context, self.context_config
             )
@@ -715,12 +731,17 @@ class InterRobotPlaceAlignment(Node):
     def _descriptor_candidates(
         self, new_keyframe: OccupancyKeyframe
     ) -> List[DescriptorCandidate]:
+        if new_keyframe.context is None:
+            return []
         database = self.keyframes[1 - new_keyframe.robot_id]
         if not database:
             return []
+        database_contexts = [keyframe.context for keyframe in database]
+        if any(context is None for context in database_contexts):
+            return []
         ring_rank = rank_ring_candidates(
             new_keyframe.context,
-            [keyframe.context for keyframe in database],
+            database_contexts,
             self.descriptor_top_k,
         )
         candidates: List[DescriptorCandidate] = []
@@ -1012,9 +1033,90 @@ class InterRobotPlaceAlignment(Node):
         )
         self._update_consensus(now_ns)
 
+    def _process_direct_pair(
+        self,
+        target: OccupancyKeyframe,
+        source: OccupancyKeyframe,
+        now_ns: int,
+    ) -> None:
+        pair = (target.keyframe_id, source.keyframe_id)
+        if pair in self.attempted_pairs:
+            return
+        self.attempted_pairs.add(pair)
+        initial_yaw = normalize_angle(
+            self.expected_map_yaw_rad + source.pose[2] - target.pose[2]
+        )
+        result = register_submaps_direct(
+            target.patch,
+            source.patch,
+            initial_yaw,
+            self.registration_config,
+        )
+        if result is None:
+            self.last_match_summary = {
+                "mode": "direct_latest_pair",
+                "target_keyframe": target.keyframe_id,
+                "source_keyframe": source.keyframe_id,
+                "registration_reason": "not_computable",
+            }
+            self._warn_throttled(
+                "direct_registration",
+                "Direct occupancy registration could not compute a finite "
+                "transform for r0:k%d <-> r1:k%d."
+                % pair,
+            )
+            return
+
+        map0_from_map1 = world_from_source_odom(
+            target.pose,
+            result.transform,
+            source.pose,
+        )
+        transform = TransformStamped()
+        transform.header.stamp = self.get_clock().now().to_msg()
+        transform.header.frame_id = self.target_frame_id
+        transform.child_frame_id = self.source_frame_id
+        transform.transform.translation.x = map0_from_map1[0]
+        transform.transform.translation.y = map0_from_map1[1]
+        transform.transform.translation.z = 0.0
+        transform.transform.rotation.z = math.sin(0.5 * map0_from_map1[2])
+        transform.transform.rotation.w = math.cos(0.5 * map0_from_map1[2])
+        self.alignment_message = transform
+        self.alignment_publisher.publish(transform)
+        self.state = "LOCKED" if self.lock_after_consensus else "TRACKING"
+        self.last_match_summary = {
+            "mode": "direct_latest_pair",
+            "target_keyframe": target.keyframe_id,
+            "source_keyframe": source.keyframe_id,
+            "registration_reason": result.reason,
+            "quality_gates_applied": False,
+        }
+        self.get_logger().info(
+            "Direct occupancy alignment published without descriptor, "
+            "observation-ratio, RMSE, overlap, conflict, or consensus gates: "
+            "%s <- %s = (x=%.3f y=%.3f yaw=%.2fdeg), pair=r0:k%d/r1:k%d"
+            % (
+                self.target_frame_id,
+                self.source_frame_id,
+                *map0_from_map1[:2],
+                math.degrees(map0_from_map1[2]),
+                pair[0],
+                pair[1],
+            )
+        )
+
     def _match_new_keyframe(
         self, keyframe: OccupancyKeyframe, now_ns: int
     ) -> None:
+        if self.direct_latest_pair:
+            if not self.keyframes[0] or not self.keyframes[1]:
+                return
+            self._process_direct_pair(
+                self.keyframes[0][-1],
+                self.keyframes[1][-1],
+                now_ns,
+            )
+            return
         for candidate in self._descriptor_candidates(keyframe):
             self._process_candidate(candidate, now_ns)
             if (
@@ -1089,7 +1191,8 @@ class InterRobotPlaceAlignment(Node):
                 and self.stop_processing_after_lock
             ):
                 break
-        self._update_consensus(now_ns)
+        if not self.direct_latest_pair:
+            self._update_consensus(now_ns)
         self._publish_status(now_ns)
 
 

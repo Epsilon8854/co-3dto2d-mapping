@@ -175,10 +175,7 @@ def launch_setup(context, *args, **kwargs):
     enable_robot0_pipeline = _bool_value(context, "enable_robot0_pipeline")
     enable_robot1_pipeline = _bool_value(context, "enable_robot1_pipeline")
     enable_fusion = _bool_value(context, "enable_fusion")
-    # The former optional, post-startup stage is now the ONLY inter-robot
-    # registration. Old runners pass false explicitly; do not silently leave
-    # their fusion host without an alignment publisher.
-    legacy_place_recognition = _bool_value(context, "enable_place_recognition")
+    enable_place_recognition = _bool_value(context, "enable_place_recognition")
     if not (enable_robot0_pipeline or enable_robot1_pipeline or enable_fusion):
         raise RuntimeError("at least one robot pipeline or the fusion pipeline must be enabled")
     alignment_startup_delay_sec = float(_value(context, "alignment_startup_delay_sec"))
@@ -196,7 +193,7 @@ def launch_setup(context, *args, **kwargs):
 
     alignment_topic = _value(context, "alignment_topic")
     common_frame_id = _value(context, "common_frame_id")
-    if enable_fusion:
+    if enable_fusion and enable_place_recognition:
         parameters = [os.path.join(package_share, "config", "place_recognition.yaml")]
         alignment_config_file = _value(context, "alignment_config_file").strip()
         if alignment_config_file:
@@ -222,12 +219,6 @@ def launch_setup(context, *args, **kwargs):
             output="screen",
             parameters=parameters,
         ))
-        if not legacy_place_recognition:
-            actions.append(LogInfo(msg=(
-                "enable_place_recognition:=false is deprecated and ignored: "
-                "enable_fusion now uses 2-D occupancy registration exclusively. "
-                "Use enable_fusion:=false for local mapping only."
-            )))
     if enable_fusion and enable_record_republisher:
         actions.insert(1, Node(
             package="co_3dto2d_mapping",
@@ -257,8 +248,9 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_robot1_pipeline", default_value="true"),
         DeclareLaunchArgument("enable_fusion", default_value="true"),
         DeclareLaunchArgument(
-            "enable_place_recognition", default_value="true",
-            description="Deprecated compatibility argument; fusion always uses 2-D map registration.",
+            "enable_place_recognition",
+            default_value="false",
+            description="Run occupancy-map alignment on the fusion host.",
         ),
         DeclareLaunchArgument("robot0_lidar_topic", default_value="/r0/livox/lidar"),
         DeclareLaunchArgument("robot0_imu_topic", default_value="/r0/livox/imu"),

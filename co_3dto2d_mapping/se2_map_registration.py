@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Optional, Tuple
 
@@ -526,4 +526,52 @@ def register_submaps(
         correspondences=int(correspondences),
         accepted=accepted,
         reason=reason,
+    )
+
+
+def register_submaps_direct(
+    target: LocalOccupancyPatch,
+    source: LocalOccupancyPatch,
+    initial_yaw_rad: float,
+    config: RegistrationConfig = RegistrationConfig(),
+) -> Optional[RegistrationResult]:
+    """Register one explicit map pair without applying quality acceptance gates.
+
+    The caller has already selected the pair, so descriptor, observation,
+    overlap, RMSE, free-space-conflict, and consensus checks are not calculated
+    or applied. One boundary cell is still required because an empty point set
+    cannot be registered.
+    """
+
+    direct_config = replace(config, min_correspondences=1).validated()
+    if not target.occupied_boundary_count or not source.occupied_boundary_count:
+        return None
+    try:
+        initial, search_score = _search_transform(
+            target,
+            source,
+            normalize_angle(initial_yaw_rad),
+            direct_config,
+        )
+        transform = _trimmed_icp(
+            target.boundary_points,
+            source.boundary_points,
+            initial,
+            direct_config,
+        )
+    except (ValueError, np.linalg.LinAlgError):
+        return None
+    if not all(np.isfinite(value) for value in transform):
+        return None
+    return RegistrationResult(
+        transform=transform,
+        search_score=float(search_score),
+        symmetric_rmse_m=float("nan"),
+        symmetric_overlap=float("nan"),
+        forward_overlap=float("nan"),
+        reverse_overlap=float("nan"),
+        free_conflict_ratio=float("nan"),
+        correspondences=0,
+        accepted=True,
+        reason="direct_result",
     )

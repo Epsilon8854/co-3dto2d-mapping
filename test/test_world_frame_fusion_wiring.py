@@ -34,17 +34,11 @@ def test_combined_bag_launch_uses_profile_then_explicit_overrides():
     assert '\"processing_period_sec\": float(' in text
 
 
-def test_default_consensus_requires_motion_separated_support_and_locks():
+def test_default_alignment_registers_latest_pair_directly_and_locks():
     profile = yaml.safe_load(
         (PACKAGE / "config" / "place_recognition.yaml").read_text()
     )["/**"]["ros__parameters"]
-    assert profile["stationary_keyframe_period_sec"] >= 3600.0
-    assert profile["keyframe_translation_m"] > 0.0
-    assert profile["keyframe_rotation_rad"] > 0.0
-    assert profile["require_mutual_best_match"] is True
-    assert profile["descriptor_ratio_test"] < 1.0
-    assert profile["consensus_min_measurements"] >= 3
-    assert profile["consensus_min_distinct_keyframes"] >= 2
+    assert profile["direct_latest_pair"] is True
     assert profile["lock_after_consensus"] is True
     assert profile["stop_processing_after_lock"] is True
 
