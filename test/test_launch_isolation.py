@@ -94,6 +94,12 @@ def test_two_live_laptop_runner_starts_only_its_local_mapping_pipeline():
     assert missing == []
 
 
+def test_two_live_laptop_runner_auto_detects_the_repository_livox_workspace():
+    text = (PACKAGE / "scripts" / "run_two_mid360_2d_mapping.sh").read_text()
+
+    assert '"${REPOSITORY_DIR}/third_party/ws_livox"' in text
+
+
 def test_two_live_pointcloud_republisher_is_installed():
     script = PACKAGE / "co_3dto2d_mapping" / "pointcloud_frame_republisher.py"
     cmake = (PACKAGE / "CMakeLists.txt").read_text()

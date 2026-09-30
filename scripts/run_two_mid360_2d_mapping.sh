@@ -48,7 +48,7 @@ ROBOT0_IMU_TOPIC="/r0/livox/imu"
 ROBOT1_LIDAR_TOPIC="/r1/livox/lidar"
 ROBOT1_IMU_TOPIC="/r1/livox/imu"
 PUBLISH_SENSOR_STATIC_TF="true"
-ENABLE_PLACE_RECOGNITION="false"
+ENABLE_PLACE_RECOGNITION="true"
 START_RVIZ=true
 PROCESS_GROUPS=()
 CHILD_PIDS=()
@@ -259,8 +259,8 @@ fi
 
 if [[ -z "${LIVOX_WORKSPACE}" ]]; then
   livox_workspace_candidates=(
+    "${REPOSITORY_DIR}/third_party/ws_livox"
     "${REPOSITORY_DIR}/../ws_livox"
-    "${HOME}/aibot/livox_mid360/ws_livox"
     "${HOME}/ws_livox"
     "${HOME}/livox_ws"
   )

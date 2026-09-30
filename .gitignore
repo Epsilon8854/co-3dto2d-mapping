@@ -20,5 +20,6 @@ __pycache__/
 /recordings/
 /output/
 /results/
+/logs/live_runs/
 *.db3
 *.mcap

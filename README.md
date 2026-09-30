@@ -188,7 +188,7 @@ odom·occupancy를 구독해 정렬, `/toy_record` 재게시, merged occupancy�
 ```bash
 # 물리 로봇 1 노트북: r0 driver + r0 odom/mapping
 cd ~/co_3dto2d_mapping
-bash scripts/run_two_mid360_2d_mapping.sh --robot-number 1
+bash scripts/run_mapping_r0.sh
 
 # 물리 로봇 2 노트북: r1 driver/odom + 두 로봇 fusion + RViz
 cd ~/co_3dto2d_mapping
