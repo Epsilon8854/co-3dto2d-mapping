@@ -279,6 +279,12 @@ if(BUILD_TESTING)
     test/test_workspace_layout.py
     PYTHON_EXECUTABLE /usr/bin/python3
   )
+  ament_add_pytest_test(
+    test_dynamic_filter_config
+    test/test_dynamic_filter_config.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
 endif()
 
 ament_package()

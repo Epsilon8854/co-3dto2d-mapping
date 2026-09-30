@@ -1,12 +1,21 @@
+"""Two independent live mapping pipelines with occupancy-only inter-robot ICP.
+
+LiDAR/IMU remain local inputs to each robot's odometry and mapper. The fusion
+host subscribes to OccupancyGrid and corrected odometry for registration; no
+cross-robot point cloud or accepted alignment is needed to start local mapping.
+"""
+
+import math
 import os
 
 from ament_index_python.packages import get_package_share_directory
-
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+from co_3dto2d_mapping.dynamic_filter_config import merged_dynamic_parameters
 
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
@@ -34,25 +43,18 @@ def _require_absolute_topic(name, topic):
         )
 
 
-def _robot_actions(
-    context,
-    robot_id,
-    live_launch_path,
-    enable_rear_lidar_filter,
-):
+def _robot_actions(context, robot_id, live_launch_path, enable_rear_lidar_filter):
     input_prefix = "robot%d" % robot_id
     robot_namespace = "/r%d" % robot_id
     lidar_input_topic = _value(context, input_prefix + "_lidar_topic")
     imu_input_topic = _value(context, input_prefix + "_imu_topic")
-
     sensor_parent_frame = "r%d/base_link" % robot_id
     sensor_child_frame = "r%d/livox_frame" % robot_id
     global_frame_id = "r%d/odom" % robot_id
     scan_cloud_topic = robot_namespace + "/mapping/lidar"
     lidar_relay_topic = (
         robot_namespace + "/mapping/lidar_unfiltered"
-        if enable_rear_lidar_filter
-        else scan_cloud_topic
+        if enable_rear_lidar_filter else scan_cloud_topic
     )
     imu_filtered_topic = robot_namespace + "/mapping/imu_filtered"
     imu_filter_raw_frame_topic = imu_filtered_topic + "_raw_frame"
@@ -60,14 +62,12 @@ def _robot_actions(
     if lidar_input_topic in {lidar_relay_topic, scan_cloud_topic}:
         raise RuntimeError(
             "%s_lidar_topic=%r collides with an internal mapping topic and would "
-            "create a republish loop"
-            % (input_prefix, lidar_input_topic)
+            "create a republish loop" % (input_prefix, lidar_input_topic)
         )
     if imu_input_topic in {imu_filtered_topic, imu_filter_raw_frame_topic}:
         raise RuntimeError(
             "%s_imu_topic=%r collides with an internal mapping topic and would "
-            "create an IMU filter loop"
-            % (input_prefix, imu_input_topic)
+            "create an IMU filter loop" % (input_prefix, imu_input_topic)
         )
 
     lidar_frame_republisher = Node(
@@ -75,24 +75,19 @@ def _robot_actions(
         executable="pointcloud_frame_republisher.py",
         name="pointcloud_frame_republisher_r%d" % robot_id,
         output="screen",
-        parameters=[
-            {
-                "input_topic": lidar_input_topic,
-                "output_topic": lidar_relay_topic,
-                "output_frame_id": sensor_child_frame,
-            }
-        ],
+        parameters=[{
+            "input_topic": lidar_input_topic,
+            "output_topic": lidar_relay_topic,
+            "output_frame_id": sensor_child_frame,
+        }],
     )
-
     live_pipeline = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(live_launch_path),
         launch_arguments={
             "robot_id": str(robot_id),
             "use_sim_time": "false",
             "publish_tf_odom": "false",
-            "publish_sensor_static_tf": _value(
-                context, "publish_sensor_static_tf"
-            ),
+            "publish_sensor_static_tf": _value(context, "publish_sensor_static_tf"),
             "sensor_parent_frame": sensor_parent_frame,
             "sensor_child_frame": sensor_child_frame,
             "local_frame_id": sensor_parent_frame,
@@ -106,32 +101,20 @@ def _robot_actions(
             "sensor_tf_roll": _value(context, "sensor_tf_roll_%d" % robot_id),
             "expected_update_rate": _value(context, "expected_update_rate"),
             "wait_imu_to_init": _value(context, "wait_imu_to_init"),
-            "mapping_startup_delay_sec": _value(
-                context, "mapping_startup_delay_sec"
-            ),
-            "enable_rear_lidar_filter": _value(
-                context, "enable_rear_lidar_filter"
-            ),
+            "mapping_startup_delay_sec": _value(context, "mapping_startup_delay_sec"),
+            "enable_rear_lidar_filter": _value(context, "enable_rear_lidar_filter"),
             "rear_filter_angle_deg": _value(context, "rear_filter_angle_deg"),
             "rear_filter_axis": _value(context, "rear_filter_axis"),
-            "rear_filter_min_xy_range_m": _value(
-                context, "rear_filter_min_xy_range_m"
-            ),
+            "rear_filter_min_xy_range_m": _value(context, "rear_filter_min_xy_range_m"),
             "rear_filter_log_period": _value(context, "rear_filter_log_period"),
             "bag_lidar_topic": lidar_relay_topic,
             "scan_cloud_topic": scan_cloud_topic,
             "imu_raw_topic": imu_input_topic,
             "imu_filtered_topic": imu_filtered_topic,
-            "imu_input_is_filtered": _value(
-                context, input_prefix + "_imu_input_is_filtered"
-            ),
+            "imu_input_is_filtered": _value(context, input_prefix + "_imu_input_is_filtered"),
             "alignment_topic": _value(context, "alignment_topic"),
-            "transform_cloud_to_local_frame": _value(
-                context, "transform_cloud_to_local_frame"
-            ),
-            "center_box_filter_half_extent_m": _value(
-                context, "center_box_filter_half_extent_m"
-            ),
+            "transform_cloud_to_local_frame": _value(context, "transform_cloud_to_local_frame"),
+            "center_box_filter_half_extent_m": _value(context, "center_box_filter_half_extent_m"),
             "slice_z_in_cloud_frame": _value(context, "slice_z_in_cloud_frame"),
             "occupancy_config_file": _value(context, "occupancy_config_file"),
         }.items(),
@@ -143,36 +126,25 @@ def launch_setup(context, *args, **kwargs):
     del args, kwargs
     package_share = get_package_share_directory("co_3dto2d_mapping")
     live_launch_path = os.path.join(package_share, "launch", "live_mapping.launch.py")
-
-    robot0_lidar_topic = _value(context, "robot0_lidar_topic")
-    robot1_lidar_topic = _value(context, "robot1_lidar_topic")
-    robot0_imu_topic = _value(context, "robot0_imu_topic")
-    robot1_imu_topic = _value(context, "robot1_imu_topic")
-    for name, topic in (
-        ("robot0_lidar_topic", robot0_lidar_topic),
-        ("robot1_lidar_topic", robot1_lidar_topic),
-        ("robot0_imu_topic", robot0_imu_topic),
-        ("robot1_imu_topic", robot1_imu_topic),
-    ):
+    source_topics = {
+        name: _value(context, name)
+        for name in (
+            "robot0_lidar_topic", "robot1_lidar_topic",
+            "robot0_imu_topic", "robot1_imu_topic",
+        )
+    }
+    for name, topic in source_topics.items():
         _require_absolute_topic(name, topic)
-
-    if robot0_lidar_topic == robot1_lidar_topic:
+    if source_topics["robot0_lidar_topic"] == source_topics["robot1_lidar_topic"]:
         raise RuntimeError(
             "robot0_lidar_topic and robot1_lidar_topic must be different; "
             "two live LiDAR streams cannot share one topic"
         )
-    if robot0_imu_topic == robot1_imu_topic:
+    if source_topics["robot0_imu_topic"] == source_topics["robot1_imu_topic"]:
         raise RuntimeError(
             "robot0_imu_topic and robot1_imu_topic must be different; "
             "two live IMU streams cannot share one topic"
         )
-
-    source_topics = {
-        "robot0_lidar_topic": robot0_lidar_topic,
-        "robot1_lidar_topic": robot1_lidar_topic,
-        "robot0_imu_topic": robot0_imu_topic,
-        "robot1_imu_topic": robot1_imu_topic,
-    }
     topic_owners = {}
     for name, topic in source_topics.items():
         topic_owners.setdefault(topic, []).append(name)
@@ -185,345 +157,176 @@ def launch_setup(context, *args, **kwargs):
             for topic, names in sorted(cross_type_duplicates.items())
         )
         raise RuntimeError("all live sensor input topics must be unique: " + details)
-
     reserved_internal_topics = {
-        "/r0/mapping/lidar",
-        "/r0/mapping/lidar_unfiltered",
-        "/r0/mapping/imu_filtered",
-        "/r0/mapping/imu_filtered_raw_frame",
-        "/r1/mapping/lidar",
-        "/r1/mapping/lidar_unfiltered",
-        "/r1/mapping/imu_filtered",
-        "/r1/mapping/imu_filtered_raw_frame",
+        "/r%d/mapping/%s" % (rid, suffix)
+        for rid in (0, 1)
+        for suffix in ("lidar", "lidar_unfiltered", "imu_filtered", "imu_filtered_raw_frame")
     }
     internal_collisions = {
-        name: topic
-        for name, topic in source_topics.items()
+        name: topic for name, topic in source_topics.items()
         if topic in reserved_internal_topics
     }
     if internal_collisions:
-        details = ", ".join(
-            "%s=%s" % item for item in sorted(internal_collisions.items())
-        )
-        raise RuntimeError(
-            "live sensor inputs cannot use internal mapping topics: " + details
-        )
+        details = ", ".join("%s=%s" % item for item in sorted(internal_collisions.items()))
+        raise RuntimeError("live sensor inputs cannot use internal mapping topics: " + details)
 
     enable_rear_lidar_filter = _bool_value(context, "enable_rear_lidar_filter")
     enable_record_republisher = _bool_value(context, "enable_record_republisher")
     enable_robot0_pipeline = _bool_value(context, "enable_robot0_pipeline")
     enable_robot1_pipeline = _bool_value(context, "enable_robot1_pipeline")
     enable_fusion = _bool_value(context, "enable_fusion")
-    enable_place_recognition = _bool_value(context, "enable_place_recognition")
+    # The former optional, post-startup stage is now the ONLY inter-robot
+    # registration. Old runners pass false explicitly; do not silently leave
+    # their fusion host without an alignment publisher.
+    legacy_place_recognition = _bool_value(context, "enable_place_recognition")
     if not (enable_robot0_pipeline or enable_robot1_pipeline or enable_fusion):
-        raise RuntimeError(
-            "at least one robot pipeline or the fusion pipeline must be enabled"
-        )
+        raise RuntimeError("at least one robot pipeline or the fusion pipeline must be enabled")
+    alignment_startup_delay_sec = float(_value(context, "alignment_startup_delay_sec"))
+    if not math.isfinite(alignment_startup_delay_sec) or alignment_startup_delay_sec < 0.0:
+        raise RuntimeError("alignment_startup_delay_sec must be finite and non-negative")
 
-    alignment_startup_delay_sec = float(
-        _value(context, "alignment_startup_delay_sec")
-    )
-    if alignment_startup_delay_sec < 0.0:
-        raise RuntimeError("alignment_startup_delay_sec must be non-negative")
-
-    robot0_scan_topic = "/r0/mapping/lidar"
-    robot1_scan_topic = "/r1/mapping/lidar"
     actions = []
-    if enable_robot0_pipeline:
-        robot0_republisher, robot0_pipeline, robot0_scan_topic = _robot_actions(
-            context,
-            0,
-            live_launch_path,
-            enable_rear_lidar_filter,
-        )
-        actions.extend([robot0_pipeline, robot0_republisher])
-    if enable_robot1_pipeline:
-        robot1_republisher, robot1_pipeline, robot1_scan_topic = _robot_actions(
-            context,
-            1,
-            live_launch_path,
-            enable_rear_lidar_filter,
-        )
-        actions.extend([robot1_pipeline, robot1_republisher])
+    for robot_id, enabled in ((0, enable_robot0_pipeline), (1, enable_robot1_pipeline)):
+        if enabled:
+            republisher, pipeline, _ = _robot_actions(
+                context, robot_id, live_launch_path, enable_rear_lidar_filter
+            )
+            # No startup alignment gate: these actions depend on local inputs only.
+            actions.extend([pipeline, republisher])
 
     alignment_topic = _value(context, "alignment_topic")
     common_frame_id = _value(context, "common_frame_id")
-    alignment_node = Node(
-        package="co_3dto2d_mapping",
-        executable="initial_xy_icp_alignment.py",
-        name="initial_xy_icp_alignment",
-        output="screen",
-        parameters=[
-            {
-                # Use exactly the PointCloud2 topics consumed by RTAB-Map.  The
-                # alignment node keeps XYZ after the same z/range/body crop.
-                "robot0_cloud_topic": robot0_scan_topic,
-                "robot1_cloud_topic": robot1_scan_topic,
-                "robot0_map_topic": "/r0/toy/global_occupancy",
-                "robot1_map_topic": "/r1/toy/global_occupancy",
-                "input_mode": "cloud_initial",
-                "alignment_topic": alignment_topic,
-                "target_frame_id": common_frame_id,
-                "source_frame_id": "r1/odom",
-                "local_frame_id": "base_link",
-                "robot0_local_frame_id": "r0/base_link",
-                "robot1_local_frame_id": "r1/base_link",
-                "transform_cloud_to_local_frame": _bool_value(
-                    context, "transform_cloud_to_local_frame"
-                ),
-                "use_z_filter": _bool_value(
-                    context, "alignment_use_z_filter"
-                ),
-                "slice_z_in_cloud_frame": _bool_value(
-                    context, "slice_z_in_cloud_frame"
-                ),
-                "z_min": float(_value(context, "alignment_z_min")),
-                "z_max": float(_value(context, "alignment_z_max")),
-                "invert_z_slice": _bool_value(
-                    context, "alignment_invert_z_slice"
-                ),
-                "frame_count": int(_value(context, "alignment_frame_count")),
-                "invert_result": _bool_value(context, "alignment_invert_result"),
-                "center_box_half_extent_m": float(
-                    _value(context, "alignment_center_box_half_extent_m")
-                ),
-                "range_min_m": float(
-                    _value(context, "alignment_range_min_m")
-                ),
-                "range_max_m": float(
-                    _value(context, "alignment_range_max_m")
-                ),
-                "voxel_size": float(_value(context, "alignment_voxel_size")),
-                "max_points": int(_value(context, "alignment_max_points")),
-                "max_correspondence_distance": float(
-                    _value(context, "alignment_max_correspondence_distance")
-                ),
-                "min_correspondences": int(
-                    _value(context, "alignment_min_correspondences")
-                ),
-                "min_fitness": float(_value(context, "alignment_min_fitness")),
-                "max_rmse": float(_value(context, "alignment_max_rmse")),
-                "max_iterations": int(
-                    _value(context, "alignment_max_iterations")
-                ),
-                "recompute_period_sec": float(
-                    _value(context, "alignment_recompute_period_sec")
-                ),
-                "occupied_threshold": int(
-                    _value(context, "alignment_occupied_threshold")
-                ),
-                "startup_delay_sec": alignment_startup_delay_sec,
-                "retry_on_failure": True,
-                "lock_after_first_alignment": _bool_value(
-                    context, "alignment_lock_after_first"
-                ),
-                "required_consistent_results": int(
-                    _value(context, "alignment_required_consistent_results")
-                ),
-                "max_consistency_translation_m": float(
-                    _value(context, "alignment_max_consistency_translation_m")
-                ),
-                "max_consistency_rotation_rad": float(
-                    _value(context, "alignment_max_consistency_rotation_rad")
-                ),
-                "initialize_from_centroids": _bool_value(
-                    context, "alignment_initialize_from_centroids"
-                ),
-                "enforce_tilt_prior": _bool_value(
-                    context, "alignment_enforce_tilt_prior"
-                ),
-                "max_tilt_deviation_rad": float(
-                    _value(context, "alignment_max_tilt_deviation_rad")
-                ),
-                "use_sim_time": False,
-            }
-        ],
-    )
-
-    if enable_fusion and enable_place_recognition:
-        actions.insert(0, alignment_node)
+    if enable_fusion:
+        parameters = [os.path.join(package_share, "config", "place_recognition.yaml")]
+        alignment_config_file = _value(context, "alignment_config_file").strip()
+        if alignment_config_file:
+            parameters.append(alignment_config_file)
+        parameters.append({
+            "robot0_map_topic": "/r0/toy/global_occupancy",
+            "robot1_map_topic": "/r1/toy/global_occupancy",
+            "robot0_odom_topic": "/r0/toy/corrected_odometry",
+            "robot1_odom_topic": "/r1/toy/corrected_odometry",
+            "alignment_topic": alignment_topic,
+            "target_frame_id": common_frame_id,
+            "source_frame_id": "r1/odom",
+            "startup_delay_sec": alignment_startup_delay_sec,
+            "occupied_threshold": int(_value(context, "alignment_occupied_threshold")),
+            "lock_after_consensus": _bool_value(context, "alignment_lock_after_first"),
+            "stop_processing_after_lock": _bool_value(context, "alignment_lock_after_first"),
+            "use_sim_time": False,
+        })
+        actions.insert(0, Node(
+            package="co_3dto2d_mapping",
+            executable="inter_robot_place_alignment.py",
+            name="inter_robot_place_alignment",
+            output="screen",
+            parameters=parameters,
+        ))
+        if not legacy_place_recognition:
+            actions.append(LogInfo(msg=(
+                "enable_place_recognition:=false is deprecated and ignored: "
+                "enable_fusion now uses 2-D occupancy registration exclusively. "
+                "Use enable_fusion:=false for local mapping only."
+            )))
     if enable_fusion and enable_record_republisher:
-        actions.insert(
-            1,
-            Node(
-                package="co_3dto2d_mapping",
-                executable="record_republisher.py",
-                name="toy_record_republisher",
-                output="screen",
-                parameters=[
-                    {
-                        "target_frame_id": "odom",
-                        "common_frame_id": common_frame_id,
-                        "alignment_topic": alignment_topic,
-                        "publish_period_ms": int(
-                            _value(context, "record_publish_period_ms")
-                        ),
-                        "output_prefix": _value(context, "record_output_prefix"),
-                        "robot_ids": [0, 1],
-                        "publish_tf": True,
-                        "publish_merged_global": _bool_value(
-                            context, "record_publish_merged_global"
-                        ),
-                        "use_sim_time": False,
-                    }
-                ],
-            ),
-        )
+        actions.insert(1, Node(
+            package="co_3dto2d_mapping",
+            executable="record_republisher.py",
+            name="toy_record_republisher",
+            output="screen",
+            parameters=[{
+                **merged_dynamic_parameters(_value(context, "occupancy_config_file")),
+                "target_frame_id": "odom",
+                "common_frame_id": common_frame_id,
+                "alignment_topic": alignment_topic,
+                "publish_period_ms": int(_value(context, "record_publish_period_ms")),
+                "output_prefix": _value(context, "record_output_prefix"),
+                "robot_ids": [0, 1],
+                "publish_tf": True,
+                "publish_merged_global": _bool_value(context, "record_publish_merged_global"),
+                "use_sim_time": False,
+            }],
+        ))
     return actions
 
 
 def generate_launch_description():
     package_share = get_package_share_directory("co_3dto2d_mapping")
-    return LaunchDescription(
-        [
-            DeclareLaunchArgument("enable_robot0_pipeline", default_value="true"),
-            DeclareLaunchArgument("enable_robot1_pipeline", default_value="true"),
-            DeclareLaunchArgument("enable_fusion", default_value="true"),
-            DeclareLaunchArgument(
-                "enable_place_recognition",
-                default_value="false",
-                description=(
-                    "Run occupancy place recognition after startup ICP. Keep this "
-                    "off when both robots begin at the same place."
-                ),
-            ),
-            DeclareLaunchArgument(
-                "robot0_lidar_topic",
-                default_value="/r0/livox/lidar",
-                description="Absolute live PointCloud2 topic for robot 0",
-            ),
-            DeclareLaunchArgument(
-                "robot0_imu_topic",
-                default_value="/r0/livox/imu",
-                description="Absolute live Imu topic for robot 0",
-            ),
-            DeclareLaunchArgument(
-                "robot1_lidar_topic",
-                default_value="/r1/livox/lidar",
-                description="Absolute live PointCloud2 topic for robot 1",
-            ),
-            DeclareLaunchArgument(
-                "robot1_imu_topic",
-                default_value="/r1/livox/imu",
-                description="Absolute live Imu topic for robot 1",
-            ),
-            DeclareLaunchArgument(
-                "robot0_imu_input_is_filtered", default_value="false"
-            ),
-            DeclareLaunchArgument(
-                "robot1_imu_input_is_filtered", default_value="false"
-            ),
-            DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
-            DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
-            DeclareLaunchArgument(
-                "mapping_startup_delay_sec",
-                default_value="10.0",
-                description=(
-                    "Warm-up time before starting ICP odometry and occupancy mapping. "
-                    "The LiDAR driver and IMU filter run during this delay."
-                ),
-            ),
-            DeclareLaunchArgument("publish_sensor_static_tf", default_value="true"),
-            DeclareLaunchArgument("enable_rear_lidar_filter", default_value="false"),
-            DeclareLaunchArgument("rear_filter_angle_deg", default_value="120.0"),
-            DeclareLaunchArgument("rear_filter_axis", default_value="-x"),
-            DeclareLaunchArgument("rear_filter_min_xy_range_m", default_value="0.0"),
-            DeclareLaunchArgument("rear_filter_log_period", default_value="100"),
-            DeclareLaunchArgument("transform_cloud_to_local_frame", default_value="true"),
-            DeclareLaunchArgument("center_box_filter_half_extent_m", default_value="0.80"),
-            DeclareLaunchArgument("slice_z_in_cloud_frame", default_value="true"),
-            DeclareLaunchArgument("sensor_tf_x_0", default_value="0"),
-            DeclareLaunchArgument("sensor_tf_y_0", default_value="0"),
-            DeclareLaunchArgument("sensor_tf_z_0", default_value="0"),
-            DeclareLaunchArgument("sensor_tf_yaw_0", default_value="0"),
-            DeclareLaunchArgument("sensor_tf_pitch_0", default_value="0"),
-            DeclareLaunchArgument(
-                "sensor_tf_roll_0", default_value="3.141592653589793"
-            ),
-            DeclareLaunchArgument("sensor_tf_x_1", default_value="0"),
-            DeclareLaunchArgument("sensor_tf_y_1", default_value="0"),
-            DeclareLaunchArgument("sensor_tf_z_1", default_value="0"),
-            DeclareLaunchArgument("sensor_tf_yaw_1", default_value="0"),
-            DeclareLaunchArgument("sensor_tf_pitch_1", default_value="0"),
-            DeclareLaunchArgument(
-                "sensor_tf_roll_1", default_value="3.141592653589793"
-            ),
-            DeclareLaunchArgument("common_frame_id", default_value="map"),
-            DeclareLaunchArgument(
-                "alignment_topic", default_value="/toy/initial_xy_alignment"
-            ),
-            DeclareLaunchArgument("alignment_config_file", default_value=""),
-            DeclareLaunchArgument(
-                "alignment_startup_delay_sec",
-                default_value="3.0",
-                description=(
-                    "Per-robot settle time after each RTAB-Map cloud input appears "
-                    "before that robot's cropped-cloud samples are collected."
-                ),
-            ),
-            DeclareLaunchArgument("alignment_use_z_filter", default_value="true"),
-            DeclareLaunchArgument("alignment_z_min", default_value="0.4"),
-            DeclareLaunchArgument("alignment_z_max", default_value="0.8"),
-            DeclareLaunchArgument(
-                "alignment_invert_z_slice", default_value="true"
-            ),
-            DeclareLaunchArgument("alignment_frame_count", default_value="5"),
-            DeclareLaunchArgument("alignment_invert_result", default_value="false"),
-            DeclareLaunchArgument(
-                "alignment_center_box_half_extent_m", default_value="0.80"
-            ),
-            DeclareLaunchArgument("alignment_range_min_m", default_value="0.80"),
-            DeclareLaunchArgument("alignment_range_max_m", default_value="12.0"),
-            DeclareLaunchArgument("alignment_voxel_size", default_value="0.10"),
-            DeclareLaunchArgument("alignment_max_points", default_value="15000"),
-            DeclareLaunchArgument(
-                "alignment_max_correspondence_distance", default_value="0.75"
-            ),
-            DeclareLaunchArgument(
-                "alignment_min_correspondences", default_value="100"
-            ),
-            DeclareLaunchArgument("alignment_min_fitness", default_value="0.05"),
-            DeclareLaunchArgument("alignment_max_rmse", default_value="0.40"),
-            DeclareLaunchArgument("alignment_max_iterations", default_value="40"),
-            DeclareLaunchArgument(
-                "alignment_recompute_period_sec", default_value="5.0"
-            ),
-            DeclareLaunchArgument(
-                "alignment_occupied_threshold", default_value="50"
-            ),
-            DeclareLaunchArgument(
-                "alignment_lock_after_first", default_value="true"
-            ),
-            DeclareLaunchArgument(
-                "alignment_required_consistent_results", default_value="2"
-            ),
-            DeclareLaunchArgument(
-                "alignment_max_consistency_translation_m", default_value="0.25"
-            ),
-            DeclareLaunchArgument(
-                "alignment_max_consistency_rotation_rad",
-                default_value="0.08726646259971647",
-            ),
-            DeclareLaunchArgument(
-                "alignment_initialize_from_centroids", default_value="true"
-            ),
-            DeclareLaunchArgument(
-                "alignment_enforce_tilt_prior", default_value="true"
-            ),
-            DeclareLaunchArgument(
-                "alignment_max_tilt_deviation_rad",
-                default_value="0.2617993877991494",
-            ),
-            DeclareLaunchArgument("enable_record_republisher", default_value="true"),
-            DeclareLaunchArgument("record_publish_period_ms", default_value="200"),
-            DeclareLaunchArgument("record_output_prefix", default_value="/toy_record"),
-            DeclareLaunchArgument(
-                "record_publish_merged_global", default_value="true"
-            ),
-            DeclareLaunchArgument(
-                "occupancy_config_file",
-                default_value=os.path.join(package_share, "config", "occupancy.yaml"),
-            ),
-            OpaqueFunction(function=launch_setup),
-        ]
-    )
+    return LaunchDescription([
+        DeclareLaunchArgument("enable_robot0_pipeline", default_value="true"),
+        DeclareLaunchArgument("enable_robot1_pipeline", default_value="true"),
+        DeclareLaunchArgument("enable_fusion", default_value="true"),
+        DeclareLaunchArgument(
+            "enable_place_recognition", default_value="true",
+            description="Deprecated compatibility argument; fusion always uses 2-D map registration.",
+        ),
+        DeclareLaunchArgument("robot0_lidar_topic", default_value="/r0/livox/lidar"),
+        DeclareLaunchArgument("robot0_imu_topic", default_value="/r0/livox/imu"),
+        DeclareLaunchArgument("robot1_lidar_topic", default_value="/r1/livox/lidar"),
+        DeclareLaunchArgument("robot1_imu_topic", default_value="/r1/livox/imu"),
+        DeclareLaunchArgument("robot0_imu_input_is_filtered", default_value="false"),
+        DeclareLaunchArgument("robot1_imu_input_is_filtered", default_value="false"),
+        DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+        DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
+        DeclareLaunchArgument(
+            "mapping_startup_delay_sec", default_value="10.0",
+            description="Local sensor warm-up only; never waits for the other robot or alignment.",
+        ),
+        DeclareLaunchArgument("publish_sensor_static_tf", default_value="true"),
+        DeclareLaunchArgument("enable_rear_lidar_filter", default_value="false"),
+        DeclareLaunchArgument("rear_filter_angle_deg", default_value="120.0"),
+        DeclareLaunchArgument("rear_filter_axis", default_value="-x"),
+        DeclareLaunchArgument("rear_filter_min_xy_range_m", default_value="0.0"),
+        DeclareLaunchArgument("rear_filter_log_period", default_value="100"),
+        DeclareLaunchArgument("transform_cloud_to_local_frame", default_value="true"),
+        DeclareLaunchArgument("center_box_filter_half_extent_m", default_value="0.80"),
+        DeclareLaunchArgument("slice_z_in_cloud_frame", default_value="true"),
+        *[
+            DeclareLaunchArgument("sensor_tf_%s_%d" % (axis, rid), default_value=default)
+            for rid in (0, 1)
+            for axis, default in (
+                ("x", "0"), ("y", "0"), ("z", "0"), ("yaw", "0"),
+                ("pitch", "0"), ("roll", "3.141592653589793"),
+            )
+        ],
+        DeclareLaunchArgument("common_frame_id", default_value="map"),
+        DeclareLaunchArgument("alignment_topic", default_value="/toy/initial_xy_alignment"),
+        DeclareLaunchArgument("alignment_config_file", default_value=""),
+        DeclareLaunchArgument(
+            "alignment_startup_delay_sec", default_value="3.0",
+            description="Settle time inside the 2-D aligner after maps and odometry arrive; not a mapping gate.",
+        ),
+        DeclareLaunchArgument("alignment_occupied_threshold", default_value="50"),
+        DeclareLaunchArgument("alignment_lock_after_first", default_value="true"),
+        # Retain the old cloud-ICP CLI names so existing runners still launch.
+        # They are deliberately NOT forwarded to the occupancy-only aligner.
+        # Configure registration/consensus thresholds via alignment_config_file.
+        *[
+            DeclareLaunchArgument(name, default_value=default, description="Legacy cloud-ICP option; unused in live map-only registration.")
+            for name, default in (
+                ("alignment_use_z_filter", "true"),
+                ("alignment_z_min", "0.4"), ("alignment_z_max", "0.8"),
+                ("alignment_invert_z_slice", "true"),
+                ("alignment_frame_count", "5"), ("alignment_invert_result", "false"),
+                ("alignment_center_box_half_extent_m", "0.80"),
+                ("alignment_range_min_m", "0.80"), ("alignment_range_max_m", "12.0"),
+                ("alignment_voxel_size", "0.10"), ("alignment_max_points", "15000"),
+                ("alignment_max_correspondence_distance", "0.75"),
+                ("alignment_min_correspondences", "100"),
+                ("alignment_min_fitness", "0.05"), ("alignment_max_rmse", "0.40"),
+                ("alignment_max_iterations", "40"), ("alignment_recompute_period_sec", "5.0"),
+                ("alignment_required_consistent_results", "2"),
+                ("alignment_max_consistency_translation_m", "0.25"),
+                ("alignment_max_consistency_rotation_rad", "0.08726646259971647"),
+                ("alignment_initialize_from_centroids", "true"),
+                ("alignment_enforce_tilt_prior", "true"),
+                ("alignment_max_tilt_deviation_rad", "0.2617993877991494"),
+            )
+        ],
+        DeclareLaunchArgument("enable_record_republisher", default_value="true"),
+        DeclareLaunchArgument("record_publish_period_ms", default_value="200"),
+        DeclareLaunchArgument("record_output_prefix", default_value="/toy_record"),
+        DeclareLaunchArgument("record_publish_merged_global", default_value="true"),
+        DeclareLaunchArgument("occupancy_config_file", default_value=os.path.join(package_share, "config", "occupancy.yaml")),
+        OpaqueFunction(function=launch_setup),
+    ])

@@ -60,6 +60,10 @@ def expand_free_observations(
     values_array = np.asarray(values, dtype=np.int16).reshape(-1)
     if not (cols_array.size == rows_array.size == values_array.size):
         raise ValueError("cols, rows, and values must have the same length")
+    known = values_array >= 0
+    cols_array, rows_array, values_array = (
+        cols_array[known], rows_array[known], values_array[known]
+    )
     radius_cells = max(0, int(radius_cells))
     if radius_cells == 0 or cols_array.size == 0:
         return cols_array, rows_array, values_array.astype(np.int8)
@@ -137,6 +141,10 @@ class TemporalFusionGrid:
             cols_array.size == rows_array.size == values_array.size
         ):
             raise ValueError("cols, rows, and values must have the same length")
+        known = values_array >= 0
+        cols_array, rows_array, values_array = (
+            cols_array[known], rows_array[known], values_array[known]
+        )
         if cols_array.size == 0:
             return cols_array, rows_array, np.empty(0, dtype=np.int8)
 
@@ -221,8 +229,10 @@ class TemporalFusionGrid:
     ) -> None:
         """Bootstrap from persistent global maps without adding evidence.
 
-        Occupied wins a bootstrap conflict.  Each robot is expected to be
-        seeded at most once; subsequent changes must arrive through ``observe``.
+        Occupied wins between bootstrap maps, but never over a cell with
+        live observation evidence. A late second robot must not resurrect
+        obstacles that the first robot has already cleared. Each robot is
+        seeded at most once; subsequent changes arrive through ``observe``.
         """
 
         cols_array, rows_array, values_array = self._normalize_observations(
@@ -234,8 +244,9 @@ class TemporalFusionGrid:
         local_cols = cols_array - self.origin_col
         local_rows = rows_array - self.origin_row
         current = self.data[local_rows, local_cols]
-        occupied = values_array == OCCUPIED
-        free_into_unknown = (values_array == FREE) & (current == UNKNOWN)
+        bootstrap_only = self.last_observed[local_rows, local_cols] == 0
+        occupied = (values_array == OCCUPIED) & bootstrap_only
+        free_into_unknown = (values_array == FREE) & (current == UNKNOWN) & bootstrap_only
         self.data[local_rows[occupied], local_cols[occupied]] = OCCUPIED
         self.data[
             local_rows[free_into_unknown], local_cols[free_into_unknown]

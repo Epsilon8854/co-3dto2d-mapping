@@ -1,179 +1,257 @@
+"""Execute the real launch setup with lightweight ROS launch stand-ins.
+
+These tests validate action wiring, not DDS transport or LiDAR hardware. No ROS
+installation is needed, so a remote-cloud startup dependency cannot hide behind
+a skipped integration test.
+"""
+
+import importlib.util
 from pathlib import Path
+import sys
+import types
+
+import pytest
 
 
 PACKAGE = Path(__file__).resolve().parents[1]
 LAUNCH_DIR = PACKAGE / "launch"
 
 
-def test_two_live_mode_has_a_sensor_warmup_before_mapping():
-    two_live = (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
-    assert '"mapping_startup_delay_sec"' in two_live
-    assert 'default_value="10.0"' in two_live
+class LaunchDescription:
+    def __init__(self, entities):
+        self.entities = list(entities)
 
-    forwarding = {
-        "live_mapping.launch.py": '"mapping_startup_delay_sec": LaunchConfiguration(',
-        "single_bag_mapping.launch.py": '"mapping_startup_delay_sec": str(mapping_startup_delay_sec)',
-        "mid360_mapping_pipeline.launch.py": '"startup_delay_sec": LaunchConfiguration("mapping_startup_delay_sec")',
+
+class DeclareLaunchArgument:
+    def __init__(self, name, default_value=None, **kwargs):
+        self.name = name
+        self.default_value = default_value
+
+
+class LaunchConfiguration:
+    def __init__(self, name):
+        self.name = name
+
+    def perform(self, context):
+        return context[self.name]
+
+
+class OpaqueFunction:
+    def __init__(self, function):
+        self.function = function
+
+
+class LogInfo:
+    def __init__(self, msg):
+        self.msg = msg
+
+
+class IncludeLaunchDescription:
+    def __init__(self, source, launch_arguments):
+        self.source = source
+        self.launch_arguments = dict(launch_arguments)
+
+
+class PythonLaunchDescriptionSource:
+    def __init__(self, path):
+        self.path = path
+
+
+class Node:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+@pytest.fixture
+def load_launch(monkeypatch, tmp_path):
+    installed = tmp_path / "share" / "co_3dto2d_mapping"
+    (installed / "launch").mkdir(parents=True)
+    (installed / "launch" / "two_live_mapping_base.launch.py").write_text(
+        (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
+    )
+    (installed / "config").mkdir()
+    (installed / "config" / "occupancy.yaml").write_text(
+        (PACKAGE / "config" / "occupancy.yaml").read_text()
+    )
+    modules = {
+        "ament_index_python": {},
+        "ament_index_python.packages": {
+            "get_package_share_directory": lambda _: str(installed),
+        },
+        "launch": {"LaunchDescription": LaunchDescription},
+        "launch.actions": {
+            "DeclareLaunchArgument": DeclareLaunchArgument,
+            "IncludeLaunchDescription": IncludeLaunchDescription,
+            "LogInfo": LogInfo,
+            "OpaqueFunction": OpaqueFunction,
+        },
+        "launch.launch_description_sources": {
+            "PythonLaunchDescriptionSource": PythonLaunchDescriptionSource,
+        },
+        "launch.substitutions": {"LaunchConfiguration": LaunchConfiguration},
+        "launch_ros": {},
+        "launch_ros.actions": {"Node": Node},
     }
-    for filename, fragment in forwarding.items():
-        assert fragment in (LAUNCH_DIR / filename).read_text()
+    for name, attributes in modules.items():
+        module = types.ModuleType(name)
+        module.__dict__.update(attributes)
+        monkeypatch.setitem(sys.modules, name, module)
 
-    odometry = (LAUNCH_DIR / "rtabmap_mid360_odometry.launch.py").read_text()
-    assert "TimerAction(period=startup_delay_sec" in odometry
+    def load(public=True, **overrides):
+        filename = ("two_live_plane_height_mapping.launch.py" if public
+                    else "two_live_mapping.launch.py")
+        spec = importlib.util.spec_from_file_location("launch_under_test", LAUNCH_DIR / filename)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        description = module.generate_launch_description()
+        context = {
+            action.name: action.default_value
+            for action in description.entities
+            if isinstance(action, DeclareLaunchArgument)
+        }
+        context.update(overrides)
+        actions = []
+        for action in description.entities:
+            if isinstance(action, OpaqueFunction):
+                actions.extend(action.function(context) or [])
+        return actions, context
+
+    return load
 
 
-def test_public_two_live_waits_for_actual_startup_icp_before_odom_mapping():
-    public_wrapper = (
-        LAUNCH_DIR / "two_live_plane_height_mapping.launch.py"
-    ).read_text()
+def nodes(actions, executable):
+    return [action for action in actions
+            if isinstance(action, Node) and action.kwargs["executable"] == executable]
 
-    required_fragments = (
-        '"wait_for_initial_alignment"',
-        'default_value="true"',
-        '"startup_alignment_topic"',
-        'default_value="/toy/startup_xy_alignment"',
-        '"startup_alignment_timeout_sec"',
-        'default_value="0.0"',
-        '"startup_alignment_required_consistent_results"',
-        'default_value="1"',
-        'name == "mapping_startup_delay_sec"',
-        'return "0.0"',
-        'name="startup_initial_xy_icp_alignment"',
-        '"robot0_cloud_topic": _prealignment_cloud_topic(context, 0)',
-        '"robot1_cloud_topic": _prealignment_cloud_topic(context, 1)',
-        'parameters=[occupancy_config_file, overrides]',
-        '"use_z_filter": False',
-        '"invert_z_slice": False',
-        'occupancy, "center_box_filter_half_extent_m", 0.80',
-        'occupancy, "range_min_m", 0.80',
-        'occupancy, "range_max_m", 12.0',
-        '"required_consistent_results": _ACTIVE_STARTUP_REQUIRED_RESULTS',
-        '"co_3dto2d_mapping.alignment_startup_gate"',
-        'EmitEvent(event=Shutdown(reason=reason))',
-        'odometry/mapping has not started.',
-        'odometry/mapping now.',
-        'inter_robot_place_alignment.py',
-        'startup_alignment_gate_record_republisher',
+
+def assert_map_only(actions):
+    aligners = nodes(actions, "inter_robot_place_alignment.py")
+    assert len(aligners) == 1
+    settings = aligners[0].kwargs["parameters"][-1]
+    assert settings["robot0_map_topic"] == "/r0/toy/global_occupancy"
+    assert settings["robot1_map_topic"] == "/r1/toy/global_occupancy"
+    assert settings["robot0_odom_topic"] == "/r0/toy/corrected_odometry"
+    assert settings["robot1_odom_topic"] == "/r1/toy/corrected_odometry"
+    assert settings["alignment_topic"] == "/toy/initial_xy_alignment"
+    assert settings["target_frame_id"] == "map"
+    assert settings["source_frame_id"] == "r1/odom"
+    assert not any("cloud" in name for name in settings)
+    assert "input_mode" not in settings
+    assert not nodes(actions, "initial_xy_icp_alignment.py")
+    assert not nodes(actions, "cropped_xyz_initial_icp_alignment.py")
+    # A process gate or event-handler wrapper would violate this action contract.
+    assert all(isinstance(action, (Node, IncludeLaunchDescription, LogInfo))
+               for action in actions)
+    return settings
+
+
+@pytest.mark.parametrize("public", [False, True])
+def test_both_entry_points_use_2d_maps_without_startup_gate(load_launch, public):
+    actions, context = load_launch(public=public)
+    assert_map_only(actions)
+    pipelines = [a for a in actions if isinstance(a, IncludeLaunchDescription)]
+    assert len(pipelines) == 2
+    assert {p.launch_arguments["robot_id"] for p in pipelines} == {"0", "1"}
+    assert len(nodes(actions, "record_republisher.py")) == 1
+    for pipeline in pipelines:
+        arguments = pipeline.launch_arguments
+        rid = arguments["robot_id"]
+        assert arguments["global_frame_id"] == f"r{rid}/odom"
+        assert arguments["sensor_parent_frame"] == f"r{rid}/base_link"
+        assert arguments["sensor_child_frame"] == f"r{rid}/livox_frame"
+        assert arguments["publish_sensor_static_tf"] == "true"
+        assert arguments["mapping_startup_delay_sec"] == "10.0"
+        assert arguments["wait_imu_to_init"] == "true"
+        assert "wait_for_initial_alignment" not in arguments
+
+
+@pytest.mark.parametrize("rid", [0, 1])
+def test_peer_starts_without_a_remote_robot_or_fusion_host(load_launch, rid):
+    actions, _ = load_launch(**{
+        "enable_robot0_pipeline": str(rid == 0).lower(),
+        "enable_robot1_pipeline": str(rid == 1).lower(),
+        "enable_fusion": "false",
+    })
+    assert len(actions) == 2
+    pipeline, relay = actions
+    assert isinstance(pipeline, IncludeLaunchDescription)
+    assert pipeline.launch_arguments["robot_id"] == str(rid)
+    assert relay.kwargs["parameters"][0]["input_topic"] == f"/r{rid}/livox/lidar"
+    assert not nodes(actions, "inter_robot_place_alignment.py")
+    assert not nodes(actions, "record_republisher.py")
+
+
+@pytest.mark.parametrize("rid", [0, 1])
+def test_distributed_fusion_only_reads_its_own_sensor(load_launch, rid):
+    actions, _ = load_launch(**{
+        "enable_robot0_pipeline": str(rid == 0).lower(),
+        "enable_robot1_pipeline": str(rid == 1).lower(),
+    })
+    assert_map_only(actions)
+    relays = nodes(actions, "pointcloud_frame_republisher.py")
+    assert len(relays) == 1
+    assert relays[0].kwargs["parameters"][0]["input_topic"] == f"/r{rid}/livox/lidar"
+
+
+def test_fusion_only_host_does_not_create_sensor_consumers(load_launch):
+    actions, _ = load_launch(enable_robot0_pipeline="false", enable_robot1_pipeline="false")
+    assert_map_only(actions)
+    assert not nodes(actions, "pointcloud_frame_republisher.py")
+    assert not any(isinstance(a, IncludeLaunchDescription) for a in actions)
+
+
+def test_old_runner_flags_cannot_reenable_cloud_icp(load_launch, monkeypatch):
+    monkeypatch.setenv("CO3DTO2D_STARTUP_DIRECT_LIDAR", "true")
+    actions, _ = load_launch(
+        wait_for_initial_alignment="true",
+        startup_alignment_timeout_sec="0.0",
+        enable_place_recognition="false",
     )
-    for fragment in required_fragments:
-        assert fragment in public_wrapper
-
-    # The process-exit handler must exist before the gate action is started.
-    # Otherwise a fast transient-local delivery can exit before registration
-    # and leave the pipeline waiting forever.
-    release_group = public_wrapper[public_wrapper.index("def _release_group") :]
-    assert release_group.index("handler = RegisterEventHandler") < release_group.index(
-        "handler,\n            gate,"
-    )
-
-    gate = (
-        PACKAGE / "co_3dto2d_mapping" / "alignment_startup_gate.py"
-    ).read_text()
-    for fragment in (
-        "DurabilityPolicy.TRANSIENT_LOCAL",
-        'self.declare_parameter("timeout_sec", 0.0)',
-        "if self.timeout_sec > 0.0 and elapsed >= self.timeout_sec:",
-        "self.count_publishers(self.alignment_topic)",
-        "self.count_publishers(self.cloud_topics[0])",
-        "raise SystemExit(exit_code)",
-    ):
-        assert fragment in gate
-
-    cmake = (PACKAGE / "CMakeLists.txt").read_text()
-    assert "ament_python_install_package(${PROJECT_NAME})" in cmake
-    assert "launch/two_live_plane_height_mapping.launch.py" in cmake
-    assert "RENAME two_live_mapping.launch.py" in cmake
+    assert_map_only(actions)
+    assert len([a for a in actions if isinstance(a, IncludeLaunchDescription)]) == 2
+    notices = " ".join(a.msg for a in actions if isinstance(a, LogInfo))
+    assert "wait_for_initial_alignment is deprecated" in notices
+    assert "enable_place_recognition:=false is deprecated" in notices
 
 
-def test_startup_icp_uses_driver_lidar_without_waiting_for_sensor_tf():
-    # Given: both robots use the same MID-360 extrinsic configuration.
-    public_wrapper = (
-        LAUNCH_DIR / "two_live_plane_height_mapping.launch.py"
-    ).read_text()
-    live_runner = (PACKAGE / "scripts" / "run_two_mid360_2d_mapping.sh").read_text()
-
-    # When: the physical live runner starts the fusion host.
-
-    # Then: startup ICP consumes each driver's DDS cloud directly and does not
-    # block on the remote robot's static sensor transform, while bag replay
-    # keeps its transform-aware default path.
-    assert "CO3DTO2D_STARTUP_DIRECT_LIDAR=true" in live_runner
-    assert (
-        'os.environ.get("CO3DTO2D_STARTUP_DIRECT_LIDAR", "false")'
-        in public_wrapper
-    )
-    assert (
-        'return _ORIGINAL_VALUE(context, "robot%d_lidar_topic" % robot_id)'
-        in public_wrapper
-    )
-    assert '"transform_cloud_to_local_frame": (' in public_wrapper
-    assert "transform_to_local and not _startup_uses_direct_lidar()" in public_wrapper
+def test_profile_precedes_frame_contract_and_preserves_consensus(load_launch):
+    actions, _ = load_launch(alignment_config_file="/profiles/strict.yaml")
+    settings = assert_map_only(actions)
+    parameters = nodes(actions, "inter_robot_place_alignment.py")[0].kwargs["parameters"]
+    assert parameters[0].endswith("/config/place_recognition.yaml")
+    assert parameters[1] == "/profiles/strict.yaml"
+    assert settings["lock_after_consensus"] is True
+    assert settings["stop_processing_after_lock"] is True
+    assert "consensus_min_measurements" not in settings
+    assert "registration_min_symmetric_overlap" not in settings
 
 
-def test_two_live_alignment_uses_cropped_xyz_rtabmap_clouds():
-    two_live = (LAUNCH_DIR / "two_live_mapping.launch.py").read_text()
-    required_launch_fragments = (
-        '"robot0_cloud_topic": robot0_scan_topic',
-        '"robot1_cloud_topic": robot1_scan_topic',
-        '"input_mode": "cloud_initial"',
-        '"robot0_local_frame_id": "r0/base_link"',
-        '"robot1_local_frame_id": "r1/base_link"',
-        '"alignment_use_z_filter"',
-        '"alignment_range_min_m"',
-        '"alignment_range_max_m"',
-        '"alignment_enforce_tilt_prior"',
-        '"alignment_required_consistent_results"',
-        'default_value="2"',
-        '"alignment_lock_after_first"',
-        '"alignment_initialize_from_centroids"',
-    )
-    for fragment in required_launch_fragments:
-        assert fragment in two_live
-
-    aligner = (
-        PACKAGE
-        / "co_3dto2d_mapping"
-        / "cropped_xyz_initial_icp_alignment.py"
-    ).read_text()
-    required_aligner_fragments = (
-        "Cropped XYZ startup ICP",
-        "robot0_local_frame_id",
-        "slice_z_in_cloud_frame",
-        "range_min_m",
-        "estimate_rigid_transform",
-        "Collecting a fresh pair",
-        "published_planar",
-        "max_tilt_deviation_rad",
-    )
-    for fragment in required_aligner_fragments:
-        assert fragment in aligner
-
-    registration = (
-        PACKAGE / "co_3dto2d_mapping" / "pointcloud_registration.py"
-    ).read_text()
-    for fragment in (
-        "estimate_rigid_transform",
-        "yaw_rotation_matrix",
-        "rotation_tilt",
-        "voxel_downsample",
-    ):
-        assert fragment in registration
-
-    cmake = (PACKAGE / "CMakeLists.txt").read_text()
-    assert "co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py" in cmake
+def test_disable_record_does_not_disable_map_alignment(load_launch):
+    actions, _ = load_launch(enable_record_republisher="false")
+    assert_map_only(actions)
+    assert not nodes(actions, "record_republisher.py")
 
 
-def test_startup_icp_collects_each_robot_without_a_shared_input_gate():
-    base_aligner = (
-        PACKAGE / "co_3dto2d_mapping" / "initial_xy_icp_alignment.py"
-    ).read_text()
-    xyz_aligner = (
-        PACKAGE / "co_3dto2d_mapping" / "cropped_xyz_initial_icp_alignment.py"
-    ).read_text()
+@pytest.mark.parametrize("overrides", [
+    {"robot1_lidar_topic": "/r0/livox/lidar"},
+    {"robot1_imu_topic": "/r0/livox/imu"},
+    {"robot1_imu_topic": "/r0/livox/lidar"},
+    {"robot0_lidar_topic": "relative/lidar"},
+    {"robot0_lidar_topic": "/r1/mapping/lidar"},
+    {"robot0_imu_topic": "/r1/mapping/imu_filtered"},
+    {"enable_robot0_pipeline": "false", "enable_robot1_pipeline": "false", "enable_fusion": "false"},
+    {"alignment_startup_delay_sec": "-1"},
+    {"alignment_startup_delay_sec": "nan"},
+    {"enable_fusion": "invalid"},
+    {"wait_for_initial_alignment": "invalid"},
+])
+def test_input_validation_is_preserved(load_launch, overrides):
+    with pytest.raises(RuntimeError):
+        load_launch(**overrides)
 
-    assert "input_ready_since_ns: List[Optional[int]] = [None, None]" in base_aligner
-    assert "inputs_ready_since_ns" not in base_aligner
-    assert "not all(self.input_seen)" not in base_aligner
-    assert "self._startup_delay_elapsed(0)" in base_aligner
-    assert "self._startup_delay_elapsed(1)" in base_aligner
-    assert "self._startup_delay_elapsed(robot_index)" in xyz_aligner
+
+def test_local_warmup_is_configurable_and_not_an_alignment_barrier(load_launch):
+    actions, _ = load_launch(mapping_startup_delay_sec="0.0")
+    assert_map_only(actions)
+    for pipeline in (a for a in actions if isinstance(a, IncludeLaunchDescription)):
+        assert pipeline.launch_arguments["mapping_startup_delay_sec"] == "0.0"

@@ -67,7 +67,7 @@ def test_two_live_mapping_isolates_robot_topics_and_frames():
         "r%d/livox_frame",
         "r%d/odom",
         "pointcloud_frame_republisher.py",
-        "initial_xy_icp_alignment.py",
+        "inter_robot_place_alignment.py",
         "record_republisher.py",
         '"publish_tf_odom": "false"',
         "reserved_internal_topics",
@@ -84,9 +84,9 @@ def test_two_live_laptop_runner_starts_only_its_local_mapping_pipeline():
     required = (
         'ENABLE_ROBOT0_PIPELINE="true"',
         'ENABLE_ROBOT1_PIPELINE="true"',
-        '"enable_robot0_pipeline:=${ENABLE_ROBOT0_PIPELINE}"',
-        '"enable_robot1_pipeline:=${ENABLE_ROBOT1_PIPELINE}"',
-        '"enable_fusion:=${RUN_FUSION}"',
+        '\"enable_robot0_pipeline:=${ENABLE_ROBOT0_PIPELINE}\"',
+        '\"enable_robot1_pipeline:=${ENABLE_ROBOT1_PIPELINE}\"',
+        '\"enable_fusion:=${RUN_FUSION}\"',
         'RUN_LOCAL_MAPPING="${TWO_LIVE_LOCAL_MAPPING:-true}"',
         'EXPECTED_UPDATE_RATE="${EXPECTED_UPDATE_RATE:-11.0}"',
     )
