@@ -36,7 +36,7 @@
     # This is not runtime ros2 param set support or object segmentation.
     # Keep enable_raycast_free_space=true and raycast_clear_occupied=false.
     # Counts are observations, not seconds; unseen cells are not deleted.
-    dynamic_filter_enabled: false
+    dynamic_filter_enabled: true
     dynamic_free_clear_count: 10
     dynamic_occupied_confirm_count: 1
     dynamic_counter_decay: 1

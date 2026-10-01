@@ -23,3 +23,4 @@ __pycache__/
 /logs/live_runs/
 *.db3
 *.mcap
+third_party/

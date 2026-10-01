@@ -166,12 +166,12 @@ def test_s3ev1_profile_is_strict_while_accepting_sparse_evidence() -> None:
     )
 
 
-def test_master_baseline_defaults_disable_dynamic_and_plane_pose() -> None:
+def test_master_defaults_enable_dynamic_and_disable_plane_pose() -> None:
     inspection = (
         "import sys, yaml; "
         "profile = yaml.safe_load(open(sys.argv[1], encoding='utf-8')); "
         "params = profile['/**']['ros__parameters']; "
-        "print(params['dynamic_filter_enabled'] is False, "
+        "print(params['dynamic_filter_enabled'] is True, "
         "params['ground_plane_pose_enabled'] is False)"
     )
     result = subprocess.run(

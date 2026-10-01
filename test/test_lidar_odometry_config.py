@@ -111,7 +111,7 @@ def test_default_lidar_odometry_profile_contains_tunable_icp_parameters():
 
     assert profile_path.exists()
     parameters = yaml.safe_load(profile_path.read_text())["/**"]["ros__parameters"]
-    assert parameters["Icp/VoxelSize"] == "0.1"
+    assert parameters["Icp/VoxelSize"] == "0.05"
     assert parameters["Icp/Iterations"] == "10"
     assert parameters["Icp/MaxCorrespondenceDistance"] == "1"
     assert parameters["OdomF2M/ScanMaxSize"] == "15000"
