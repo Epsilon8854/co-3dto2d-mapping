@@ -23,4 +23,4 @@
     Odom/ScanKeyFrameThr: "0.4"
     OdomF2M/ScanSubtractRadius: "0.1"
     OdomF2M/ScanMaxSize: "15000"
-    OdomF2M/BundleAdjustment: "false"
+    OdomF2M/BundleAdjustment: "true"

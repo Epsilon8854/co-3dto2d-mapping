@@ -18,7 +18,7 @@
     publish_slice_debug_points: true
     slice_debug_points_max_points: 80000
     transform_cloud_to_local_frame: true
-    center_box_filter_half_extent_m: 0.80
+    center_box_filter_half_extent_m: 2.5
     range_min_m: 0.80
     range_max_m: 12.0
     enable_raycast_free_space: true
@@ -37,10 +37,10 @@
     # Keep enable_raycast_free_space=true and raycast_clear_occupied=false.
     # Counts are observations, not seconds; unseen cells are not deleted.
     dynamic_filter_enabled: true
-    dynamic_free_clear_count: 10
-    dynamic_occupied_confirm_count: 1
+    dynamic_free_clear_count: 20
+    dynamic_occupied_confirm_count: 1   
     dynamic_counter_decay: 1
-    dynamic_evidence_timeout_frames: 30
+    dynamic_evidence_timeout_frames: 3000
     # Do not expand free rays into neighbouring unobserved cells by default.
     merged_free_observation_inflation_m: 0.0
 
