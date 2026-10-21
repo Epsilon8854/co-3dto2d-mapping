@@ -1,0 +1,40 @@
+{
+  "purpose": "Reference for comparing setup on another laptop; not an apt lockfile or experimental result.",
+  "date": "2026-10-21",
+  "os_release": "Ubuntu 22.04.5 LTS",
+  "architecture": "x86_64",
+  "python": "3.10.12",
+  "ros_distro": "humble",
+  "apt_packages": {
+    "libopencv-dev": "4.5.4+dfsg-9ubuntu4",
+    "python3-colcon-common-extensions": "0.3.0-100",
+    "python3-numpy": "1:1.21.5-1ubuntu22.04.1",
+    "python3-opencv": "4.5.4+dfsg-9ubuntu4",
+    "python3-scipy": "1.8.0-1exp2ubuntu1",
+    "python3-yaml": "5.4.1-1ubuntu1",
+    "ros-humble-imu-filter-madgwick": "2.1.5-1jammy.20260804.202639",
+    "ros-humble-rclcpp": "16.0.19-1jammy.20260724.021311",
+    "ros-humble-ros-base": "0.10.0-1jammy.20260804.204550",
+    "ros-humble-rosbag2-py": "0.15.16-1jammy.20260726.134021",
+    "ros-humble-rosbag2-storage-default-plugins": "0.15.16-1jammy.20260726.122936",
+    "ros-humble-rtabmap": "0.23.7-1jammy.20260718.024231",
+    "ros-humble-rtabmap-odom": "0.23.7-1jammy.20260804.220127",
+    "ros-humble-rviz2": "11.2.28-1jammy.20260804.222726"
+  },
+  "livox_ros_driver2": {
+    "repository": "https://github.com/Livox-SDK/livox_ros_driver2.git",
+    "commit": "4a1def929e5b59c7a8122d19fce6efba581ce9f7",
+    "local_modification": "Per-device MID360_config.json; not shared"
+  },
+  "livox_sdk2": {
+    "source_revision": null,
+    "note": "Installed SDK source checkout not available; binary and header hashes only.",
+    "installed_sha256": {
+      "/usr/local/lib/liblivox_lidar_sdk_shared.so": "c6a283e51cfcc0ad5c4c431a56065f0996cc675776b751240eb8541c48230a06",
+      "/usr/local/lib/liblivox_lidar_sdk_static.a": "4e5c60f9b02124a344f0ad950a6805fb0cd7a1fc1938d88c9400d67365cfb788",
+      "/usr/local/include/livox_lidar_api.h": "c9b40b4336a0d8732d05a9e84869342519577c6bb9f08c77330a30655b9bbfed",
+      "/usr/local/include/livox_lidar_def.h": "85306714bbba536cb613143dc70107731acceba1b52b827a92b34eeaa8562847",
+      "/usr/local/include/livox_lidar_cfg.h": "fbeb3b91897fad5b71b169e4e4f88bfb3b4b716cecb07e45aa08569cf159e9a5"
+    }
+  }
+}

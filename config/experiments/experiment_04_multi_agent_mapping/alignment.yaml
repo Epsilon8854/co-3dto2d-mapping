@@ -1,0 +1,34 @@
+/**:
+  ros__parameters:
+    mode: auto_validated_locked
+    window_sec: 3.0
+    window_min_frames: 15
+    window_max_frames: 80
+    confirmation_windows: 3
+    consensus_translation_m: 0.1
+    consensus_yaw_deg: 0.5
+    stationary_translation_m: 0.15
+    stationary_yaw_deg: 2.0
+    pose_stamp_tolerance_sec: 0.4
+    input_timeout_sec: 5.0
+    submap_radius_m: 12.0
+    registration_resolution_m: 0.1
+    output_resolution_m: 0.05
+    merged_period_sec: 0.5
+    checkpoint_sec: 10.0
+    max_grid_cells: 16000000
+    require_sessions: true
+    manual_x_m: 0.0
+    manual_y_m: 0.0
+    manual_yaw_deg: 0.0
+    registration.coarse_translation_range_m: 2.5
+    registration.coarse_translation_step_m: 0.25
+    registration.search_max_points: 700
+    registration.min_correspondences: 80
+    registration.min_symmetric_overlap: 0.3
+    registration.max_symmetric_rmse_m: 0.25
+    registration.max_free_conflict_ratio: 0.14
+    search.coarse_yaw_step_deg: 5.0
+    search.top_candidates: 5
+    search.min_score_gap_ratio: 0.1
+    search.min_observability_ratio: 0.001

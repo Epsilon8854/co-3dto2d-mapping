@@ -7,6 +7,7 @@ from co_3dto2d_mapping.gravity_plane_utils import (
     PlaneFitConfig,
     blend_unit_vectors,
     estimate_gravity_constrained_plane,
+    fixed_z_gravity_pose,
     imu_timestamp_is_usable,
     pose_z_from_plane,
     quaternion_from_rpy,
@@ -14,6 +15,7 @@ from co_3dto2d_mapping.gravity_plane_utils import (
     rotation_matrix_from_quaternion,
     up_from_world_orientation,
     vector_angle,
+    yaw_from_quaternion,
 )
 
 
@@ -47,6 +49,26 @@ def test_roll_pitch_are_recovered_from_plane_normal_independent_of_yaw() -> None
         recovered_roll, recovered_pitch = roll_pitch_from_up(up_body)
         assert recovered_roll == pytest.approx(roll, abs=1e-9)
         assert recovered_pitch == pytest.approx(pitch, abs=1e-9)
+
+
+def test_fixed_z_gravity_pose_keeps_icp_yaw_and_replaces_height() -> None:
+    """The fixed-height mode must not need a cloud plane observation."""
+
+    roll = math.radians(7.0)
+    pitch = math.radians(-4.0)
+    yaw = math.radians(38.0)
+    up = _world_from_body(roll, pitch, yaw).T @ np.asarray([0.0, 0.0, 1.0])
+
+    pose_z, orientation = fixed_z_gravity_pose(
+        fixed_base_link_height_m=0.30,
+        up_vector=up,
+        icp_yaw_rad=yaw,
+    )
+
+    assert pose_z == pytest.approx(0.30)
+    assert yaw_from_quaternion(orientation) == pytest.approx(yaw, abs=1e-9)
+    recovered_up = up_from_world_orientation(orientation)
+    assert np.allclose(recovered_up, up, atol=1e-9)
 
 
 def test_gravity_constrained_ransac_selects_floor_over_outliers() -> None:

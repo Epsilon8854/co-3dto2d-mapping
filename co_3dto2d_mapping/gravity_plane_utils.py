@@ -181,6 +181,24 @@ def quaternion_from_rpy(roll: float, pitch: float, yaw: float) -> np.ndarray:
     )
 
 
+def fixed_z_gravity_pose(
+    *,
+    fixed_base_link_height_m: float,
+    up_vector: Sequence[float],
+    icp_yaw_rad: float,
+) -> Tuple[float, np.ndarray]:
+    """Build a fixed-height pose from IMU world-up and an ICP yaw estimate."""
+
+    if not math.isfinite(fixed_base_link_height_m):
+        raise ValueError("fixed_base_link_height_m must be finite")
+    if not math.isfinite(icp_yaw_rad):
+        raise ValueError("icp_yaw_rad must be finite")
+    roll, pitch = roll_pitch_from_up(up_vector)
+    return float(fixed_base_link_height_m), quaternion_from_rpy(
+        roll, pitch, icp_yaw_rad
+    )
+
+
 def yaw_from_quaternion(quaternion_xyzw: Sequence[float]) -> float:
     x, y, z, w = normalize_quaternion(quaternion_xyzw)
     return math.atan2(

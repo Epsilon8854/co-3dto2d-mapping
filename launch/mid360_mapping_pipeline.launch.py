@@ -32,6 +32,9 @@ def launch_setup(context, *args, **kwargs):
     enable_rear_lidar_filter = _bool_value(context, "enable_rear_lidar_filter")
     imu_input_is_filtered = _bool_value(context, "imu_input_is_filtered")
     scan_cloud_topic = LaunchConfiguration("scan_cloud_topic").perform(context)
+    icp_scan_cloud_topic = LaunchConfiguration("icp_scan_cloud_topic").perform(
+        context
+    ) or scan_cloud_topic
     imu_raw_topic = LaunchConfiguration("imu_raw_topic").perform(context)
     imu_filtered_topic = LaunchConfiguration("imu_filtered_topic").perform(context)
     imu_filter_output_topic = imu_filtered_topic + "_raw_frame"
@@ -126,13 +129,19 @@ def launch_setup(context, *args, **kwargs):
             "namespace": namespace,
             "frame_id": LaunchConfiguration("sensor_parent_frame").perform(context),
             "odom_topic": "odom",
-            "scan_cloud_topic": scan_cloud_topic,
+            "odom_frame_id": "r%s/odom" % robot_id,
+            # ICP must receive the unfiltered cloud when a downstream rear
+            # sector filter is enabled for occupancy mapping.
+            "scan_cloud_topic": icp_scan_cloud_topic,
             "imu_topic": imu_filtered_topic,
             "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(
                 context
             ),
             "expected_update_rate": LaunchConfiguration(
                 "expected_update_rate"
+            ).perform(context),
+            "topic_queue_size": LaunchConfiguration(
+                "icp_topic_queue_size"
             ).perform(context),
             "odometry_config_file": LaunchConfiguration(
                 "odometry_config_file"
@@ -215,6 +224,7 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_pitch", default_value="0"),
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+            DeclareLaunchArgument("icp_topic_queue_size", default_value="1"),
             DeclareLaunchArgument(
                 "odometry_config_file",
                 default_value=os.path.join(
@@ -234,6 +244,7 @@ def generate_launch_description():
             DeclareLaunchArgument("rear_filter_log_period", default_value="100"),
             DeclareLaunchArgument("bag_lidar_topic", default_value="/livox/lidar_raw"),
             DeclareLaunchArgument("scan_cloud_topic", default_value="/livox/lidar"),
+            DeclareLaunchArgument("icp_scan_cloud_topic", default_value=""),
             DeclareLaunchArgument("imu_raw_topic", default_value="/livox/imu"),
             DeclareLaunchArgument(
                 "imu_filtered_topic", default_value="/livox/imu_filtered"

@@ -35,6 +35,7 @@ def generate_launch_description():
         "sensor_tf_pitch": LaunchConfiguration("sensor_tf_pitch"),
         "sensor_tf_roll": LaunchConfiguration("sensor_tf_roll"),
         "expected_update_rate": LaunchConfiguration("expected_update_rate"),
+        "icp_topic_queue_size": LaunchConfiguration("icp_topic_queue_size"),
         "odometry_config_file": LaunchConfiguration("odometry_config_file"),
         "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init"),
         "mapping_startup_delay_sec": LaunchConfiguration(
@@ -49,6 +50,7 @@ def generate_launch_description():
         "rear_filter_log_period": LaunchConfiguration("rear_filter_log_period"),
         "bag_lidar_topic": LaunchConfiguration("bag_lidar_topic"),
         "scan_cloud_topic": LaunchConfiguration("scan_cloud_topic"),
+        "icp_scan_cloud_topic": LaunchConfiguration("icp_scan_cloud_topic"),
         "imu_raw_topic": LaunchConfiguration("imu_raw_topic"),
         "imu_filtered_topic": LaunchConfiguration("imu_filtered_topic"),
         "imu_input_is_filtered": LaunchConfiguration("imu_input_is_filtered"),
@@ -82,6 +84,7 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_pitch", default_value="0"),
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+            DeclareLaunchArgument("icp_topic_queue_size", default_value="1"),
             DeclareLaunchArgument(
                 "odometry_config_file",
                 default_value=os.path.join(
@@ -97,6 +100,7 @@ def generate_launch_description():
             DeclareLaunchArgument("rear_filter_log_period", default_value="100"),
             DeclareLaunchArgument("bag_lidar_topic", default_value="/livox/lidar"),
             DeclareLaunchArgument("scan_cloud_topic", default_value="/livox/lidar"),
+            DeclareLaunchArgument("icp_scan_cloud_topic", default_value=""),
             DeclareLaunchArgument("imu_raw_topic", default_value="/livox/imu"),
             DeclareLaunchArgument(
                 "imu_filtered_topic",
@@ -105,7 +109,7 @@ def generate_launch_description():
             DeclareLaunchArgument("imu_input_is_filtered", default_value="false"),
             DeclareLaunchArgument(
                 "alignment_topic",
-                default_value="/toy/initial_xy_alignment",
+                default_value="/mapping/initial_xy_alignment",
             ),
             DeclareLaunchArgument("transform_cloud_to_local_frame", default_value="true"),
             DeclareLaunchArgument("center_box_filter_half_extent_m", default_value="0.80"),

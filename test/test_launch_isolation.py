@@ -69,7 +69,8 @@ def test_two_live_mapping_isolates_robot_topics_and_frames():
         "pointcloud_frame_republisher.py",
         "inter_robot_place_alignment.py",
         "record_republisher.py",
-        '"publish_tf_odom": "false"',
+        '"publish_tf_odom": _value(context, "publish_tf_odom")',
+        'DeclareLaunchArgument("publish_tf_odom", default_value="false")',
         "reserved_internal_topics",
         "enable_robot0_pipeline",
         "enable_robot1_pipeline",
@@ -133,3 +134,23 @@ def test_two_live_forwards_wait_imu_to_init_to_icp_odometry():
             f"{launch_name}: {fragment}" for fragment in fragments if fragment not in text
         )
     assert missing == []
+
+
+def test_single_bag_launch_forwards_local_submap_diagnostics_path():
+    text = (LAUNCH_DIR / "single_bag_mapping.launch.py").read_text()
+    assert 'DeclareLaunchArgument("local_submap_diagnostics_csv_path"' in text
+    assert '"local_submap_diagnostics_csv_path": LaunchConfiguration(' in text
+
+
+def test_mapper_declares_local_submap_registration_parameters():
+    parameters = (
+        PACKAGE / "include" / "co_3dto2d_mapping" / "occupancy_mapper" / "parameters.inc"
+    ).read_text()
+    for name in (
+        "local_submap_registration_enabled",
+        "local_submap_registration_radius_m",
+        "local_submap_keyframe_translation_m",
+        "local_submap_min_direction_bins",
+        "local_submap_diagnostics_csv_path",
+    ):
+        assert name in parameters

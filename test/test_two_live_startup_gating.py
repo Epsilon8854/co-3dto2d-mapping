@@ -128,11 +128,11 @@ def assert_map_only(actions):
     aligners = nodes(actions, "inter_robot_place_alignment.py")
     assert len(aligners) == 1
     settings = aligners[0].kwargs["parameters"][-1]
-    assert settings["robot0_map_topic"] == "/r0/toy/global_occupancy"
-    assert settings["robot1_map_topic"] == "/r1/toy/global_occupancy"
-    assert settings["robot0_odom_topic"] == "/r0/toy/corrected_odometry"
-    assert settings["robot1_odom_topic"] == "/r1/toy/corrected_odometry"
-    assert settings["alignment_topic"] == "/toy/initial_xy_alignment"
+    assert settings["robot0_map_topic"] == "/r0/mapping/global_occupancy"
+    assert settings["robot1_map_topic"] == "/r1/mapping/global_occupancy"
+    assert settings["robot0_odom_topic"] == "/r0/mapping/occupancy_mapper_odometry"
+    assert settings["robot1_odom_topic"] == "/r1/mapping/occupancy_mapper_odometry"
+    assert settings["alignment_topic"] == "/mapping/initial_xy_alignment"
     assert settings["target_frame_id"] == "map"
     assert settings["source_frame_id"] == "r1/odom"
     assert not any("cloud" in name for name in settings)
@@ -181,6 +181,27 @@ def test_peer_starts_without_a_remote_robot_or_fusion_host(load_launch, rid):
     assert relay.kwargs["parameters"][0]["input_topic"] == f"/r{rid}/livox/lidar"
     assert not nodes(actions, "inter_robot_place_alignment.py")
     assert not nodes(actions, "record_republisher.py")
+
+
+@pytest.mark.parametrize("rid", [0, 1])
+def test_rear_filter_is_downstream_of_the_icp_input(load_launch, rid):
+    actions, _ = load_launch(**{
+        "enable_robot0_pipeline": str(rid == 0).lower(),
+        "enable_robot1_pipeline": str(rid == 1).lower(),
+        "enable_fusion": "false",
+        "enable_rear_lidar_filter": "true",
+    })
+
+    pipeline, relay = actions
+    arguments = pipeline.launch_arguments
+    assert arguments["scan_cloud_topic"] == f"/r{rid}/mapping/lidar"
+    assert arguments["icp_scan_cloud_topic"] == (
+        f"/r{rid}/mapping/lidar_unfiltered"
+    )
+    assert arguments["bag_lidar_topic"] == f"/r{rid}/mapping/lidar_unfiltered"
+    assert relay.kwargs["parameters"][0]["output_topic"] == (
+        f"/r{rid}/mapping/lidar_unfiltered"
+    )
 
 
 @pytest.mark.parametrize("rid", [0, 1])

@@ -6,13 +6,13 @@
       resetIcpState("odometry tracking failure");
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
-          "Skipping toy occupancy update because odometry reports tracking failure.");
+          "Skipping occupancy update because odometry reports tracking failure.");
       return;
     }
     if (alignment_required_ && !alignment_ready_) {
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
-          "Skipping toy occupancy update until initial XY alignment is available.");
+          "Skipping occupancy update until initial XY alignment is available.");
       return;
     }
     if (use_odom_header_frame_ && !global_frame_from_odom_ && !odom->header.frame_id.empty()) {
@@ -36,7 +36,7 @@
       } catch (const std::exception &exc) {
         RCLCPP_WARN_THROTTLE(
             get_logger(), *get_clock(), 2000,
-            "Skipping toy occupancy update because transform %s <- %s is unavailable: %s",
+            "Skipping occupancy update because transform %s <- %s is unavailable: %s",
             local_frame_id_.c_str(), cloud->header.frame_id.c_str(), exc.what());
         return;
       }
@@ -141,7 +141,7 @@
     } catch (const std::exception &exc) {
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
-          "Skipping toy occupancy update because PointCloud2 xyz iteration failed: %s",
+          "Skipping occupancy update because PointCloud2 xyz iteration failed: %s",
           exc.what());
       return;
     }
@@ -160,18 +160,32 @@
           global_z_min, global_z_max, z_min_, z_max_);
     }
 
-    std::vector<Point2> icp_scan_points;
-    icp_scan_points.reserve(local_occupied_points.size());
+    // The local-submap registration owns its 5 cm occupancy representation.
+    // Keep every occupied return here; it will remove only interior grid cells,
+    // rather than discarding geometric boundaries through the legacy 12 cm ICP
+    // downsampling used by the separate local-window ablation.
+    std::vector<Point2> occupancy_patch_points;
+    occupancy_patch_points.reserve(local_occupied_points.size());
     for (const Vec3 &point : local_occupied_points) {
-      icp_scan_points.push_back({point.x, point.y});
+      occupancy_patch_points.push_back({point.x, point.y});
     }
-    icp_scan_points = co_3dto2d_mapping::icp::voxelDownsample(
-        icp_scan_points, icp_voxel_size_m_,
+    std::vector<Point2> icp_scan_points = co_3dto2d_mapping::icp::voxelDownsample(
+        occupancy_patch_points, icp_voxel_size_m_,
         static_cast<std::size_t>(icp_max_source_points_));
 
     const Pose2 raw_planar_pose{raw_t.x, raw_t.y, yawFromQuaternion(raw_q)};
-    const Pose2 corrected_planar_pose = refinePoseWithLocalWindowIcp(
-        raw_planar_pose, icp_scan_points, cloud->header.stamp);
+    const auto local_submap_result = refinePoseWithLocalSubmapRegistration(
+        raw_planar_pose, occupancy_patch_points, cloud->header.stamp);
+    const Pose2 corrected_planar_pose = enable_local_pht_submap_pose_graph_
+        ? refinePoseWithLocalPhtSubmapPoseGraph(
+            raw_planar_pose, occupancy_patch_points, cloud->header.stamp)
+        : (enable_local_line_pose_graph_
+        ? refinePoseWithLocalLinePoseGraph(raw_planar_pose, occupancy_patch_points, cloud->header.stamp)
+        : (enable_local_pose_graph_
+            ? refinePoseWithLocalPoseGraph(raw_planar_pose, occupancy_patch_points, cloud->header.stamp)
+            : (enable_local_submap_registration_
+            ? local_submap_result.pose
+            : refinePoseWithLocalWindowIcp(raw_planar_pose, icp_scan_points, cloud->header.stamp))));
     const double yaw_correction = co_3dto2d_mapping::icp::normalizeAngle(
         corrected_planar_pose.yaw - raw_planar_pose.yaw);
     const Quaternion corrected_q = multiplyQuaternion(
@@ -193,6 +207,15 @@
       corrected_odom.pose.pose.orientation.z = aligned_q.z;
       corrected_odom.pose.pose.orientation.w = aligned_q.w;
       corrected_odom_pub_->publish(corrected_odom);
+      if (local_submap_path_pub_) {
+        geometry_msgs::msg::PoseStamped pose_stamped;
+        pose_stamped.header = corrected_odom.header;
+        pose_stamped.pose = corrected_odom.pose.pose;
+        local_submap_path_.header = corrected_odom.header;
+        local_submap_path_.poses.push_back(std::move(pose_stamped));
+        if (local_submap_path_.poses.size() > 10000U) local_submap_path_.poses.erase(local_submap_path_.poses.begin());
+        local_submap_path_pub_->publish(local_submap_path_);
+      }
     }
 
     const auto to_global = [&](const Vec3 &local_point) {
@@ -239,6 +262,7 @@
     latest_local_grid_ = buildLocalGrid(
         global_hits, global_free_ray_hits, cloud->header.stamp, aligned_t);
     latest_local_grid_ready_ = true;
+    flushLocalLinePoseGraphVisualization(latest_local_grid_, corrected_q, corrected_t);
 
     updateGlobalGrid(
         global_hits, global_free_ray_hits, {aligned_t.x, aligned_t.y},

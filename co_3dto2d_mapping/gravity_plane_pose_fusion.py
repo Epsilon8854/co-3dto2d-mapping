@@ -103,13 +103,14 @@ class GravityPlanePoseFusion(Node):
 
         self.get_logger().info(
             "Gravity-plane pose fusion started. planar=%s cloud=%s imu=%s output=%s "
-            "enabled=%s gravity=%s z_mode=%s"
+            "enabled=%s pose_reference=%s gravity=%s z_mode=%s"
             % (
                 self.planar_odometry_topic,
                 self.pointcloud_topic,
                 self.imu_topic,
                 self.output_odometry_topic,
                 "true" if self.enabled else "false",
+                self.pose_reference_mode,
                 self.gravity_source,
                 self.z_mode,
             )
@@ -117,13 +118,15 @@ class GravityPlanePoseFusion(Node):
 
     def _declare_parameters(self) -> None:
         self.declare_parameter("ground_plane_pose_enabled", True)
+        self.declare_parameter("ground_plane_pose_reference_mode", "estimated_plane")
+        self.declare_parameter("fixed_base_link_height_above_floor_m", 0.0)
         self.declare_parameter("ground_plane_pointcloud_topic", "/livox/lidar")
         self.declare_parameter("ground_plane_imu_topic", "/livox/imu_filtered")
         self.declare_parameter(
-            "ground_plane_planar_odometry_topic", "toy/planar_odometry"
+            "ground_plane_planar_odometry_topic", "odom"
         )
         self.declare_parameter(
-            "ground_plane_output_odometry_topic", "toy/corrected_odometry"
+            "ground_plane_output_odometry_topic", "mapping/floor_based_odometry"
         )
         self.declare_parameter("ground_plane_local_frame_id", "base_link")
         self.declare_parameter(
@@ -168,6 +171,10 @@ class GravityPlanePoseFusion(Node):
     def _read_parameters(self) -> None:
         value = lambda name: self.get_parameter(name).value
         self.enabled = bool(value("ground_plane_pose_enabled"))
+        self.pose_reference_mode = str(value("ground_plane_pose_reference_mode"))
+        self.fixed_base_link_height_m = float(
+            value("fixed_base_link_height_above_floor_m")
+        )
         self.pointcloud_topic = str(value("ground_plane_pointcloud_topic"))
         self.imu_topic = str(value("ground_plane_imu_topic"))
         self.planar_odometry_topic = str(
@@ -265,6 +272,18 @@ class GravityPlanePoseFusion(Node):
             raise ValueError(
                 "ground_plane_gravity_source must be orientation, acceleration, "
                 "orientation_then_acceleration, or blend"
+            )
+        if self.pose_reference_mode not in {
+            "estimated_plane",
+            "fixed_height_imu_gravity",
+        }:
+            raise ValueError(
+                "ground_plane_pose_reference_mode must be estimated_plane or "
+                "fixed_height_imu_gravity"
+            )
+        if not math.isfinite(self.fixed_base_link_height_m):
+            raise ValueError(
+                "fixed_base_link_height_above_floor_m must be finite"
             )
         if self.imu_timeout_sec < 0.0:
             raise ValueError("ground_plane_imu_timeout_sec must be non-negative")

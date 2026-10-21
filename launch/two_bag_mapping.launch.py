@@ -80,6 +80,11 @@ def launch_setup(context, *args, **kwargs):
             "expected_update_rate": "0.0",
             "bag_lidar_topic": "/r0/livox/lidar_raw",
             "scan_cloud_topic": "/r0/livox/lidar",
+            "icp_scan_cloud_topic": (
+                "/r0/livox/lidar_raw"
+                if enable_rear_lidar_filter.lower() == "true"
+                else ""
+            ),
             "imu_raw_topic": "/r0/livox/imu",
             "imu_filtered_topic": "/r0/livox/imu_filtered",
             "alignment_required": "false",
@@ -121,6 +126,11 @@ def launch_setup(context, *args, **kwargs):
             "expected_update_rate": "0.0",
             "bag_lidar_topic": "/r1/livox/lidar_raw",
             "scan_cloud_topic": "/r1/livox/lidar",
+            "icp_scan_cloud_topic": (
+                "/r1/livox/lidar_raw"
+                if enable_rear_lidar_filter.lower() == "true"
+                else ""
+            ),
             "imu_raw_topic": "/r1/livox/imu",
             "imu_filtered_topic": "/r1/livox/imu_filtered",
             "alignment_required": "false",
@@ -140,8 +150,8 @@ def launch_setup(context, *args, **kwargs):
             {
                 "robot0_cloud_topic": "/r0/livox/lidar",
                 "robot1_cloud_topic": "/r1/livox/lidar",
-                "robot0_map_topic": "/r0/toy/global_occupancy",
-                "robot1_map_topic": "/r1/toy/global_occupancy",
+                "robot0_map_topic": "/r0/mapping/global_occupancy",
+                "robot1_map_topic": "/r1/mapping/global_occupancy",
                 "input_mode": "global_occupancy",
                 "alignment_topic": alignment_topic,
                 "target_frame_id": "map",
@@ -205,7 +215,7 @@ def launch_setup(context, *args, **kwargs):
     record_republisher = Node(
         package="co_3dto2d_mapping",
         executable="record_republisher.py",
-        name="toy_record_republisher",
+        name="mapping_record_republisher",
         output="screen",
         parameters=[
             {
@@ -243,7 +253,7 @@ def generate_launch_description():
             DeclareLaunchArgument("robot_delay_s", default_value="20.0"),
             DeclareLaunchArgument("enable_record_republisher", default_value="true"),
             DeclareLaunchArgument("record_publish_period_ms", default_value="200"),
-            DeclareLaunchArgument("record_output_prefix", default_value="/toy_record"),
+            DeclareLaunchArgument("record_output_prefix", default_value="/mapping_record"),
             DeclareLaunchArgument("record_publish_merged_global", default_value="true"),
             DeclareLaunchArgument("publish_sensor_static_tf", default_value="true"),
             DeclareLaunchArgument("enable_rear_lidar_filter", default_value="true"),
@@ -254,7 +264,7 @@ def generate_launch_description():
             DeclareLaunchArgument("transform_cloud_to_local_frame", default_value="true"),
             DeclareLaunchArgument("center_box_filter_half_extent_m", default_value="0.80"),
             DeclareLaunchArgument("slice_z_in_cloud_frame", default_value="true"),
-            DeclareLaunchArgument("alignment_topic", default_value="/toy/initial_xy_alignment"),
+            DeclareLaunchArgument("alignment_topic", default_value="/mapping/initial_xy_alignment"),
             DeclareLaunchArgument("alignment_startup_delay_s", default_value="1.0"),
             DeclareLaunchArgument("alignment_z_min", default_value="0.4"),
             DeclareLaunchArgument("alignment_z_max", default_value="0.8"),

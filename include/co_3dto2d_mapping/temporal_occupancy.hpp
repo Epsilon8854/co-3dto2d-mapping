@@ -8,17 +8,15 @@ namespace co_3dto2d_mapping::occupancy
 
 struct TemporalOccupancyConfig
 {
-  uint16_t free_clear_count = 4;
-  uint16_t occupied_confirm_count = 3;
-  uint16_t counter_decay = 1;
-  uint32_t evidence_timeout_frames = 30;
+  uint16_t free_clear_count = 10;
+  int64_t evidence_timeout_ns = 5'000'000'000LL;
+  double clear_max_range_m = 6.0;
 };
 
 struct TemporalCellEvidence
 {
-  uint32_t last_observed_frame = 0;
+  int64_t last_observed_time_ns = -1;
   uint16_t free_observations = 0;
-  uint16_t occupied_observations = 0;
 };
 
 inline uint16_t saturatingIncrement(uint16_t value, uint16_t limit)
@@ -37,39 +35,39 @@ inline uint16_t saturatingDecrement(uint16_t value, uint16_t amount)
 
 inline void prepareTemporalEvidence(
     TemporalCellEvidence &evidence,
-    uint32_t frame_index,
-    uint32_t evidence_timeout_frames)
+    int64_t observation_time_ns,
+    int64_t evidence_timeout_ns)
 {
-  if (evidence.last_observed_frame != 0 && evidence_timeout_frames > 0 &&
-      frame_index > evidence.last_observed_frame &&
-      frame_index - evidence.last_observed_frame > evidence_timeout_frames) {
+  if (evidence.last_observed_time_ns >= 0 && evidence_timeout_ns > 0 &&
+      (observation_time_ns < evidence.last_observed_time_ns ||
+       observation_time_ns - evidence.last_observed_time_ns > evidence_timeout_ns)) {
     evidence.free_observations = 0;
-    evidence.occupied_observations = 0;
   }
-  evidence.last_observed_frame = frame_index;
+  evidence.last_observed_time_ns = observation_time_ns;
+}
+
+inline bool isFreeClearRangeAllowed(
+    const TemporalOccupancyConfig &config, double cell_range_m)
+{
+  return config.clear_max_range_m <= 0.0 || cell_range_m <= config.clear_max_range_m;
 }
 
 inline int8_t observeFreeCell(
     TemporalCellEvidence &evidence,
     int8_t current_value,
     const TemporalOccupancyConfig &config,
-    uint32_t frame_index,
+    int64_t observation_time_ns,
     int8_t free_value,
     int8_t occupied_value)
 {
-  prepareTemporalEvidence(evidence, frame_index, config.evidence_timeout_frames);
+  prepareTemporalEvidence(evidence, observation_time_ns, config.evidence_timeout_ns);
   evidence.free_observations = saturatingIncrement(
       evidence.free_observations, std::max<uint16_t>(1, config.free_clear_count));
-  evidence.occupied_observations = saturatingDecrement(
-      evidence.occupied_observations, config.counter_decay);
 
   // A previously unknown/free cell is free immediately. Only an established
   // occupied cell needs repeated free-space evidence before it is cleared.
   if (current_value != occupied_value ||
       evidence.free_observations >= std::max<uint16_t>(1, config.free_clear_count)) {
-    if (current_value == occupied_value) {
-      evidence.occupied_observations = 0;
-    }
     return free_value;
   }
   return current_value;
@@ -79,23 +77,13 @@ inline int8_t observeOccupiedCell(
     TemporalCellEvidence &evidence,
     int8_t current_value,
     const TemporalOccupancyConfig &config,
-    uint32_t frame_index,
+    int64_t observation_time_ns,
     int8_t occupied_value)
 {
-  prepareTemporalEvidence(evidence, frame_index, config.evidence_timeout_frames);
-  evidence.occupied_observations = saturatingIncrement(
-      evidence.occupied_observations,
-      std::max<uint16_t>(1, config.occupied_confirm_count));
-  evidence.free_observations = saturatingDecrement(
-      evidence.free_observations, config.counter_decay);
-
-  if (current_value == occupied_value ||
-      evidence.occupied_observations >=
-          std::max<uint16_t>(1, config.occupied_confirm_count)) {
-    evidence.free_observations = 0;
-    return occupied_value;
-  }
-  return current_value;
+  prepareTemporalEvidence(evidence, observation_time_ns, config.evidence_timeout_ns);
+  evidence.free_observations = 0;
+  (void)current_value;
+  return occupied_value;
 }
 
 }  // namespace co_3dto2d_mapping::occupancy

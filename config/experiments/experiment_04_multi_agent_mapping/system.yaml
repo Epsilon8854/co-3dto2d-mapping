@@ -1,0 +1,11 @@
+robot_ids:
+- 0
+- 1
+ros_domain_id: 72
+common_frame: r0/odom
+roles:
+- robot
+- fusion
+- all
+raw_icp_input: true
+dynamic_filter_enabled: false

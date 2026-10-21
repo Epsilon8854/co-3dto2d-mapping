@@ -140,15 +140,15 @@ def merge_global_grids(
 
 class ToyRecordRepublisher(Node):
     def __init__(self) -> None:
-        super().__init__("toy_record_republisher")
+        super().__init__("mapping_record_republisher")
         self.declare_parameter("target_frame_id", "odom")
         self.declare_parameter("common_frame_id", "map")
-        self.declare_parameter("alignment_topic", "/toy/initial_xy_alignment")
+        self.declare_parameter("alignment_topic", "/mapping/initial_xy_alignment")
         self.declare_parameter("publish_period_ms", 200)
         self.declare_parameter("occupied_threshold", 50)
         self.declare_parameter("merged_padding_m", 1.0)
         self.declare_parameter("robot_ids", [0, 1])
-        self.declare_parameter("output_prefix", "/toy_record")
+        self.declare_parameter("output_prefix", "/mapping_record")
         self.declare_parameter("robot_odom_frame_format", "r{robot_id}/odom")
         self.declare_parameter("robot_base_frame_format", "r{robot_id}/base_link")
         self.declare_parameter("publish_tf", True)
@@ -210,25 +210,25 @@ class ToyRecordRepublisher(Node):
             )
             self.create_subscription(
                 OccupancyGrid,
-                f"/r{robot_id}/toy/local_occupancy",
+                f"/r{robot_id}/mapping/local_occupancy",
                 lambda msg, rid=robot_id: self.local_map_callback(msg, rid),
                 10,
             )
             self.create_subscription(
                 OccupancyGrid,
-                f"/r{robot_id}/toy/global_occupancy",
+                f"/r{robot_id}/mapping/global_occupancy",
                 lambda msg, rid=robot_id: self.global_map_callback(msg, rid),
                 10,
             )
             self.create_subscription(
                 PointCloud2,
-                f"/r{robot_id}/toy/slice_kept_points",
+                f"/r{robot_id}/mapping/slice_kept_points",
                 lambda msg, rid=robot_id: self.slice_kept_points_callback(msg, rid),
                 10,
             )
             self.create_subscription(
                 PointCloud2,
-                f"/r{robot_id}/toy/slice_rejected_points",
+                f"/r{robot_id}/mapping/slice_rejected_points",
                 lambda msg, rid=robot_id: self.slice_rejected_points_callback(msg, rid),
                 10,
             )
@@ -258,7 +258,7 @@ class ToyRecordRepublisher(Node):
             self.publish_period_ms / 1000.0, self.publish_outputs
         )
         self.get_logger().info(
-            "Toy record republisher started. output_prefix=%s common_frame=%s period=%dms publish_tf=%s publish_merged_global=%s"
+            "Mapping record republisher started. output_prefix=%s common_frame=%s period=%dms publish_tf=%s publish_merged_global=%s"
             % (
                 self.output_prefix,
                 self.common_frame_id,

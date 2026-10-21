@@ -16,15 +16,15 @@ raw cloud + filtered IMU + raw odom
      one shared floor observation
         |                       |
         v                       v
-plane-height obstacle cloud   mapping/floor_odometry
+mapping/plane_height_filtered  mapping/floor_based_odometry
         |                       |
         +-----------+-----------+
                     v
              occupancy mapper
-      local-window x/y/yaw refinement
+      optional local-window x/y/yaw refinement
                     |
                     v
-           toy/corrected_odometry
+           mapping/occupancy_mapper_odometry
            local/global occupancy
 ```
 
@@ -54,8 +54,8 @@ IMU-constrained RANSAC estimator for comparison.
 `ground_plane_pose_enabled` is the integration switch.
 
 - `true`: the shared floor state replaces `z/roll/pitch` before occupancy
-  projection; `x/y/yaw` remain from odometry and the mapper's bounded local ICP.
-- `false`: raw odometry is passed through on `mapping/floor_odometry`; the same
+  projection; `x/y/yaw` remain from `/rN/odom` and optional mapper local ICP.
+- `false`: raw odometry is passed through on `mapping/floor_based_odometry`; the same
   plane-height-filtered cloud is retained so the map-projection state is the
   controlled variable.
 
@@ -102,10 +102,10 @@ bash scripts/run_s3ev1_mapping.sh \
 Useful diagnostics:
 
 ```bash
-ros2 topic echo /toy/place_recognition/status
-ros2 topic echo --once /toy/initial_xy_alignment
-ros2 topic echo --once /r0/mapping/floor_odometry
-ros2 topic echo --once /r0/toy/corrected_odometry
+ros2 topic echo /mapping/place_recognition/status
+ros2 topic echo --once /mapping/initial_xy_alignment
+ros2 topic echo --once /r0/mapping/floor_based_odometry
+ros2 topic echo --once /r0/mapping/occupancy_mapper_odometry
 ros2 run tf2_ros tf2_echo map r1/odom
 ```
 

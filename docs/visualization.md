@@ -13,8 +13,8 @@ rviz2 -d install/co_3dto2d_mapping/share/co_3dto2d_mapping/rviz/two_robot_mappin
 
 The default enabled layers are:
 
-- `/toy_record/merged_global_occupancy`
-- `/toy_record/r0/odom` and `/toy_record/r1/odom` (ground-fused pose when fresh)
+- `/mapping_record/merged_global_occupancy`
+- `/mapping_record/r0/odom` and `/mapping_record/r1/odom` (ground-fused pose when fresh)
 - `/r0/mapping/plane_height_filtered`
 - `/r1/mapping/plane_height_filtered`
 - `r0/base_link` and `r1/base_link` axes
@@ -25,7 +25,7 @@ QoS, matching their sensor-data publishers.
 
 Raw mapping clouds and legacy integrated endpoint clouds remain available as
 disabled diagnostic layers. Enabling both raw and filtered clouds is useful for
-checking the 0.05-1.00 m plane-relative band.
+checking the configured plane-relative band. Experiment 1 uses 0.05-1.21 m.
 
 ### Single robot
 
@@ -33,9 +33,9 @@ checking the 0.05-1.00 m plane-relative band.
 rviz2 -d install/co_3dto2d_mapping/share/co_3dto2d_mapping/rviz/single_robot_mapping.rviz
 ```
 
-The main odometry display uses `/r0/toy/corrected_odometry`. Its `Axes` shape
-shows the final roll/pitch/yaw directly from the message. Raw RTAB-Map odometry
-and planar x/y/yaw odometry are retained as disabled comparison layers.
+The main odometry display uses `/r0/mapping/occupancy_mapper_odometry`. Raw
+RTAB-Map odometry `/r0/odom` and the floor-based pose
+`/r0/mapping/floor_based_odometry` are retained as separate comparison layers.
 
 ## Rerun
 
@@ -53,7 +53,7 @@ alignment. It therefore visualizes:
 - plane-relative obstacle clouds,
 - per-robot and merged occupancy.
 
-The old `/toy_record/rN/slice_*_points` views are disabled by default because
+The old `/mapping_record/rN/slice_*_points` views are disabled by default because
 they are mapper-global debug endpoints and may be confusing beside the final
 pose-fused local cloud. They can be restored in `config/rerun.yaml`:
 

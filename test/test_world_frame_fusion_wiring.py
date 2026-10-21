@@ -15,8 +15,8 @@ def test_public_two_live_launch_selects_fixed_occupancy_alignment():
     assert "_BASE.generate_launch_description().entities" in wrapper
     assert 'executable="inter_robot_place_alignment.py"' in implementation
     assert '"config", "place_recognition.yaml"' in implementation
-    assert '"robot0_odom_topic": "/r0/toy/corrected_odometry"' in implementation
-    assert '"robot1_odom_topic": "/r1/toy/corrected_odometry"' in implementation
+    assert '"robot0_odom_topic": "/r0/mapping/occupancy_mapper_odometry"' in implementation
+    assert '"robot1_odom_topic": "/r1/mapping/occupancy_mapper_odometry"' in implementation
     assert "_BASE.Node =" not in wrapper
     assert "co_3dto2d_mapping/inter_robot_place_alignment.py" in cmake
 
@@ -26,8 +26,8 @@ def test_combined_bag_launch_uses_profile_then_explicit_overrides():
         PACKAGE / "launch" / "two_live_combined_bag_mapping.launch.py"
     ).read_text()
     assert 'executable="inter_robot_place_alignment.py"' in text
-    assert '"robot0_odom_topic": "/r0/toy/corrected_odometry"' in text
-    assert '"robot1_odom_topic": "/r1/toy/corrected_odometry"' in text
+    assert '"robot0_odom_topic": "/r0/mapping/occupancy_mapper_odometry"' in text
+    assert '"robot1_odom_topic": "/r1/mapping/occupancy_mapper_odometry"' in text
     assert "alignment_parameters = [place_config_file]" in text
     assert "alignment_parameters.append(alignment_config_file)" in text
     assert "alignment_parameters.append(alignment_overrides)" in text
@@ -52,10 +52,10 @@ def test_s3e_profile_selects_single_floor_and_stricter_fixed_alignment():
 
     assert mapping["ground_plane_estimation_mode"] == "single_floor"
     assert mapping["ground_plane_planar_odometry_topic"] == "odom"
-    assert mapping["ground_plane_output_odometry_topic"] == "mapping/floor_odometry"
-    assert mapping["corrected_odometry_topic"] == "toy/corrected_odometry"
-    assert alignment["robot0_odom_topic"] == "/r0/toy/corrected_odometry"
-    assert alignment["robot1_odom_topic"] == "/r1/toy/corrected_odometry"
+    assert mapping["ground_plane_output_odometry_topic"] == "mapping/floor_based_odometry"
+    assert mapping["corrected_odometry_topic"] == "mapping/occupancy_mapper_odometry"
+    assert alignment["robot0_odom_topic"] == "/r0/mapping/occupancy_mapper_odometry"
+    assert alignment["robot1_odom_topic"] == "/r1/mapping/occupancy_mapper_odometry"
     assert alignment["stationary_keyframe_period_sec"] >= 3600.0
     assert alignment["consensus_min_measurements"] >= 4
     assert alignment["consensus_min_distinct_keyframes"] >= 2

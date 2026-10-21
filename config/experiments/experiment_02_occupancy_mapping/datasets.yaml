@@ -1,0 +1,3 @@
+# Stable dataset aliases for Experiment 2 replay. Paths point to rosbag2 directories.
+airoom: outputs/experiment_01_ground_plane/captures/airoom_20261008_231538_796047065/airoom_20261008_231538_796047065
+hallway: outputs/experiment_01_ground_plane/captures/dynamic_long_seq_hallway_20261011_213549/dynamic_long_seq_hallway_20261011_213549

@@ -2,7 +2,7 @@
 
 ## Why the object remained in the default RViz view
 
-The two-live script opens RViz with `/toy_record/merged_global_occupancy`
+The two-live script opens RViz with `/mapping_record/merged_global_occupancy`
 enabled. The old merger rebuilt that topic from the two persistent per-robot
 global maps and resolved every free/occupied conflict as occupied. Consequently,
 a cell that remained occupied in either robot's old global map could never be
@@ -11,8 +11,8 @@ cleared by fresh free-space observations from the other robot.
 The per-robot temporal filter and the merged-map filter solve different
 problems:
 
-- `/rN/toy/global_occupancy` removes trails observed again by robot `N`;
-- `/toy_record/merged_global_occupancy` must also accept fresh observations from
+- `/rN/mapping/global_occupancy` removes trails observed again by robot `N`;
+- `/mapping_record/merged_global_occupancy` must also accept fresh observations from
   either robot without re-inserting the other robot's stale global cell.
 
 ## New merged-map behavior
@@ -21,7 +21,7 @@ The executable name remains `record_republisher.py`, so existing launch files
 and the run script do not change. Its installed implementation now:
 
 1. uses each per-robot global map at most once as startup bootstrap data;
-2. consumes `/r0/toy/local_occupancy` and `/r1/toy/local_occupancy` as
+2. consumes `/r0/mapping/local_occupancy` and `/r1/mapping/local_occupancy` as
    current-frame observation grids;
 3. ignores duplicate local-grid publications with the same sensor timestamp;
 4. transforms robot 1 observations through the current inter-robot alignment;

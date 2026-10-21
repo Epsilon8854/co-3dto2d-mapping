@@ -82,14 +82,14 @@ def test_rviz_presets_show_plane_cloud_and_final_ground_fused_pose():
     two = (PACKAGE / "rviz" / "two_robot_mapping.rviz").read_text()
 
     assert "/r0/mapping/plane_height_filtered" in single
-    assert "/r0/toy/corrected_odometry" in single
+    assert "/r0/mapping/occupancy_mapper_odometry" in single
     assert "Plane-Relative Obstacle Cloud (0.05-1.00m)" in single
     assert "Reliability Policy: Best Effort" in single
     assert "Pitch: 1.05" in single
 
     for robot_id in (0, 1):
         assert f"/r{robot_id}/mapping/plane_height_filtered" in two
-        assert f"/toy_record/r{robot_id}/odom" in two
+        assert f"/mapping_record/r{robot_id}/odom" in two
         assert f"Reference Frame: r{robot_id}/base_link" in two
     assert two.count("Reliability Policy: Best Effort") >= 4
     assert "Fixed Frame: map" in two

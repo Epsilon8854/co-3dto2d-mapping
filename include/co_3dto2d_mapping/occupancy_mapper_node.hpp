@@ -7,10 +7,14 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,6 +26,7 @@
 #include <message_filters/synchronizer.h>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rmw/qos_profiles.h>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -33,25 +38,34 @@
 #include "co_3dto2d_mapping/occupancy_grid_utils.hpp"
 #include "co_3dto2d_mapping/occupancy_point_filter.hpp"
 #include "co_3dto2d_mapping/planar_icp.hpp"
+#include "co_3dto2d_mapping/local_submap_registration.hpp"
+#include "co_3dto2d_mapping/local_pose_graph.hpp"
+#include "co_3dto2d_mapping/occupancy_line_registration.hpp"
 #include "co_3dto2d_mapping/temporal_occupancy.hpp"
 
 class ToyOccupancyMapper : public rclcpp::Node
 {
 public:
-  ToyOccupancyMapper() : Node("toy_occupancy_mapper")
+  ToyOccupancyMapper() : Node("occupancy_mapper")
   {
     declareMappingParameters();
     declareDynamicFilterParameters();
     declareIcpParameters();
     readParameters();
     validateParameters();
+    initializeLocalSubmapRegistration();
+    initializeLocalPoseGraph();
+    initializeLocalLinePoseGraph();
+    initializeLocalPhtSubmapPoseGraph();
 
-    local_pub_ = create_publisher<nav_msgs::msg::OccupancyGrid>("toy/local_occupancy", 10);
-    global_pub_ = create_publisher<nav_msgs::msg::OccupancyGrid>("toy/global_occupancy", 10);
+    local_pub_ = create_publisher<nav_msgs::msg::OccupancyGrid>("mapping/local_occupancy", 10);
+    global_pub_ = create_publisher<nav_msgs::msg::OccupancyGrid>("mapping/global_occupancy", 10);
     kept_points_pub_ =
-        create_publisher<sensor_msgs::msg::PointCloud2>("toy/slice_kept_points", 10);
+        create_publisher<sensor_msgs::msg::PointCloud2>("mapping/slice_kept_points", 10);
     rejected_points_pub_ =
-        create_publisher<sensor_msgs::msg::PointCloud2>("toy/slice_rejected_points", 10);
+        create_publisher<sensor_msgs::msg::PointCloud2>("mapping/slice_rejected_points", 10);
+    local_submap_path_pub_ = create_publisher<nav_msgs::msg::Path>(
+        "mapping/debug/local_submap_corrected_odometry_path", 10);
     if (publish_corrected_odometry_) {
       corrected_odom_pub_ = create_publisher<nav_msgs::msg::Odometry>(
           corrected_odometry_topic_, 10);
@@ -81,10 +95,10 @@ public:
 
     RCLCPP_INFO(
         get_logger(),
-        "Toy occupancy mapper started. scan=%s odom=%s resolution=%.3f local_size=%.2f "
+        "Occupancy mapper started. scan=%s odom=%s resolution=%.3f local_size=%.2f "
         "z=[%.2f, %.2f] slice_frame=%s invert_z_slice=%s local_frame=%s "
-        "raycast=%s dynamic_filter=%s free_clear=%u occupied_confirm=%u "
-        "local_window_icp=%s window=%d",
+        "raycast=%s dynamic_filter=%s free_clear=%u timeout=%.2fs clear_range=%.2fm "
+        "local_window_icp=%s window=%d pht_submap=%s mode=%s",
         scan_cloud_topic_.c_str(), odom_topic_.c_str(), resolution_, local_map_size_m_,
         z_min_, z_max_,
         slice_in_global_frame_ ? "global" :
@@ -93,8 +107,11 @@ public:
         enable_raycast_free_space_ ? "true" : "false",
         dynamic_filter_enabled_ ? "true" : "false",
         static_cast<unsigned>(temporal_config_.free_clear_count),
-        static_cast<unsigned>(temporal_config_.occupied_confirm_count),
-        enable_local_window_icp_ ? "true" : "false", icp_window_size_);
+        static_cast<double>(temporal_config_.evidence_timeout_ns) / 1e9,
+        temporal_config_.clear_max_range_m,
+        enable_local_window_icp_ ? "true" : "false", icp_window_size_,
+        enable_local_pht_submap_pose_graph_ ? "true" : "false",
+        local_pht_submap_pose_graph_mode_.c_str());
   }
 
 private:
@@ -138,12 +155,29 @@ private:
     std::vector<Point2> scan_points;
   };
 
+  struct PendingLocalLineVisualization
+  {
+    bool ready = false;
+    uint64_t frame = 0;
+    builtin_interfaces::msg::Time stamp;
+    Pose2 raw;
+    Pose2 optimized;
+    co_3dto2d_mapping::submap::OccupancyPatch patch;
+    std::vector<co_3dto2d_mapping::line_registration::LineSegment> lines;
+    int accepted = 0;
+    std::vector<std::string> candidates;
+  };
+
 
   // The implementation is split by concern so parameter handling, scan matching,
   // and occupancy integration can be reviewed and tested independently.
 #include "co_3dto2d_mapping/occupancy_mapper/parameters.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/geometry.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/local_window_icp.inc"
+#include "co_3dto2d_mapping/occupancy_mapper/local_submap_registration.inc"
+#include "co_3dto2d_mapping/occupancy_mapper/local_pose_graph.inc"
+#include "co_3dto2d_mapping/occupancy_mapper/local_line_pose_graph.inc"
+#include "co_3dto2d_mapping/occupancy_mapper/local_pht_submap_pose_graph.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/sensor_and_local_grid.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/global_grid.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/state.inc"

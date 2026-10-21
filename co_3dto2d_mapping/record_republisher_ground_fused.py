@@ -27,7 +27,7 @@ class GroundFusedTemporalRecordRepublisher(TemporalToyRecordRepublisher):
         self.declare_parameter("prefer_ground_fused_odometry", True)
         self.declare_parameter(
             "ground_fused_odometry_topic_format",
-            "/r{robot_id}/toy/corrected_odometry",
+            "/r{robot_id}/mapping/occupancy_mapper_odometry",
         )
         # This timeout uses receipt wall/ROS time. Three seconds is long enough
         # for deliberately slowed combined-bag replay while still preventing a

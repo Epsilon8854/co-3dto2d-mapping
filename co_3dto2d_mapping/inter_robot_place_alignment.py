@@ -58,13 +58,13 @@ from co_3dto2d_mapping.se2_map_registration import (
 
 PARAMETER_DEFAULTS = {
     # Topics and frame contract.
-    "robot0_map_topic": "/r0/toy/global_occupancy",
-    "robot1_map_topic": "/r1/toy/global_occupancy",
-    "robot0_odom_topic": "/r0/toy/planar_odometry",
-    "robot1_odom_topic": "/r1/toy/planar_odometry",
+    "robot0_map_topic": "/r0/mapping/global_occupancy",
+    "robot1_map_topic": "/r1/mapping/global_occupancy",
+    "robot0_odom_topic": "/r0/mapping/occupancy_mapper_odometry",
+    "robot1_odom_topic": "/r1/mapping/occupancy_mapper_odometry",
     "robot_odom_frame_format": "r{robot_id}/odom",
-    "alignment_topic": "/toy/initial_xy_alignment",
-    "status_topic": "/toy/place_recognition/status",
+    "alignment_topic": "/mapping/initial_xy_alignment",
+    "status_topic": "/mapping/place_recognition/status",
     "target_frame_id": "map",
     "source_frame_id": "r1/odom",
     "strict_frame_validation": True,

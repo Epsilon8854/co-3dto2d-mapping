@@ -83,8 +83,8 @@ source install/local_setup.bash
 ```bash
 ros2 param get /r0/occupancy_mapper dynamic_filter_enabled
 ros2 param get /r1/occupancy_mapper dynamic_filter_enabled
-ros2 param get /toy_record_republisher merged_temporal_filter_enabled
-ros2 param get /toy_record_republisher merged_dynamic_free_clear_count
+ros2 param get /mapping_record_republisher merged_temporal_filter_enabled
+ros2 param get /mapping_record_republisher merged_dynamic_free_clear_count
 ```
 
 각 스위치는 true, 기본 clear count는 10이어야 합니다. merger의 ROS 파라미터 이름은

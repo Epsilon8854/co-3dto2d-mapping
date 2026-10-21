@@ -47,7 +47,7 @@ def generate_launch_description():
     # CO3DTO2D_STARTUP_DIRECT_LIDAR; neither selects an input in this path.
     legacy = (
         ("wait_for_initial_alignment", "false"),
-        ("startup_alignment_topic", "/toy/startup_xy_alignment"),
+        ("startup_alignment_topic", "/mapping/startup_xy_alignment"),
         ("startup_alignment_timeout_sec", "0.0"),
         ("startup_alignment_status_period_sec", "2.0"),
         ("startup_alignment_required_consistent_results", "1"),

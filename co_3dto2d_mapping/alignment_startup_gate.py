@@ -15,7 +15,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 class AlignmentStartupGate(Node):
     def __init__(self) -> None:
         super().__init__("alignment_startup_gate")
-        self.declare_parameter("alignment_topic", "/toy/startup_xy_alignment")
+        self.declare_parameter("alignment_topic", "/mapping/startup_xy_alignment")
         self.declare_parameter("robot0_cloud_topic", "/r0/mapping/lidar")
         self.declare_parameter("robot1_cloud_topic", "/r1/mapping/lidar")
         self.declare_parameter("timeout_sec", 0.0)

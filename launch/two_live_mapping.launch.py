@@ -56,6 +56,11 @@ def _robot_actions(context, robot_id, live_launch_path, enable_rear_lidar_filter
         robot_namespace + "/mapping/lidar_unfiltered"
         if enable_rear_lidar_filter else scan_cloud_topic
     )
+    # Keep the rear-filtered cloud for occupancy mapping, while RTAB-Map ICP
+    # consumes the frame-normalized cloud before rear-sector removal.
+    icp_scan_cloud_topic = (
+        lidar_relay_topic if enable_rear_lidar_filter else ""
+    )
     imu_filtered_topic = robot_namespace + "/mapping/imu_filtered"
     imu_filter_raw_frame_topic = imu_filtered_topic + "_raw_frame"
 
@@ -86,7 +91,7 @@ def _robot_actions(context, robot_id, live_launch_path, enable_rear_lidar_filter
         launch_arguments={
             "robot_id": str(robot_id),
             "use_sim_time": "false",
-            "publish_tf_odom": "false",
+            "publish_tf_odom": _value(context, "publish_tf_odom"),
             "publish_sensor_static_tf": _value(context, "publish_sensor_static_tf"),
             "sensor_parent_frame": sensor_parent_frame,
             "sensor_child_frame": sensor_child_frame,
@@ -100,6 +105,7 @@ def _robot_actions(context, robot_id, live_launch_path, enable_rear_lidar_filter
             "sensor_tf_pitch": _value(context, "sensor_tf_pitch_%d" % robot_id),
             "sensor_tf_roll": _value(context, "sensor_tf_roll_%d" % robot_id),
             "expected_update_rate": _value(context, "expected_update_rate"),
+            "icp_topic_queue_size": _value(context, "icp_topic_queue_size"),
             "odometry_config_file": _value(context, "odometry_config_file"),
             "wait_imu_to_init": _value(context, "wait_imu_to_init"),
             "mapping_startup_delay_sec": _value(context, "mapping_startup_delay_sec"),
@@ -110,6 +116,7 @@ def _robot_actions(context, robot_id, live_launch_path, enable_rear_lidar_filter
             "rear_filter_log_period": _value(context, "rear_filter_log_period"),
             "bag_lidar_topic": lidar_relay_topic,
             "scan_cloud_topic": scan_cloud_topic,
+            "icp_scan_cloud_topic": icp_scan_cloud_topic,
             "imu_raw_topic": imu_input_topic,
             "imu_filtered_topic": imu_filtered_topic,
             "imu_input_is_filtered": _value(context, input_prefix + "_imu_input_is_filtered"),
@@ -200,10 +207,10 @@ def launch_setup(context, *args, **kwargs):
         if alignment_config_file:
             parameters.append(alignment_config_file)
         parameters.append({
-            "robot0_map_topic": "/r0/toy/global_occupancy",
-            "robot1_map_topic": "/r1/toy/global_occupancy",
-            "robot0_odom_topic": "/r0/toy/corrected_odometry",
-            "robot1_odom_topic": "/r1/toy/corrected_odometry",
+            "robot0_map_topic": "/r0/mapping/global_occupancy",
+            "robot1_map_topic": "/r1/mapping/global_occupancy",
+            "robot0_odom_topic": "/r0/mapping/occupancy_mapper_odometry",
+            "robot1_odom_topic": "/r1/mapping/occupancy_mapper_odometry",
             "alignment_topic": alignment_topic,
             "target_frame_id": common_frame_id,
             "source_frame_id": "r1/odom",
@@ -224,7 +231,7 @@ def launch_setup(context, *args, **kwargs):
         actions.insert(1, Node(
             package="co_3dto2d_mapping",
             executable="record_republisher.py",
-            name="toy_record_republisher",
+            name="mapping_record_republisher",
             output="screen",
             parameters=[{
                 **merged_dynamic_parameters(_value(context, "occupancy_config_file")),
@@ -263,6 +270,7 @@ def generate_launch_description():
         DeclareLaunchArgument("robot0_imu_input_is_filtered", default_value="false"),
         DeclareLaunchArgument("robot1_imu_input_is_filtered", default_value="false"),
         DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+        DeclareLaunchArgument("icp_topic_queue_size", default_value="1"),
         DeclareLaunchArgument(
             "odometry_config_file",
             default_value=os.path.join(
@@ -275,6 +283,7 @@ def generate_launch_description():
             description="Local sensor warm-up only; never waits for the other robot or alignment.",
         ),
         DeclareLaunchArgument("publish_sensor_static_tf", default_value="true"),
+        DeclareLaunchArgument("publish_tf_odom", default_value="false"),
         DeclareLaunchArgument("enable_rear_lidar_filter", default_value="false"),
         DeclareLaunchArgument("rear_filter_angle_deg", default_value="120.0"),
         DeclareLaunchArgument("rear_filter_axis", default_value="-x"),
@@ -292,7 +301,7 @@ def generate_launch_description():
             )
         ],
         DeclareLaunchArgument("common_frame_id", default_value="map"),
-        DeclareLaunchArgument("alignment_topic", default_value="/toy/initial_xy_alignment"),
+        DeclareLaunchArgument("alignment_topic", default_value="/mapping/initial_xy_alignment"),
         DeclareLaunchArgument("alignment_config_file", default_value=""),
         DeclareLaunchArgument(
             "alignment_startup_delay_sec", default_value="3.0",
@@ -327,7 +336,7 @@ def generate_launch_description():
         ],
         DeclareLaunchArgument("enable_record_republisher", default_value="true"),
         DeclareLaunchArgument("record_publish_period_ms", default_value="200"),
-        DeclareLaunchArgument("record_output_prefix", default_value="/toy_record"),
+        DeclareLaunchArgument("record_output_prefix", default_value="/mapping_record"),
         DeclareLaunchArgument("record_publish_merged_global", default_value="true"),
         DeclareLaunchArgument("occupancy_config_file", default_value=os.path.join(package_share, "config", "occupancy.yaml")),
         OpaqueFunction(function=launch_setup),

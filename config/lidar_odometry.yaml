@@ -4,7 +4,9 @@
     wait_for_transform: 0.1
     qos: 0
     qos_imu: 0
-    deskewing: true
+    # MID-360 Experiment 01 replay: IMU deskewing caused repeated ICP failures
+    # and z-guess divergence. Keep scans in their captured frame by default.
+    deskewing: false
 
 
     # RTAB-Map point-to-plane ICP odometry.

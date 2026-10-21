@@ -35,8 +35,120 @@
 
   bool dynamic_filter_enabled_ = true;
   TemporalOccupancyConfig temporal_config_;
-  uint32_t global_frame_index_ = 0;
   size_t dynamic_cells_cleared_total_ = 0;
+
+  bool enable_local_submap_registration_ = false;
+  double local_submap_registration_radius_m_ = 10.0;
+  double local_submap_min_keyframe_distance_m_ = 0.0;
+  int local_submap_min_target_keyframes_ = 1;
+  double local_submap_keyframe_translation_m_ = 0.50;
+  double local_submap_keyframe_yaw_rad_ = degreesToRadians(5.0);
+  int local_submap_min_direction_bins_ = 2;
+  double local_submap_min_rmse_improvement_m_ = 0.0;
+  double local_submap_correction_gain_ = 1.0;
+  int local_submap_registration_period_frames_ = 2;
+  uint32_t local_submap_registration_frame_index_ = 0;
+  Pose2 last_local_submap_raw_pose_;
+  Pose2 last_local_submap_corrected_pose_;
+  bool has_local_submap_pose_ = false;
+  std::string local_submap_diagnostics_csv_path_;
+  std::unique_ptr<co_3dto2d_mapping::submap::LocalSubmapRegistrar>
+      local_submap_registrar_;
+  Pose2 last_local_submap_keyframe_pose_;
+  bool has_local_submap_keyframe_pose_ = false;
+  std::ofstream local_submap_diagnostics_stream_;
+
+  struct LocalPoseGraphKeyframe
+  {
+    Pose2 raw_pose;
+    co_3dto2d_mapping::submap::OccupancyPatch patch;
+    std::size_t graph_index = 0;
+    uint64_t snapshot_frame = 0;
+  };
+  bool enable_local_pose_graph_ = false;
+  int local_pose_graph_window_size_ = 30;
+  double local_pose_graph_keyframe_translation_m_ = 0.50;
+  double local_pose_graph_keyframe_yaw_rad_ = degreesToRadians(5.0);
+  double local_pose_graph_candidate_min_distance_m_ = 1.0;
+  double local_pose_graph_candidate_radius_m_ = 10.0;
+  int local_pose_graph_max_scan_constraints_ = 2;
+  double local_pose_graph_scan_weight_ = 0.20;
+  std::unique_ptr<co_3dto2d_mapping::pose_graph::LocalPoseGraph> local_pose_graph_;
+  std::vector<LocalPoseGraphKeyframe> local_pose_graph_keyframes_;
+  std::size_t local_pose_graph_last_index_ = 0;
+  Pose2 local_pose_graph_last_raw_pose_;
+  bool has_local_pose_graph_keyframe_ = false;
+  std::string local_pose_graph_diagnostics_csv_path_;
+  std::ofstream local_pose_graph_diagnostics_stream_;
+  std::string local_pose_graph_visualization_dir_;
+  int local_pose_graph_visualization_period_frames_ = 1;
+  uint64_t local_pose_graph_visualization_frame_ = 0;
+  std::ofstream local_pose_graph_snapshots_stream_;
+  std::ofstream local_pose_graph_events_stream_;
+
+  struct LocalLinePoseGraphKeyframe
+  {
+    Pose2 raw_pose;
+    co_3dto2d_mapping::submap::OccupancyPatch patch;
+    std::vector<co_3dto2d_mapping::line_registration::LineSegment> lines;
+    std::size_t graph_index = 0;
+    uint64_t snapshot_frame = 0;
+  };
+  bool enable_local_line_pose_graph_ = false;
+  int local_line_pose_graph_window_size_ = 30;
+  double local_line_pose_graph_keyframe_translation_m_ = 0.50;
+  double local_line_pose_graph_keyframe_yaw_rad_ = degreesToRadians(5.0);
+  double local_line_pose_graph_candidate_min_distance_m_ = 1.0;
+  double local_line_pose_graph_candidate_radius_m_ = 10.0;
+  int local_line_pose_graph_max_scan_constraints_ = 2;
+  double local_line_pose_graph_scan_weight_ = 0.20;
+  std::unique_ptr<co_3dto2d_mapping::pose_graph::LocalPoseGraph> local_line_pose_graph_;
+  std::vector<LocalLinePoseGraphKeyframe> local_line_pose_graph_keyframes_;
+  std::size_t local_line_pose_graph_last_index_ = 0;
+  Pose2 local_line_pose_graph_last_raw_pose_;
+  bool has_local_line_pose_graph_keyframe_ = false;
+  std::string local_line_pose_graph_diagnostics_csv_path_;
+  std::string local_line_pose_graph_visualization_dir_;
+  int local_line_pose_graph_visualization_period_frames_ = 1;
+  uint64_t local_line_pose_graph_visualization_frame_ = 0;
+  std::ofstream local_line_pose_graph_diagnostics_stream_;
+  std::ofstream local_line_pose_graph_snapshots_stream_;
+  std::ofstream local_line_pose_graph_events_stream_;
+  bool local_line_pht_enabled_ = true;
+  co_3dto2d_mapping::line_registration::PhtLineExtractionConfig local_line_pht_config_;
+  PendingLocalLineVisualization pending_local_line_visualization_;
+
+  struct LocalPhtSubmapKeyframe
+  {
+    Pose2 raw_pose;
+    co_3dto2d_mapping::submap::OccupancyPatch patch;
+    std::vector<co_3dto2d_mapping::line_registration::LineSegment> local_lines;
+    std::size_t graph_index = 0;
+    uint64_t snapshot_frame = 0;
+  };
+  bool enable_local_pht_submap_pose_graph_ = false;
+  std::string local_pht_submap_pose_graph_mode_ = "visualization_only";
+  int local_pht_submap_history_keyframes_ = 10;
+  double local_pht_submap_keyframe_translation_m_ = 0.50;
+  double local_pht_submap_keyframe_yaw_rad_ = degreesToRadians(5.0);
+  double local_pht_submap_max_angle_rad_ = degreesToRadians(10.0);
+  double local_pht_submap_max_normal_distance_m_ = 0.35;
+  double local_pht_submap_min_overlap_m_ = 0.50;
+  double local_pht_submap_weight_ = 0.20;
+  int local_pht_submap_apply_frame_ = -1;
+  int local_pht_submap_apply_source_line_ = -1;
+  int local_pht_submap_apply_target_line_ = -1;
+  std::unique_ptr<co_3dto2d_mapping::pose_graph::LocalPoseGraph> local_pht_submap_pose_graph_;
+  std::vector<LocalPhtSubmapKeyframe> local_pht_submap_keyframes_;
+  std::size_t local_pht_submap_last_index_ = 0;
+  Pose2 local_pht_submap_last_raw_pose_;
+  bool has_local_pht_submap_keyframe_ = false;
+  uint64_t local_pht_submap_frame_ = 0;
+  std::string local_pht_submap_diagnostics_csv_path_;
+  std::string local_pht_submap_visualization_dir_;
+  std::ofstream local_pht_submap_diagnostics_stream_;
+  std::ofstream local_pht_submap_snapshots_stream_;
+  std::ofstream local_pht_submap_events_stream_;
 
   bool enable_local_window_icp_ = false;
   int icp_window_size_ = 10;
@@ -63,7 +175,7 @@
   double icp_coarse_rotation_step_rad_ = degreesToRadians(1.0);
   int icp_log_period_ms_ = 2000;
   bool publish_corrected_odometry_ = true;
-  std::string corrected_odometry_topic_ = "toy/corrected_odometry";
+  std::string corrected_odometry_topic_ = "mapping/occupancy_mapper_odometry";
   std::deque<IcpFrame> icp_window_;
   Pose2 last_raw_pose_;
   Pose2 last_corrected_pose_;
@@ -82,6 +194,8 @@
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr kept_points_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr rejected_points_pub_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr corrected_odom_pub_;
+  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr local_submap_path_pub_;
+  nav_msgs::msg::Path local_submap_path_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   builtin_interfaces::msg::Time latest_stamp_;

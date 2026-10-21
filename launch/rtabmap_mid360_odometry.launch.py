@@ -29,11 +29,17 @@ def launch_setup(context, *args, **kwargs):
 
     runtime_parameters = {
         "frame_id": LaunchConfiguration("frame_id").perform(context),
-        "odom_frame_id": LaunchConfiguration("odom_topic").perform(context),
+        # The topic name and the TF parent frame are different concepts.
+        # Keep the TF frame explicit so namespaced robots publish a coherent
+        # rN/odom -> rN/base_link transform.
+        "odom_frame_id": LaunchConfiguration("odom_frame_id").perform(context),
         "publish_tf": LaunchConfiguration("publish_tf").perform(context).lower() == "true",
         "use_sim_time": use_sim_time,
         "expected_update_rate": float(
             LaunchConfiguration("expected_update_rate").perform(context)
+        ),
+        "topic_queue_size": int(
+            LaunchConfiguration("topic_queue_size").perform(context)
         ),
         "wait_imu_to_init": LaunchConfiguration("wait_imu_to_init").perform(
             context
@@ -67,11 +73,13 @@ def generate_launch_description():
             DeclareLaunchArgument("namespace", default_value="/r0"),
             DeclareLaunchArgument("frame_id", default_value="base_link"),
             DeclareLaunchArgument("odom_topic", default_value="odom"),
+            DeclareLaunchArgument("odom_frame_id", default_value="odom"),
             DeclareLaunchArgument("scan_cloud_topic", default_value="/livox/lidar"),
             DeclareLaunchArgument("imu_topic", default_value="/livox/imu"),
             DeclareLaunchArgument("publish_tf", default_value="true"),
             DeclareLaunchArgument("wait_imu_to_init", default_value="true"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+            DeclareLaunchArgument("topic_queue_size", default_value="1"),
             DeclareLaunchArgument("startup_delay_sec", default_value="0.0"),
             DeclareLaunchArgument(
                 "odometry_config_file",

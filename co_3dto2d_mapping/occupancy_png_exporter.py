@@ -32,12 +32,12 @@ class OccupancyPngExporter(Node):
     def __init__(self) -> None:
         super().__init__("occupancy_png_exporter")
         self.declare_parameter("output_directory", "output")
-        self.declare_parameter("robot0_map_topic", "/r0/toy/global_occupancy")
-        self.declare_parameter("robot1_map_topic", "/r1/toy/global_occupancy")
-        self.declare_parameter("merged_map_topic", "/toy_record/merged_global_occupancy")
+        self.declare_parameter("robot0_map_topic", "/r0/mapping/global_occupancy")
+        self.declare_parameter("robot1_map_topic", "/r1/mapping/global_occupancy")
+        self.declare_parameter("merged_map_topic", "/mapping_record/merged_global_occupancy")
         self.declare_parameter("robot0_odom_topic", "/r0/odom")
         self.declare_parameter("robot1_odom_topic", "/r1/odom")
-        self.declare_parameter("merged_alignment_topic", "/toy/startup_xy_alignment")
+        self.declare_parameter("merged_alignment_topic", "/mapping/startup_xy_alignment")
         self.declare_parameter("max_trajectory_points", 5000)
         self.declare_parameter("trajectory_export_period_sec", 1.0)
 

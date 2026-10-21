@@ -1,0 +1,19 @@
+# Offline ICP-input ablation for Experiment 01.
+# The virtual floor is 0.30 m below the LiDAR origin. The retained physical
+# obstacle band is 0.30--1.20 m above that floor (0.00--0.90 m above sensor).
+rear_sector_filter:
+  enabled: true
+  axis: "-x"
+  angle_deg: 120.0
+  min_xy_range_m: 0.0
+
+pre_icp_gravity_height_filter:
+  enabled: true
+  height_reference_mode: fixed_sensor_height
+  sensor_height_m: 0.30
+  floor_relative_min_height_m: 0.30
+  floor_relative_max_height_m: 1.20
+  gravity_aligned_sensor_band_min_m: 0.00
+  gravity_aligned_sensor_band_max_m: 0.90
+  imu_timeout_sec: 0.30
+  min_output_points: 20

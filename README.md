@@ -1,5 +1,24 @@
 # co_3dto2d_mapping
 
+## 현재 실험 4: 두 노트북 설치·실행
+
+- 사용 브랜치: **`features/jeongeon/optimization`** (`jeongoen` 오타 수정).
+- [실험 4 설치·실행 안내](docs/experiment_04_setup.md)를 기준으로 실행합니다.
+- 기존 single-agent pipeline을 유지하고, 시작 정지 구간에서 XY 및 전체 yaw를 검색한 뒤 r1 map을 r0에 고정 정합합니다.
+- 최신 실행기는 `scripts/run_experiment_04_multi_agent_mapping.sh`입니다. 아래의 `two_live_*` 설명은 기존 실행 경로이며, 실험 4와 설정을 혼용하지 않습니다.
+- 소스·config·RViz·설치 스크립트는 Git으로 공유합니다. `outputs/`, rosbag, 지도·보고서 및 build/install/log는 각 노트북에만 보관합니다.
+
+```bash
+git clone --branch features/jeongeon/optimization --single-branch \
+  https://github.com/Epsilon8854/co-3dto2d-mapping.git
+cd co-3dto2d-mapping
+bash scripts/setup_experiment_04_environment.sh
+```
+
+아래 설치 스크립트는 Ubuntu 22.04 / ROS 2 Humble이 설치된 환경에서 의존성을 설치하고 mapping 패키지를 빌드합니다. Livox SDK/driver 및 각 센서의 IP는 위 안내에 따라 별도로 준비합니다. 실제 두 센서의 정합 정확도와 네트워크 처리율은 실증으로 확인해야 합니다.
+
+## 기존 실행 경로 안내
+
 이미 설정된 Livox MID-360의 point cloud와 IMU를 받아 odometry와 2D occupancy grid를 만드는 ROS 2 패키지입니다. C++ mapper, 단일·두 로봇 live mapping, rosbag2 재생, 두 로봇 정렬과 기록 재게시, 단위 테스트를 포함합니다.
 
 이 README는 ROS 2와 Livox 입력 토픽이 이미 준비된 환경에서 단일 로봇 또는 두 로봇 mapping을 실행하는 흐름을 설명합니다. rosbag2는 센서가 없을 때 사용하는 선택 사항입니다. 현재 다중 로봇 구현 범위는 `r0`, `r1`의 **2대**이며, 3대 이상의 임의 N대 구성은 지원하지 않습니다.
@@ -20,7 +39,7 @@
 | --- | --- |
 | `co_3dto2d_mapping` | 센서 토픽을 받아 IMU filtering, RTAB-Map ICP odometry, occupancy mapping을 실행합니다. |
 | `live_mapping.launch.py` | 한 대의 live 센서로 mapping pipeline을 실행합니다. 기본 `use_sim_time`은 `false`입니다. |
-| `two_live_mapping.launch.py` | 두 대의 live 센서를 `/r0`, `/r1` pipeline에 연결하고 초기 XY ICP 정렬, 공통 `map` TF, `/toy_record` 재게시와 merged occupancy를 실행합니다. |
+| `two_live_mapping.launch.py` | 두 대의 live 센서를 `/r0`, `/r1` pipeline에 연결하고 초기 XY ICP 정렬, 공통 `map` TF, `/mapping_record` 재게시와 merged occupancy를 실행합니다. |
 | `single_bag_mapping.launch.py` | rosbag2 한 개를 재생하며 mapping pipeline을 실행합니다. bag mode는 선택 사항입니다. |
 | `two_bag_mapping.launch.py` | rosbag2 두 개를 `/r0`, `/r1`로 재생하고 두 로봇의 초기 XY 정렬과 결과 병합을 실행합니다. |
 
@@ -35,8 +54,8 @@
 | Mapping LiDAR | 입력 토픽 사용 | `/r0/mapping/lidar`, `/r1/mapping/lidar` | 재생·필터 설정에 따름 |
 | Filtered IMU | `/livox/imu_filtered` | `/r0/mapping/imu_filtered`, `/r1/mapping/imu_filtered` | `/livox/imu_filtered` |
 | Odometry | `/r0/odom` | `/r0/odom`, `/r1/odom` | `/r0/odom` |
-| Occupancy | `/r0/toy/local_occupancy`, `/r0/toy/global_occupancy` | `/r0/toy/*`, `/r1/toy/*` | 단일 Live와 같은 토픽 |
-| 정렬·병합 | - | `/toy/initial_xy_alignment`, `/toy_record/merged_global_occupancy` | - |
+| Occupancy | `/r0/mapping/local_occupancy`, `/r0/mapping/global_occupancy` | `/r0/mapping/*`, `/r1/mapping/*` | 단일 Live와 같은 토픽 |
+| 정렬·병합 | - | `/mapping/initial_xy_alignment`, `/mapping_record/merged_global_occupancy` | - |
 | Frame | `base_link`, `livox_frame`, `odom` | `map -> rN/odom -> rN/base_link -> rN/livox_frame` | `base_link`, `livox_frame`, `odom` |
 
 ## 1. mapping 패키지 clone과 빌드
@@ -44,7 +63,7 @@
 이 저장소를 clone하고 저장소 루트에서 직접 빌드합니다.
 
 ```bash
-git clone https://github.com/Epsilon8854/co-3dto2d-mapping.git ~/co_3dto2d_mapping
+git clone --branch features/jeongeon/optimization --single-branch https://github.com/Epsilon8854/co-3dto2d-mapping.git ~/co_3dto2d_mapping
 cd ~/co_3dto2d_mapping
 # rosdep을 아직 초기화하지 않은 노트북에서만 sudo rosdep init을 실행합니다.
 # 이미 초기화되어 있으면 이 줄을 건너뜁니다.
@@ -124,7 +143,7 @@ ros2 launch co_3dto2d_mapping live_mapping.launch.py
 
 ### 2.2 두 로봇 live mode
 
-`two_live_mapping.launch.py`는 기존 두 bag mode와 같은 `/r0`, `/r1` mapping pipeline, 초기 XY ICP 정렬, `/toy_record` 재게시와 merged occupancy 구성을 실시간 LiDAR·IMU 입력에 연결합니다. 분산 실행에서는 각 노트북이 자기 pipeline 하나만 실행하고, 한 노트북만 정렬·병합을 담당합니다.
+`two_live_mapping.launch.py`는 기존 두 bag mode와 같은 `/r0`, `/r1` mapping pipeline, 초기 XY ICP 정렬, `/mapping_record` 재게시와 merged occupancy 구성을 실시간 LiDAR·IMU 입력에 연결합니다. 분산 실행에서는 각 노트북이 자기 pipeline 하나만 실행하고, 한 노트북만 정렬·병합을 담당합니다.
 
 #### 센서 토픽 준비
 
@@ -182,7 +201,7 @@ ros2 launch co_3dto2d_mapping two_live_mapping.launch.py
 실행합니다. 각 스크립트는 해당 노트북의 Livox driver와 로컬 mapping pipeline
 하나만 시작하므로 `--mapping-host` 없이도 자기 `/rN/odom`을 publish합니다.
 두 노트북 중 정확히 한 곳에만 `--mapping-host`를 지정하면 그 노트북이 양쪽
-odom·occupancy를 구독해 정렬, `/toy_record` 재게시, merged occupancy와 RViz를
+odom·occupancy를 구독해 정렬, `/mapping_record` 재게시, merged occupancy와 RViz를
 추가로 실행합니다.
 
 ```bash
@@ -198,8 +217,8 @@ bash scripts/run_two_mid360_2d_mapping.sh --robot-number 2 --mapping-host
 `--mapping-host`는 어느 노트북에 지정해도 되지만 두 곳에서 동시에 지정하면
 정렬·병합 node와 출력 토픽이 중복되므로 한 곳에서만 사용합니다. DDS graph에는
 양쪽 raw topic이 모두 보이지만 각 노트북의 local pipeline은 자기 `/rN/livox/*`
-만 소비합니다. mapping host는 최신 `/r0/toy/global_occupancy`,
-`/r1/toy/global_occupancy`, `/toy_record/merged_global_occupancy`를 각각
+만 소비합니다. mapping host는 최신 `/r0/mapping/global_occupancy`,
+`/r1/mapping/global_occupancy`, `/mapping_record/merged_global_occupancy`를 각각
 `results/<YYYYmmdd_HHMMSS_nanoseconds>/output/` 아래에 저장합니다. 기본 occupancy
 PNG(`r0_global_occupancy.png`, `r1_global_occupancy.png`,
 `merged_global_occupancy.png`)와 함께 궤적을 겹친 RGB PNG
@@ -260,17 +279,17 @@ ros2 launch co_3dto2d_mapping two_live_mapping.launch.py \
 ```text
 /r0/odom
 /r1/odom
-/r0/toy/local_occupancy
-/r1/toy/local_occupancy
-/r0/toy/global_occupancy
-/r1/toy/global_occupancy
-/toy/initial_xy_alignment
-/toy_record/r0/*
-/toy_record/r1/*
-/toy_record/merged_global_occupancy
+/r0/mapping/local_occupancy
+/r1/mapping/local_occupancy
+/r0/mapping/global_occupancy
+/r1/mapping/global_occupancy
+/mapping/initial_xy_alignment
+/mapping_record/r0/*
+/mapping_record/r1/*
+/mapping_record/merged_global_occupancy
 ```
 
-기본 TF 트리는 `map -> r0/odom -> r0/base_link -> r0/livox_frame`과 `map -> r1/odom -> r1/base_link -> r1/livox_frame`입니다. r1의 `map` 정렬은 두 global occupancy에 충분한 공통 구조가 있고 ICP가 유효한 결과를 얻은 뒤 publish됩니다. 반복적이거나 대칭적인 환경에서는 `/toy/initial_xy_alignment`와 병합 지도를 반드시 확인합니다.
+기본 TF 트리는 `map -> r0/odom -> r0/base_link -> r0/livox_frame`과 `map -> r1/odom -> r1/base_link -> r1/livox_frame`입니다. r1의 `map` 정렬은 두 global occupancy에 충분한 공통 구조가 있고 ICP가 유효한 결과를 얻은 뒤 publish됩니다. 반복적이거나 대칭적인 환경에서는 `/mapping/initial_xy_alignment`와 병합 지도를 반드시 확인합니다.
 
 외부 `robot_state_publisher` 또는 sensor driver가 이미 로봇별 static TF를 제공하면 중복 발행을 끕니다.
 
@@ -341,7 +360,7 @@ ros2 launch co_3dto2d_mapping two_bag_mapping.launch.py \
   robot_delay_s:=20.0
 ```
 
-두 bag launch는 `/r0`과 `/r1` pipeline을 실행하고 초기 XY 정렬을 계산합니다. 기본 설정에서는 `/toy_record/*` 토픽을 publish하며, 결과는 [두 로봇 RViz](#두-로봇-live-mode-및-bag-mode)에서 확인할 수 있습니다.
+두 bag launch는 `/r0`과 `/r1` pipeline을 실행하고 초기 XY 정렬을 계산합니다. 기본 설정에서는 `/mapping_record/*` 토픽을 publish하며, 결과는 [두 로봇 RViz](#두-로봇-live-mode-및-bag-mode)에서 확인할 수 있습니다.
 
 두 bag 실행에서는 `robot_delay_s`로 두 번째 bag의 시작 지연을 조정하고, `alignment_*`로 초기 XY 정렬 조건을 조정합니다. merged map을 저장하거나 output prefix를 바꾸려면 다음 옵션을 사용합니다.
 ```bash
@@ -352,7 +371,7 @@ ros2 launch co_3dto2d_mapping two_bag_mapping.launch.py \
   alignment_voxel_size:=0.05 \
   alignment_min_fitness:=0.05 \
   alignment_max_rmse:=0.40 \
-  record_output_prefix:=/toy_record \
+  record_output_prefix:=/mapping_record \
   record_publish_merged_global:=true
 ```
 

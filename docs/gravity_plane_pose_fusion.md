@@ -2,23 +2,24 @@
 
 현재 mapping의 평면 보정 결과는 다음 두 단계로 나뉩니다.
 
-1. `occupancy_mapper`의 local-window ICP가 `x`, `y`, `yaw`를 계산하여
-   `/rN/toy/planar_odometry`로 publish합니다.
+1. RTAB-Map `icp_odometry`가 LiDAR scan matching으로 local pose를 `/rN/odom`에 publish합니다.
 2. `gravity_plane_pose_fusion.py`가 같은 시각의 PointCloud2와 filtered IMU를 사용해
-   지면 평면을 검출하고, 그 평면에서 얻은 `z`, `roll`, `pitch`를 결합하여
-   `/rN/toy/corrected_odometry`로 publish합니다.
+   지면 평면을 검출하고, pose correction이 켜져 있으면 `z`, `roll`, `pitch`를 적용해
+   `/rN/mapping/floor_based_odometry`로 publish합니다. `x`, `y`, `yaw`는 입력에서 유지합니다.
+3. `occupancy_mapper`가 이를 입력으로 사용하고, 선택적으로 local-window ICP를 적용하여
+   `/rN/mapping/occupancy_mapper_odometry` 및 occupancy grid를 publish합니다.
 
 최종 pose의 자유도 출처는 다음과 같습니다.
 
 | 자유도 | 출처 |
 | --- | --- |
-| `x`, `y` | 2D local-window ICP / planar mapping |
-| `yaw` | 2D local-window ICP / planar mapping |
+| `x`, `y` | RTAB-Map local odometry; mapper local-window ICP가 켜지면 추가 보정 가능 |
+| `yaw` | RTAB-Map local odometry; mapper local-window ICP가 켜지면 추가 보정 가능 |
 | `z` | 검출된 지면 평면까지의 거리 |
 | `roll`, `pitch` | 검출된 지면 평면의 법선 |
 
-`record_republisher.py` 실행 파일은 최종 `/rN/toy/corrected_odometry`가 한 번이라도
-들어오면 이를 `/toy_record/rN/odom`과 TF의 pose 원본으로 사용합니다. 최종 pose가
+`record_republisher.py` 실행 파일은 mapper의 `/rN/mapping/occupancy_mapper_odometry`가 한 번이라도
+들어오면 이를 `/mapping_record/rN/odom`과 TF의 pose 원본으로 사용합니다. 최종 pose가
 아직 없을 때만 `/rN/odom`을 startup fallback으로 사용합니다.
 
 ## 좌표와 수식
@@ -154,10 +155,10 @@ ground_plane_filter_gain: 0.25
 ## 확인
 
 ```bash
-ros2 topic echo /r0/toy/planar_odometry --once
-ros2 topic echo /r0/toy/corrected_odometry --once
-ros2 topic echo /r1/toy/planar_odometry --once
-ros2 topic echo /r1/toy/corrected_odometry --once
+ros2 topic echo /r0/mapping/floor_based_odometry --once
+ros2 topic echo /r0/mapping/occupancy_mapper_odometry --once
+ros2 topic echo /r1/mapping/floor_based_odometry --once
+ros2 topic echo /r1/mapping/occupancy_mapper_odometry --once
 ```
 
 로그에서 다음 항목을 확인합니다.

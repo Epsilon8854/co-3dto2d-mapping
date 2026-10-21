@@ -55,7 +55,7 @@ def _representative_topics() -> dict[str, tuple[str, int]]:
         "/r1/mapping/imu_filtered": ("sensor_msgs/msg/Imu", 3053),
         "/r0/odom": ("nav_msgs/msg/Odometry", 5),
         "/r1/odom": ("nav_msgs/msg/Odometry", 54),
-        "/toy/initial_xy_alignment": (
+        "/mapping/initial_xy_alignment": (
             "geometry_msgs/msg/TransformStamped",
             66,
         ),
@@ -82,7 +82,7 @@ def test_combined_replay_uses_one_player_and_excludes_recorded_outputs(
     assert "/r1/livox/lidar /r1/mapping/imu_filtered" in player
     assert " /r0/odom" not in player
     assert " /r1/odom" not in player
-    assert " /toy/initial_xy_alignment" not in player
+    assert " /mapping/initial_xy_alignment" not in player
     assert " /tf" not in player
 
 

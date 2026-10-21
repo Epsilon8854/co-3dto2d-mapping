@@ -6,8 +6,8 @@ Panels:
       Expanded:
         - /Global Options1
         - /Merged Global Occupancy1
-        - /R0 Final Ground-Fused Odometry1
-        - /R1 Final Ground-Fused Odometry1
+        - /R0 Occupancy Mapper Odometry1
+        - /R1 Occupancy Mapper Odometry1
         - /R0 Plane-Relative Cloud1
         - /R1 Plane-Relative Cloud1
       Splitter Ratio: 0.5
@@ -57,7 +57,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/merged_global_occupancy
+        Value: /mapping_record/merged_global_occupancy
       Update Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -77,7 +77,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/r0/global_occupancy
+        Value: /mapping_record/r0/global_occupancy
       Update Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -97,7 +97,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/r1/global_occupancy
+        Value: /mapping_record/r1/global_occupancy
       Update Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -117,7 +117,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/r0/local_occupancy
+        Value: /mapping_record/r0/local_occupancy
       Update Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -137,7 +137,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/r1/local_occupancy
+        Value: /mapping_record/r1/local_occupancy
       Update Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -165,7 +165,7 @@ Visualization Manager:
         Value: true
       Enabled: true
       Keep: 500
-      Name: R0 Final Ground-Fused Odometry
+      Name: R0 Occupancy Mapper Odometry
       Position Tolerance: 0.03
       Shape:
         Alpha: 1
@@ -182,7 +182,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/r0/odom
+        Value: /mapping_record/r0/odom
       Value: true
     - Angle Tolerance: 0.05
       Class: rviz_default_plugins/Odometry
@@ -203,7 +203,7 @@ Visualization Manager:
         Value: true
       Enabled: true
       Keep: 500
-      Name: R1 Final Ground-Fused Odometry
+      Name: R1 Occupancy Mapper Odometry
       Position Tolerance: 0.03
       Shape:
         Alpha: 1
@@ -220,19 +220,19 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/r1/odom
+        Value: /mapping_record/r1/odom
       Value: true
     - Class: rviz_default_plugins/Axes
       Enabled: true
       Length: 0.8
-      Name: R0 Ground-Fused Base Axes
+      Name: R0 Mapper Base Axes
       Radius: 0.045
       Reference Frame: r0/base_link
       Value: true
     - Class: rviz_default_plugins/Axes
       Enabled: true
       Length: 0.8
-      Name: R1 Ground-Fused Base Axes
+      Name: R1 Mapper Base Axes
       Radius: 0.045
       Reference Frame: r1/base_link
       Value: true
@@ -397,7 +397,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/r0/slice_kept_points
+        Value: /mapping_record/r0/slice_kept_points
       Use Fixed Frame: true
       Use rainbow: false
       Value: false
@@ -430,7 +430,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /toy_record/r1/slice_kept_points
+        Value: /mapping_record/r1/slice_kept_points
       Use Fixed Frame: true
       Use rainbow: false
       Value: false

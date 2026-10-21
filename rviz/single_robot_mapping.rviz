@@ -6,7 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Global Occupancy1
-        - /Final Ground-Fused Odometry1
+        - /Occupancy Mapper Odometry1
         - /Plane-Relative Obstacle Cloud1
       Splitter Ratio: 0.5
     Tree Height: 520
@@ -55,7 +55,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /r0/toy/global_occupancy
+        Value: /r0/mapping/global_occupancy
       Update Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -75,7 +75,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /r0/toy/local_occupancy
+        Value: /r0/mapping/local_occupancy
       Update Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -103,7 +103,7 @@ Visualization Manager:
         Value: true
       Enabled: true
       Keep: 500
-      Name: Final Ground-Fused Odometry
+      Name: Occupancy Mapper Odometry
       Position Tolerance: 0.03
       Shape:
         Alpha: 1
@@ -120,7 +120,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /r0/toy/corrected_odometry
+        Value: /r0/mapping/occupancy_mapper_odometry
       Value: true
     - Angle Tolerance: 0.1
       Class: rviz_default_plugins/Odometry
@@ -141,7 +141,7 @@ Visualization Manager:
         Value: false
       Enabled: false
       Keep: 500
-      Name: Planar x-y-yaw Odometry
+      Name: Floor-Based Odometry (before mapper)
       Position Tolerance: 0.05
       Shape:
         Alpha: 0.8
@@ -158,7 +158,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /r0/toy/planar_odometry
+        Value: /r0/mapping/floor_based_odometry
       Value: false
     - Angle Tolerance: 0.1
       Class: rviz_default_plugins/Odometry
@@ -293,7 +293,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /r0/toy/slice_kept_points
+        Value: /r0/mapping/slice_kept_points
       Use Fixed Frame: true
       Use rainbow: false
       Value: false

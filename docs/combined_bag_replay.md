@@ -14,7 +14,7 @@ startup ICP gate와 plane-height mapping을 사용합니다. 두 로봇은 시�
 - r1 LiDAR
 - r1 IMU
 
-기록된 `/r0/odom`, `/r1/odom`, occupancy, `/toy/initial_xy_alignment`, `/tf`,
+기록된 `/r0/odom`, `/r1/odom`, occupancy, `/mapping/initial_xy_alignment`, `/tf`,
 `/tf_static`은 재생하지 않습니다.
 
 ## 실행
@@ -92,7 +92,7 @@ ICP의 기록 시간 1초 대기와 2초 재시도 주기는 기본 `--rate 0.5`
 ```bash
 ROS_DOMAIN_ID=173 ros2 topic hz /r0/odom
 ROS_DOMAIN_ID=173 ros2 topic hz /r1/odom
-ROS_DOMAIN_ID=173 ros2 topic echo /toy/initial_xy_alignment --once
+ROS_DOMAIN_ID=173 ros2 topic echo /mapping/initial_xy_alignment --once
 ```
 
 실행 로그는 `/tmp/co3dto2d-two-live.*` 아래에 저장됩니다.

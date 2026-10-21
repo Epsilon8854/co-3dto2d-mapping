@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from co_3dto2d_mapping.plane_height_filter import (
+    filter_points_by_fixed_sensor_height,
     filter_points_by_plane_height,
     signed_plane_heights,
 )
@@ -70,3 +71,29 @@ def test_invalid_height_band_is_rejected():
             1.0,
             1.0,
         )
+
+
+def test_fixed_sensor_height_keeps_the_requested_floor_relative_band():
+    """A virtual floor must work even when no observed floor points exist."""
+
+    up = np.asarray([0.0, np.sqrt(0.5), np.sqrt(0.5)])
+    sensor_height_m = 0.30
+    points = np.vstack(
+        [
+            -0.30 * up,  # virtual floor, 0.00 m above floor
+            0.00 * up,  # sensor height, 0.30 m above floor
+            0.90 * up,  # 1.20 m above floor
+            0.91 * up,  # 1.21 m above floor
+        ]
+    )
+
+    result = filter_points_by_fixed_sensor_height(
+        points,
+        up,
+        sensor_height_m,
+        0.30,
+        1.20,
+    )
+
+    assert np.allclose(result.points, points[[1, 2]])
+    assert result.heights_m == pytest.approx([0.0, 0.30, 1.20, 1.21])

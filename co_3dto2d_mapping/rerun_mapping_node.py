@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rerun visualization for the plane-relative, ground-fused mapping pipeline.
 
-The visualization consumes the final per-robot odometry from ``/toy_record``
+The visualization consumes the final per-robot odometry from ``/mapping_record``
 and uses the full quaternion to place the local plane-height-filtered cloud in
 3-D. This avoids the old behavior where only x/y/yaw were visualized and the
 legacy slice clouds could appear detached from the ground-fused pose.
@@ -298,9 +298,9 @@ class RerunMappingNode(Node):
 
     def _setup_subscriptions(self):
         occupancy_topics = (
-            (0, "r0", "/toy_record/r0/global_occupancy"),
-            (1, "r1", "/toy_record/r1/global_occupancy"),
-            (-1, "merged", "/toy_record/merged_global_occupancy"),
+            (0, "r0", "/mapping_record/r0/global_occupancy"),
+            (1, "r1", "/mapping_record/r1/global_occupancy"),
+            (-1, "merged", "/mapping_record/merged_global_occupancy"),
         )
         for robot_id, label, topic in occupancy_topics:
             self.subscriptions.append(
@@ -318,7 +318,7 @@ class RerunMappingNode(Node):
             self.subscriptions.append(
                 self.create_subscription(
                     Odometry,
-                    f"/toy_record/r{robot_id}/odom",
+                    f"/mapping_record/r{robot_id}/odom",
                     lambda msg, rid=robot_id: self._odometry_callback(msg, rid),
                     50,
                 )
@@ -339,7 +339,7 @@ class RerunMappingNode(Node):
                 )
             if self.visualize_legacy_slice_points:
                 for kind in ("kept", "rejected"):
-                    topic = f"/toy_record/r{robot_id}/slice_{kind}_points"
+                    topic = f"/mapping_record/r{robot_id}/slice_{kind}_points"
                     self.subscriptions.append(
                         self.create_subscription(
                             PointCloud2,
@@ -354,7 +354,7 @@ class RerunMappingNode(Node):
         self.subscriptions.append(
             self.create_subscription(
                 TransformStamped,
-                "/toy/initial_xy_alignment",
+                "/mapping/initial_xy_alignment",
                 self._alignment_callback,
                 10,
             )
@@ -405,7 +405,7 @@ class RerunMappingNode(Node):
             if robot_id not in self._missing_pose_warned:
                 self._missing_pose_warned.add(robot_id)
                 self.get_logger().warn(
-                    "Waiting for /toy_record/r%d/odom before visualizing the "
+                    "Waiting for /mapping_record/r%d/odom before visualizing the "
                     "local plane-height cloud." % robot_id
                 )
             return

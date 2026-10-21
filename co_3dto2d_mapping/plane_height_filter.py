@@ -66,9 +66,38 @@ def filter_points_by_plane_height(
     heights = np.full(len(points), np.nan, dtype=np.float64)
     if np.any(finite):
         heights[finite] = signed_plane_heights(points[finite], normal, offset_m)
-    mask = finite & (heights >= min_height_m) & (heights <= max_height_m)
+    # Keep documented inclusive bounds stable after normal-vector rotation.
+    boundary_tolerance_m = 1e-9
+    mask = finite & (heights >= min_height_m - boundary_tolerance_m) & (
+        heights <= max_height_m + boundary_tolerance_m
+    )
     return PlaneHeightFilterResult(
         points=np.ascontiguousarray(points[mask], dtype=np.float64),
         heights_m=heights,
         mask=mask,
+    )
+
+
+def filter_points_by_fixed_sensor_height(
+    points_xyz: np.ndarray,
+    up: Sequence[float],
+    sensor_height_m: float,
+    min_height_m: float,
+    max_height_m: float,
+) -> PlaneHeightFilterResult:
+    """Keep points inside a virtual-floor height band.
+
+    The sensor origin is assumed to be ``sensor_height_m`` above a locally
+    horizontal floor. ``up`` is the gravity-derived up direction in the point
+    cloud frame. No observed floor points are required.
+    """
+
+    if not np.isfinite(float(sensor_height_m)) or sensor_height_m <= 0.0:
+        raise ValueError("sensor_height_m must be positive and finite")
+    return filter_points_by_plane_height(
+        points_xyz,
+        up,
+        sensor_height_m,
+        min_height_m,
+        max_height_m,
     )

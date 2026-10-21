@@ -86,6 +86,9 @@ def robot_actions(context, robot_id, single_launch):
             "rear_filter_log_period": value(context, "rear_filter_log_period"),
             "bag_lidar_topic": lidar_relay,
             "scan_cloud_topic": scan_topic,
+            "icp_scan_cloud_topic": (
+                lidar_relay if boolean(context, "enable_rear_lidar_filter") else ""
+            ),
             "imu_raw_topic": imu_input,
             "imu_filtered_topic": filtered_imu,
             "alignment_required": "false",
@@ -119,10 +122,10 @@ def launch_setup(context, *args, **kwargs):
         package_share, "config", "place_recognition.yaml"
     )
     alignment_overrides = {
-        "robot0_map_topic": "/r0/toy/global_occupancy",
-        "robot1_map_topic": "/r1/toy/global_occupancy",
-        "robot0_odom_topic": "/r0/toy/corrected_odometry",
-        "robot1_odom_topic": "/r1/toy/corrected_odometry",
+        "robot0_map_topic": "/r0/mapping/global_occupancy",
+        "robot1_map_topic": "/r1/mapping/global_occupancy",
+        "robot0_odom_topic": "/r0/mapping/occupancy_mapper_odometry",
+        "robot1_odom_topic": "/r1/mapping/occupancy_mapper_odometry",
         "alignment_topic": alignment_topic,
         "target_frame_id": common_frame,
         "source_frame_id": "r1/odom",
@@ -180,7 +183,7 @@ def launch_setup(context, *args, **kwargs):
         actions.insert(1, Node(
             package="co_3dto2d_mapping",
             executable="record_republisher.py",
-            name="toy_record_republisher",
+            name="mapping_record_republisher",
             output="screen",
             parameters=[{
                 **merged_dynamic_parameters(value(context, "occupancy_config_file")),
@@ -220,7 +223,7 @@ DEFAULTS = {
     "center_box_filter_half_extent_m": "0.80",
     "slice_z_in_cloud_frame": "true",
     "common_frame_id": "map",
-    "alignment_topic": "/toy/initial_xy_alignment",
+    "alignment_topic": "/mapping/initial_xy_alignment",
     "alignment_config_file": "",
     "alignment_startup_delay_sec": "3.0",
     "alignment_z_min": "0.4",
@@ -245,7 +248,7 @@ DEFAULTS = {
     "alignment_initialize_from_centroids": "true",
     "enable_record_republisher": "true",
     "record_publish_period_ms": "200",
-    "record_output_prefix": "/toy_record",
+    "record_output_prefix": "/mapping_record",
     "record_publish_merged_global": "true",
 }
 for robot_id in (0, 1):

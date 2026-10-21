@@ -13,12 +13,15 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc)
 
 ament_python_install_package(${PROJECT_NAME})
 
 add_executable(occupancy_mapper src/occupancy_mapper.cpp)
 target_compile_features(occupancy_mapper PUBLIC cxx_std_17)
 target_include_directories(occupancy_mapper PRIVATE include)
+target_include_directories(occupancy_mapper PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(occupancy_mapper ${OpenCV_LIBS})
 ament_target_dependencies(
   occupancy_mapper
   builtin_interfaces
@@ -61,6 +64,8 @@ install(
 
 install(
   PROGRAMS
+    co_3dto2d_mapping/multi_agent_mapping.py
+    co_3dto2d_mapping/multi_agent_session.py
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
     co_3dto2d_mapping/pointcloud_frame_republisher.py
     co_3dto2d_mapping/imu_frame_republisher.py
@@ -134,6 +139,29 @@ if(BUILD_TESTING)
   )
   target_compile_features(test_planar_icp PUBLIC cxx_std_17)
   target_include_directories(test_planar_icp PRIVATE include)
+
+  ament_add_gtest(
+    test_local_submap_registration
+    test/test_local_submap_registration.cpp
+  )
+  target_compile_features(test_local_submap_registration PUBLIC cxx_std_17)
+  target_include_directories(test_local_submap_registration PRIVATE include)
+
+  ament_add_gtest(
+    test_local_pose_graph
+    test/test_local_pose_graph.cpp
+  )
+  target_compile_features(test_local_pose_graph PUBLIC cxx_std_17)
+  target_include_directories(test_local_pose_graph PRIVATE include)
+
+  ament_add_gtest(
+    test_occupancy_line_registration
+    test/test_occupancy_line_registration.cpp
+  )
+  target_compile_features(test_occupancy_line_registration PUBLIC cxx_std_17)
+  target_include_directories(test_occupancy_line_registration PRIVATE include)
+  target_include_directories(test_occupancy_line_registration PRIVATE ${OpenCV_INCLUDE_DIRS})
+  target_link_libraries(test_occupancy_line_registration ${OpenCV_LIBS})
 
   ament_add_pytest_test(
     test_alignment_utils
@@ -282,6 +310,12 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_dynamic_filter_config
     test/test_dynamic_filter_config.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+  ament_add_pytest_test(
+    test_experiment_timing_monitor
+    test/test_experiment_timing_monitor.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )

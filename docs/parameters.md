@@ -12,40 +12,37 @@
 
 `single_bag_mapping.launch.py`는 `occupancy_config_file`을 `occupancy_mapper`와
 `gravity_plane_pose_fusion.py` 양쪽에 전달하고, 실행마다 달라지는 입력 토픽, frame,
-중간/최종 odometry 토픽만 launch에서 덮어씁니다. 상대 토픽은 노드 namespace 안에서
-해석됩니다. robot 0에서 `toy/corrected_odometry`는
-`/r0/toy/corrected_odometry`입니다.
+바닥 처리 odometry와 mapper odometry 토픽을 launch에서 덮어씁니다. 상대 토픽은 노드
+namespace 안에서 해석됩니다.
 
 ## 현재 pose 흐름
 
 ```text
 /rN/odom
-  RTAB-Map LiDAR odometry
+  RTAB-Map LiDAR local odometry
         │
         ▼
-occupancy_mapper local-window planar ICP
-  x, y, yaw 보정
-        │
-        ▼
-/rN/toy/planar_odometry
-        │
-        ├── /rN/mapping/lidar
-        └── /rN/mapping/imu_filtered
-                  │
-                  ▼
 gravity_plane_pose_fusion.py
-  x, y, yaw: planar odometry
-  z, roll, pitch: IMU 중력 제약 지면 평면
-                  │
-                  ▼
-/rN/toy/corrected_odometry
-                  │
-                  ▼
-/toy_record/rN/odom 및 TF
+  z, roll, pitch: IMU 중력 제약 지면 평면 (on일 때)
+  x, y, yaw: 입력 odometry 유지
+        ├── /rN/mapping/plane_height_filtered
+        ▼
+/rN/mapping/floor_based_odometry
+        │
+        ▼
+occupancy_mapper
+  local-window ICP (enable_local_window_icp=true일 때)
+        ├── /rN/mapping/local_occupancy
+        ├── /rN/mapping/global_occupancy
+        └── /rN/mapping/occupancy_mapper_odometry
+                       │
+                       ▼
+              /mapping_record/rN/odom 및 TF
 ```
 
-평면 검출이 실패하거나 IMU/TF가 준비되지 않으면 최종 노드는 planar odometry를 그대로
-전달합니다. 잘못된 plane을 강제로 pose에 넣지 않는 것이 기본 정책입니다.
+local-window ICP는 현재 기본 off입니다. 평면 검출이 실패하거나 IMU/TF가 준비되지 않으면
+바닥 처리 노드는 입력 odometry를 그대로 전달합니다. 잘못된 plane을 강제로 pose에 넣지
+않는 것이 기본 정책입니다.
 
 ---
 
@@ -60,12 +57,12 @@ gravity_plane_pose_fusion.py
 | `scan_cloud_topic` | `/livox/lidar` | 매핑에 사용할 `PointCloud2`입니다. live 2대에서는 `/rN/mapping/lidar`로 덮어씁니다. |
 | `odom_topic` | `odom` | RTAB-Map odometry 입력입니다. namespace 기준 상대 토픽입니다. |
 | `local_frame_id` | `base_link` | cloud 변환, local map, plane pose의 로봇 기준 frame입니다. |
-| `global_frame_id` | `odom` | global occupancy와 planar odometry의 기준 frame입니다. |
+| `global_frame_id` | `odom` | global occupancy와 mapper odometry의 기준 frame입니다. |
 | `use_odom_header_frame` | `true` | 첫 odometry의 `header.frame_id`를 global frame으로 채택합니다. two-live에서는 보통 false입니다. |
 | `sync_queue_size` | `100` | PointCloud/Odometry approximate-time 동기화 큐입니다. |
 | `transform_cloud_to_local_frame` | `true` | cloud frame이 local frame과 다르면 TF로 점을 변환합니다. TF가 없으면 해당 frame을 건너뜁니다. |
 | `alignment_required` | `false` | true이면 initial alignment를 받기 전 occupancy update를 중단합니다. |
-| `alignment_topic` | `/toy/initial_xy_alignment` | initial `x/y/yaw` alignment 입력입니다. |
+| `alignment_topic` | `/mapping/initial_xy_alignment` | initial `x/y/yaw` alignment 입력입니다. |
 
 ## 1.2 Z slice, 거리, 본체 제거
 
@@ -138,8 +135,8 @@ gravity_plane_pose_fusion.py
 | `icp_coarse_rotation_range_deg` | `3.0` | predicted yaw 주변 coarse 탐색 범위입니다. |
 | `icp_coarse_rotation_step_deg` | `1.0` | coarse yaw step입니다. |
 | `icp_log_period_ms` | `2000` | accept/reject 로그 throttle입니다. |
-| `publish_corrected_odometry` | `true` | planar corrected odometry publish 여부입니다. |
-| `corrected_odometry_topic` | `toy/planar_odometry` (YAML) | mapper의 중간 `x/y/yaw` 결과입니다. 노드 선언 기본값은 `toy/corrected_odometry`지만 현재 pipeline은 plane fusion을 위해 별도 중간 토픽을 사용합니다. |
+| `publish_corrected_odometry` | `true` | mapper odometry publish 여부입니다. |
+| `corrected_odometry_topic` | `mapping/occupancy_mapper_odometry` | occupancy mapper 출력 odometry입니다. local-window ICP를 켜면 `x/y/yaw`가 보정될 수 있습니다. |
 
 ---
 
@@ -151,13 +148,17 @@ gravity_plane_pose_fusion.py
 
 | 파라미터 | 기본값 | 설명 |
 | --- | --- | --- |
-| `ground_plane_pose_enabled` | `true` | false이면 planar odometry를 그대로 최종 토픽으로 전달합니다. |
+| `ground_plane_pose_enabled` | `true` | false이면 입력 odometry를 바닥 처리 토픽으로 그대로 전달합니다. |
 | `ground_plane_pointcloud_topic` | `/livox/lidar` | ground 후보 cloud입니다. launch가 robot별 mapping cloud로 덮어씁니다. |
 | `ground_plane_imu_topic` | `/livox/imu_filtered` | 중력 prior를 얻을 filtered IMU입니다. |
-| `ground_plane_planar_odometry_topic` | `toy/planar_odometry` | `x/y/yaw` 입력입니다. |
-| `ground_plane_output_odometry_topic` | `toy/corrected_odometry` | 최종 6-DoF pose 출력입니다. |
+| `ground_plane_planar_odometry_topic` | `odom` | RTAB-Map local odometry 입력입니다. |
+| `ground_plane_output_odometry_topic` | `mapping/floor_based_odometry` | 바닥 처리 odometry 출력입니다. pose correction off이면 입력 pose를 전달합니다. |
 | `ground_plane_local_frame_id` | `base_link` | plane normal/height를 표현할 로봇 frame입니다. odometry child frame과 일치시키는 것이 안전합니다. |
-| `ground_plane_sync_queue_size` | `30` | cloud/planar odometry 동기화 큐입니다. |
+| `ground_plane_height_reference_mode` | `estimated_plane` | `estimated_plane`은 cloud 바닥면을, `fixed_sensor_height`는 IMU up과 실측 장착높이로 가상 바닥을 사용합니다. |
+| `lidar_mount_height_above_floor_m` | `0.30` | LiDAR 원점에서 물리 바닥까지의 실측 수직 거리입니다. 높이 필터가 사용합니다. |
+| `fixed_base_link_height_above_floor_m` | `0.30` | `fixed_height_imu_gravity` 모드에서 고정할 `base_link`의 바닥 기준 높이입니다. |
+| `ground_plane_pose_reference_mode` | `estimated_plane` | `fixed_height_imu_gravity`이면 LiDAR plane fitting 없이 IMU gravity로 roll/pitch를 설정하고 z를 고정합니다. |
+| `ground_plane_sync_queue_size` | `30` | cloud/raw odometry 동기화 큐입니다. |
 | `ground_plane_sync_slop_sec` | `0.08` | 두 입력 stamp의 최대 허용 차이입니다. 정상 mapper는 동일 cloud stamp를 사용합니다. |
 
 ## 2.2 IMU 중력 방향
@@ -252,8 +253,8 @@ passthrough:
 | --- | ---: | --- |
 | `input_mode` | `cloud_initial` | `cloud_initial` 또는 `global_occupancy`입니다. two-live는 global occupancy를 사용합니다. |
 | `robot0_cloud_topic`, `robot1_cloud_topic` | `/r0/livox/lidar`, `/r1/livox/lidar` | cloud mode 입력입니다. |
-| `robot0_map_topic`, `robot1_map_topic` | `/r0/toy/global_occupancy`, `/r1/toy/global_occupancy` | map mode 입력입니다. |
-| `alignment_topic` | `/toy/initial_xy_alignment` | 결과 transform 토픽입니다. |
+| `robot0_map_topic`, `robot1_map_topic` | `/r0/mapping/global_occupancy`, `/r1/mapping/global_occupancy` | map mode 입력입니다. |
+| `alignment_topic` | `/mapping/initial_xy_alignment` | 결과 transform 토픽입니다. |
 | `target_frame_id`, `source_frame_id` | `odom`, `r1/odom` | 결과 부모/자식 frame입니다. two-live 부모는 `map`입니다. |
 | `frame_count` | `5` | cloud initial submap frame 수입니다. |
 | `voxel_size` | `0.10` | 2D voxel입니다. two-live 기본은 `0.05`입니다. |
@@ -364,23 +365,23 @@ bash scripts/run_two_mid360_2d_mapping.sh \
 # 6. Record republisher와 merged map
 
 설치되는 `record_republisher.py`는 temporal merged-map cleanup을 유지하면서 최종
-`/rN/toy/corrected_odometry`를 우선합니다.
+`/rN/mapping/occupancy_mapper_odometry`를 우선합니다.
 
 | 파라미터 | 기본값 | 설명 |
 | --- | ---: | --- |
 | `target_frame_id`, `common_frame_id` | `odom`, `map` | robot odom suffix와 공통 frame입니다. |
-| `alignment_topic` | `/toy/initial_xy_alignment` | map/r1 odom planar alignment입니다. |
+| `alignment_topic` | `/mapping/initial_xy_alignment` | map/r1 odom planar alignment입니다. |
 | `publish_period_ms` | `200` | 재게시 및 TF 주기입니다. |
 | `occupied_threshold` | `50` | merged occupied 임계값입니다. |
 | `merged_padding_m` | `1.0` | merged grid padding입니다. |
 | `robot_ids` | `[0,1]` | 처리 robot 목록입니다. |
-| `output_prefix` | `/toy_record` | 출력 루트입니다. |
+| `output_prefix` | `/mapping_record` | 출력 루트입니다. |
 | `robot_odom_frame_format` | `r{robot_id}/odom` | robot odom frame 형식입니다. |
 | `robot_base_frame_format` | `r{robot_id}/base_link` | base frame 형식입니다. |
 | `publish_tf` | `true` | 공통 TF를 publish합니다. |
 | `publish_merged_global` | node `false`, two-live `true` | merged occupancy publish입니다. |
 | `prefer_ground_fused_odometry` | `true` | 최종 corrected odometry를 pose/TF 원본으로 우선합니다. |
-| `ground_fused_odometry_topic_format` | `/r{robot_id}/toy/corrected_odometry` | robot별 최종 pose 토픽입니다. |
+| `ground_fused_odometry_topic_format` | `/r{robot_id}/mapping/occupancy_mapper_odometry` | robot별 최종 pose 토픽입니다. |
 
 최종 pose가 아직 없는 robot은 `/rN/odom`을 startup fallback으로 사용합니다. 최종 pose가
 한 번 들어오면 raw odometry가 다시 덮어쓰지 않습니다.
@@ -410,8 +411,8 @@ bash scripts/run_two_mid360_2d_mapping.sh \
 | `rate` | `1.0` | playback rate입니다. |
 | `storage_id` | `sqlite3` | storage plugin입니다. |
 | `mapping_startup_delay_sec` | single `0.0`, two-live `10.0` | driver/IMU filter는 실행하되 odometry, mapper, plane fusion 시작을 지연합니다. |
-| `planar_odometry_topic` | `toy/planar_odometry` | pipeline 내부 planar pose입니다. |
-| `corrected_odometry_topic` | `toy/corrected_odometry` | 최종 6-DoF pose입니다. |
+| `planar_odometry_topic` | `odom` | deprecated 호환 인자이며 현재 launch 흐름에서는 사용하지 않습니다. |
+| `corrected_odometry_topic` | `mapping/occupancy_mapper_odometry` | mapper의 최종 odometry 출력입니다. |
 | `occupancy_config_file` | package `config/occupancy.yaml` | occupancy, local ICP, ground-plane 파라미터 파일입니다. |
 
 두 로봇은 같은 occupancy config를 사용하는 것이 권장됩니다. ground-plane 후보 높이와

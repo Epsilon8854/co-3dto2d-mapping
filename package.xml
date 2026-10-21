@@ -13,6 +13,7 @@
   <depend>builtin_interfaces</depend>
   <depend>geometry_msgs</depend>
   <depend>message_filters</depend>
+  <depend>libopencv-dev</depend>
   <depend>nav_msgs</depend>
   <depend>rclcpp</depend>
   <depend>rclpy</depend>
@@ -22,14 +23,19 @@
   <depend>tf2_ros</depend>
 
   <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
   <exec_depend>imu_filter_madgwick</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
   <exec_depend>python3-scipy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>ros2bag</exec_depend>
   <exec_depend>ros2topic</exec_depend>
+  <exec_depend>rosbag2_py</exec_depend>
+  <exec_depend>rosbag2_storage_default_plugins</exec_depend>
   <exec_depend>rtabmap_odom</exec_depend>
   <exec_depend>rviz2</exec_depend>
 

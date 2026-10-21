@@ -26,6 +26,9 @@ def launch_setup(context, *args, **kwargs):
         raise RuntimeError("mapping_startup_delay_sec must be non-negative")
 
     raw_scan_cloud_topic = LaunchConfiguration("scan_cloud_topic").perform(context)
+    icp_scan_cloud_topic = LaunchConfiguration("icp_scan_cloud_topic").perform(
+        context
+    )
     plane_filtered_cloud_topic = LaunchConfiguration(
         "plane_filtered_cloud_topic"
     ).perform(context)
@@ -87,6 +90,9 @@ def launch_setup(context, *args, **kwargs):
             "expected_update_rate": LaunchConfiguration(
                 "expected_update_rate"
             ).perform(context),
+            "icp_topic_queue_size": LaunchConfiguration(
+                "icp_topic_queue_size"
+            ).perform(context),
             "odometry_config_file": LaunchConfiguration(
                 "odometry_config_file"
             ).perform(context),
@@ -119,6 +125,7 @@ def launch_setup(context, *args, **kwargs):
                 context
             ),
             "scan_cloud_topic": raw_scan_cloud_topic,
+            "icp_scan_cloud_topic": icp_scan_cloud_topic,
             "imu_raw_topic": LaunchConfiguration("imu_raw_topic").perform(context),
             "imu_filtered_topic": imu_filtered_topic,
         }.items(),
@@ -200,6 +207,30 @@ def launch_setup(context, *args, **kwargs):
                 "log_z_slice_stats": False,
                 "publish_corrected_odometry": True,
                 "corrected_odometry_topic": corrected_odometry_topic,
+                "local_submap_diagnostics_csv_path": LaunchConfiguration(
+                    "local_submap_diagnostics_csv_path"
+                ).perform(context),
+                "local_pose_graph_diagnostics_csv_path": LaunchConfiguration(
+                    "local_pose_graph_diagnostics_csv_path"
+                ).perform(context),
+                "local_pose_graph_visualization_dir": LaunchConfiguration(
+                    "local_pose_graph_visualization_dir"
+                ).perform(context),
+                "local_line_pose_graph_diagnostics_csv_path": LaunchConfiguration(
+                    "local_line_pose_graph_diagnostics_csv_path"
+                ).perform(context),
+                "local_line_pose_graph_visualization_dir": LaunchConfiguration(
+                    "local_line_pose_graph_visualization_dir"
+                ).perform(context),
+                "local_pht_submap_diagnostics_csv_path": LaunchConfiguration(
+                    "local_pht_submap_diagnostics_csv_path"
+                ).perform(context),
+                "local_pht_submap_visualization_dir": LaunchConfiguration(
+                    "local_pht_submap_visualization_dir"
+                ).perform(context),
+                "local_pht_submap_pose_graph_mode": LaunchConfiguration(
+                    "local_pht_submap_pose_graph_mode"
+                ).perform(context),
                 "use_sim_time": use_sim_time,
             },
         ],
@@ -239,6 +270,7 @@ def generate_launch_description():
             DeclareLaunchArgument("sensor_tf_pitch", default_value="0"),
             DeclareLaunchArgument("sensor_tf_roll", default_value="3.141592653589793"),
             DeclareLaunchArgument("expected_update_rate", default_value="10.0"),
+            DeclareLaunchArgument("icp_topic_queue_size", default_value="1"),
             DeclareLaunchArgument(
                 "odometry_config_file",
                 default_value=os.path.join(
@@ -258,13 +290,14 @@ def generate_launch_description():
             DeclareLaunchArgument("rear_filter_log_period", default_value="100"),
             DeclareLaunchArgument("bag_lidar_topic", default_value="/livox/lidar_raw"),
             DeclareLaunchArgument("scan_cloud_topic", default_value="/livox/lidar"),
+            DeclareLaunchArgument("icp_scan_cloud_topic", default_value=""),
             DeclareLaunchArgument("imu_raw_topic", default_value="/livox/imu"),
             DeclareLaunchArgument(
                 "imu_filtered_topic", default_value="/livox/imu_filtered"
             ),
             DeclareLaunchArgument("alignment_required", default_value="false"),
             DeclareLaunchArgument(
-                "alignment_topic", default_value="/toy/initial_xy_alignment"
+                "alignment_topic", default_value="/mapping/initial_xy_alignment"
             ),
             DeclareLaunchArgument(
                 "transform_cloud_to_local_frame", default_value="true"
@@ -281,15 +314,25 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "mapping_odometry_topic",
-                default_value="mapping/floor_odometry",
+                default_value="mapping/floor_based_odometry",
             ),
             # Deprecated compatibility argument. The mapper now publishes the
             # final pose directly on corrected_odometry_topic.
             DeclareLaunchArgument(
-                "planar_odometry_topic", default_value="toy/planar_odometry"
+                "planar_odometry_topic", default_value="odom"
             ),
             DeclareLaunchArgument(
-                "corrected_odometry_topic", default_value="toy/corrected_odometry"
+                "corrected_odometry_topic", default_value="mapping/occupancy_mapper_odometry"
+            ),
+            DeclareLaunchArgument("local_submap_diagnostics_csv_path", default_value=""),
+            DeclareLaunchArgument("local_pose_graph_diagnostics_csv_path", default_value=""),
+            DeclareLaunchArgument("local_pose_graph_visualization_dir", default_value=""),
+            DeclareLaunchArgument("local_line_pose_graph_diagnostics_csv_path", default_value=""),
+            DeclareLaunchArgument("local_line_pose_graph_visualization_dir", default_value=""),
+            DeclareLaunchArgument("local_pht_submap_diagnostics_csv_path", default_value=""),
+            DeclareLaunchArgument("local_pht_submap_visualization_dir", default_value=""),
+            DeclareLaunchArgument(
+                "local_pht_submap_pose_graph_mode", default_value="visualization_only"
             ),
             DeclareLaunchArgument(
                 "occupancy_config_file",

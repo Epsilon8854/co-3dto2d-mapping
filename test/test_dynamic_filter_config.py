@@ -195,7 +195,7 @@ def test_launch_passes_switch_and_counts_to_merger_and_same_yaml_to_robots(monke
     assert params["merged_dynamic_occupied_confirm_count"] == 1
     assert params["merged_dynamic_counter_decay"] == 2
     assert params["merged_dynamic_evidence_timeout_frames"] == 45
-    assert params["output_prefix"] == "/toy_record"
+    assert params["output_prefix"] == "/mapping_record"
     robot_includes = [a.kwargs["launch_arguments"] for a in actions if "launch_arguments" in a.kwargs]
     assert len(robot_includes) == 2
     assert {a["robot_id"] for a in robot_includes} == {"0", "1"}

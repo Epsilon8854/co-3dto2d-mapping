@@ -2,7 +2,7 @@
 
 `two_live_mapping.launch.py`는 두 MID-360의 실시간 LiDAR/IMU 입력으로 각 로봇의
 RTAB-Map ICP odometry와 2D occupancy mapper를 실행하고, 두 로봇의 좌표계를 정렬해
-`/toy_record` 결과를 공통 `map` frame으로 재게시합니다. 현재 구현 범위는
+`/mapping_record` 결과를 공통 `map` frame으로 재게시합니다. 현재 구현 범위는
 **2대(r0, r1)** 입니다. 분산 실행에서는 각 로봇 노트북이 자기 mapping pipeline만
 실행하고 한 노트북이 fusion도 담당합니다.
 
@@ -151,11 +151,11 @@ IMU 경로는 다음과 같습니다.
 주요 결과:
 
 - `/r0/odom`, `/r1/odom`
-- `/r0/toy/local_occupancy`, `/r1/toy/local_occupancy`
-- `/r0/toy/global_occupancy`, `/r1/toy/global_occupancy`
-- `/toy/initial_xy_alignment`
-- `/toy_record/r0/*`, `/toy_record/r1/*`
-- `/toy_record/merged_global_occupancy`
+- `/r0/mapping/local_occupancy`, `/r1/mapping/local_occupancy`
+- `/r0/mapping/global_occupancy`, `/r1/mapping/global_occupancy`
+- `/mapping/initial_xy_alignment`
+- `/mapping_record/r0/*`, `/mapping_record/r1/*`
+- `/mapping_record/merged_global_occupancy`
 
 TF 트리는 `map -> r0/odom -> r0/base_link -> r0/livox_frame`과
 `map -> r1/odom -> r1/base_link -> r1/livox_frame`으로 구성됩니다.
@@ -163,7 +163,7 @@ TF 트리는 `map -> r0/odom -> r0/base_link -> r0/livox_frame`과
 
 ## Cropped XYZ 3D ICP
 
-이전 live 구성은 `/r0/toy/global_occupancy`와 `/r1/toy/global_occupancy`의 occupied
+이전 live 구성은 `/r0/mapping/global_occupancy`와 `/r1/mapping/global_occupancy`의 occupied
 cell을 XY 점으로 바꿔 2D ICP를 수행했습니다. 현재 기본 live 구성은 occupancy map을
 기다리지 않고, RTAB-Map과 같은 `/r*/mapping/lidar` PointCloud2를 사용합니다.
 이 변경은 `two_live_mapping.launch.py`에만 적용되며, 기존 `two_bag_mapping.launch.py`의
@@ -245,7 +245,7 @@ ros2 topic hz /r0/mapping/lidar
 ros2 topic hz /r1/mapping/lidar
 ros2 topic echo /r0/mapping/lidar --once
 ros2 topic echo /r1/mapping/lidar --once
-ros2 topic echo /toy/initial_xy_alignment --once
+ros2 topic echo /mapping/initial_xy_alignment --once
 ros2 run tf2_ros tf2_echo map r0/base_link
 ros2 run tf2_ros tf2_echo map r1/base_link
 ```
@@ -275,7 +275,7 @@ ros2 launch co_3dto2d_mapping two_live_mapping.launch.py \
   sensor_tf_roll_1:=3.141592653589793
 ```
 
-`enable_record_republisher:=false`로 실행하면 `/toy_record`와 공통 `map` TF를 만들지
+`enable_record_republisher:=false`로 실행하면 `/mapping_record`와 공통 `map` TF를 만들지
 않습니다. 다중 로봇 frame 충돌을 막기 위해 각 RTAB-Map odometry의 직접 TF publish도
 꺼져 있으므로, 이 옵션에서는 `/r0/odom`, `/r1/odom` 토픽은 사용할 수 있지만 RViz의
 `map` 기준 TF 트리는 연결되지 않습니다.

@@ -21,6 +21,12 @@ __pycache__/
 /output/
 /results/
 /logs/live_runs/
+# Experiment recordings, snapshots, reports and generated maps stay local.
+/outputs/
+/tmp/
+/symlink_install_manifest.txt
 *.db3
+*.db3-shm
+*.db3-wal
 *.mcap
 third_party/

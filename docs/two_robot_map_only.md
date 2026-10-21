@@ -8,17 +8,17 @@ there is no remote-cloud or accepted-alignment startup barrier.
 
 On the fusion host, `inter_robot_place_alignment.py` consumes:
 
-- `/r0/toy/global_occupancy` and `/r1/toy/global_occupancy` (`OccupancyGrid`).
-- `/r0/toy/corrected_odometry` and `/r1/toy/corrected_odometry` (`Odometry`).
+- `/r0/mapping/global_occupancy` and `/r1/mapping/global_occupancy` (`OccupancyGrid`).
+- `/r0/mapping/occupancy_mapper_odometry` and `/r1/mapping/occupancy_mapper_odometry` (`Odometry`).
 
 Geometry is registered using 2-D occupancy patches: polar candidate retrieval,
 correlative matching, trimmed SE(2) ICP, and multi-keyframe consensus. Odometry
 locates each patch and converts its transform into the robot odometry frames;
 no LiDAR PointCloud2 is consumed by the inter-robot aligner.
 
-The accepted transform is still published on `/toy/initial_xy_alignment`
+The accepted transform is still published on `/mapping/initial_xy_alignment`
 (`map <- r1/odom`), preserving the existing map compositor interface. No
-`/toy/startup_xy_alignment` publisher or startup gate is launched. The compositor
+`/mapping/startup_xy_alignment` publisher or startup gate is launched. The compositor
 starts independently and does not invent an identity alignment for robot 1.
 Until map registration is accepted, robot 1 must not be shown as already aligned.
 
@@ -84,12 +84,12 @@ removed live startup barrier.
 ```bash
 # On either PC, its own odom/map should appear even before the other robot starts.
 ros2 topic hz /r0/odom
-ros2 topic hz /r0/toy/global_occupancy
+ros2 topic hz /r0/mapping/global_occupancy
 
 # On the fusion host, confirm only map/odom application inputs for this node.
 ros2 node info /inter_robot_place_alignment
-ros2 topic echo /toy/place_recognition/status --once
-ros2 topic echo /toy/initial_xy_alignment --once
+ros2 topic echo /mapping/place_recognition/status --once
+ros2 topic echo /mapping/initial_xy_alignment --once
 ```
 
 While testing, do not start a rosbag recorder or remote RViz PointCloud2 display

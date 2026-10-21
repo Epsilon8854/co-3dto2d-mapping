@@ -65,7 +65,7 @@ The matcher uses:
 When any quality gate fails, the mapper uses the odometry-predicted pose for
 that frame. Mapping therefore continues without accepting an unsafe ICP jump.
 The pose actually used for mapping is also published as
-`toy/corrected_odometry` (`nav_msgs/msg/Odometry`) by default. The topic can be
+`mapping/occupancy_mapper_odometry` (`nav_msgs/msg/Odometry`) by default. The topic can be
 renamed or disabled without publishing a second TF tree. Its twist and
 covariance are copied from the synchronized input odometry; the corrected topic
 is therefore intended primarily for map-pose inspection unless downstream

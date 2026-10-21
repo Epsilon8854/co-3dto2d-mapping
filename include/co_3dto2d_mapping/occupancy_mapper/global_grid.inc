@@ -147,13 +147,10 @@
 
     global_grid_.header.stamp = stamp;
     global_grid_.header.frame_id = global_frame_id_;
-    ++global_frame_index_;
-    if (global_frame_index_ == 0) {
-      global_frame_index_ = 1;
-      std::fill(
-          global_temporal_evidence_.begin(), global_temporal_evidence_.end(),
-          TemporalCellEvidence{});
-    }
+    constexpr int64_t kNanosecondsPerSecond = 1'000'000'000LL;
+    const int64_t observation_time_ns =
+        static_cast<int64_t>(stamp.sec) * kNanosecondsPerSecond +
+        static_cast<int64_t>(stamp.nanosec);
 
     using co_3dto2d_mapping::occupancy::Cell;
     const auto to_cell = [&](double x, double y) {
@@ -211,6 +208,18 @@
           }
           const auto index = cell_index(cell);
           if (index) {
+            const double cell_x = global_grid_.info.origin.position.x +
+                (static_cast<double>(cell.col) + 0.5) * resolution_;
+            const double cell_y = global_grid_.info.origin.position.y +
+                (static_cast<double>(cell.row) + 0.5) * resolution_;
+            const double cell_range_m = std::hypot(
+                cell_x - sensor_origin.first, cell_y - sensor_origin.second);
+            if (dynamic_filter_enabled_ &&
+                global_grid_.data[*index] == raycast_occupied_value_ &&
+                !co_3dto2d_mapping::occupancy::isFreeClearRangeAllowed(
+                    temporal_config_, cell_range_m)) {
+              continue;
+            }
             touch_observation(*index);
             global_frame_free_observed_[*index] = 1;
           }
@@ -244,8 +253,8 @@
           const int8_t old_value = global_grid_.data[index];
           global_grid_.data[index] =
               co_3dto2d_mapping::occupancy::observeOccupiedCell(
-                  global_temporal_evidence_[index], old_value, temporal_config_,
-                  global_frame_index_, raycast_occupied_value_);
+              global_temporal_evidence_[index], old_value, temporal_config_,
+                  observation_time_ns, raycast_occupied_value_);
           if (old_value != raycast_occupied_value_ &&
               global_grid_.data[index] != raycast_occupied_value_) {
             ++delayed_occupied_cells;
@@ -266,7 +275,7 @@
         const int8_t old_value = global_grid_.data[index];
         global_grid_.data[index] = co_3dto2d_mapping::occupancy::observeFreeCell(
             global_temporal_evidence_[index], old_value, temporal_config_,
-            global_frame_index_, raycast_free_value_, raycast_occupied_value_);
+            observation_time_ns, raycast_free_value_, raycast_occupied_value_);
         if (old_value == raycast_occupied_value_ &&
             global_grid_.data[index] == raycast_free_value_) {
           ++cleared_cells;
