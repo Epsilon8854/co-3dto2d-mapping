@@ -1,7 +1,7 @@
 """ROS-independent occupancy projection, stationary consensus, and atomic saving.
 
 All transforms named a_from_b map B coordinates into A coordinates. Source
-snapshots are immutable inputs; merged output is always rebuilt from them.
+snapshots are immutable; temporal fusion owns its common-frame evidence.
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from co_3dto2d_mapping.occupancy_png import (
     occupancy_grid_png_with_trajectories, trajectory_pixels,
 )
 from co_3dto2d_mapping.planar_transform_utils import normalize_angle
+from co_3dto2d_mapping.multi_agent_temporal import TemporalFusionConfig,TemporalOccupancyAccumulator
 
 
 @dataclass(frozen=True)
@@ -166,11 +167,7 @@ class SnapshotConsensus(StationaryConsensus):
 
 
 class OccupancyAccumulator:
-    """Mutable, worker-owned aligned lattice. Unknown never erases evidence.
-
-    Occupied wins over free, matching the previous conservative merged union.
-    Dynamic clearing is intentionally not introduced by this transport change.
-    """
+    """Legacy occupied-wins lattice used when central temporal clearing is OFF."""
     def __init__(self,resolution,frame='r0/odom',max_cells=16_000_000):
         if not math.isfinite(resolution) or resolution<=0:raise ValueError('invalid resolution')
         self.resolution=resolution;self.frame=frame;self.max_cells=max_cells
@@ -209,20 +206,70 @@ class OccupancyAccumulator:
 
 
 class IncrementalFusion:
-    """One map-worker owns all state; seeds once, integrates observed local cells."""
-    def __init__(self,resolution=.05,max_cells=16_000_000):
+    """One worker owns all state, including cross-agent temporal evidence.
+
+    With filtering enabled the common map ingests fresh observations directly;
+    it is never rebuilt as a union of stale per-agent occupied layers.
+    """
+    def __init__(self,resolution=.05,max_cells=16_000_000,temporal_config=None):
         self.resolution=resolution;self.max_cells=max_cells;self.generation=None;self.layers={}
+        self.temporal_config=(temporal_config or TemporalFusionConfig()).validated()
+        self.common=None;self.last_local={};self.live_agents=set();self.stats={}
+
+    def _accumulator(self):
+        if self.temporal_config.enabled:
+            return TemporalOccupancyAccumulator(self.resolution,self.temporal_config,max_cells=self.max_cells)
+        return OccupancyAccumulator(self.resolution,max_cells=self.max_cells)
+
+    def diagnostics(self):
+        return dict(enabled=self.temporal_config.enabled,
+                    policy='timestamped_local_evidence' if self.temporal_config.enabled else 'occupied_wins',
+                    input_counts=dict(self.stats),
+                    latest_source_stamps_ns=dict(self.last_local),
+                    common=self.common.diagnostics() if self.common is not None else {},
+                    agents={rid:layer.diagnostics() for rid,layer in self.layers.items()}
+                    if self.temporal_config.enabled else {})
 
     def update(self,generation,seeds,updates,alignment):
         if generation!=self.generation:
             self.generation=generation
-            self.layers={rid:OccupancyAccumulator(self.resolution,max_cells=self.max_cells) for rid in (0,1)}
-        for rid,snapshot in list(seeds.items())+list(updates):
+            self.layers={rid:self._accumulator() for rid in (0,1)}
+            self.common=self._accumulator() if self.temporal_config.enabled else None
+            self.last_local={};self.live_agents=set();self.stats={}
+        # Global snapshots are bootstrap/recovery data, not new observations.
+        # They cannot overwrite cells already observed live, even if a global
+        # resync arrives late following a queue overflow.
+        for rid,snapshot in sorted(seeds.items()):
             transform=(0.,0.,0.) if rid==0 else alignment
             if not np.any(snapshot.grid>=0):continue
             projected=compose_grids([(snapshot,transform)],self.resolution,max_cells=self.max_cells)
-            self.layers[rid].add(projected)
+            if self.temporal_config.enabled:
+                self.layers[rid].seed(projected);self.common.seed(projected)
+            else:self.layers[rid].add(projected)
+            if rid not in self.live_agents:
+                self.last_local[rid]=max(self.last_local.get(rid,-1),snapshot.stamp_ns)
+        # Sorting bounds arrival-order effects within a worker batch. Across
+        # batches, cell bins reject stale evidence; streams never get restamped.
+        for rid,snapshot in sorted(updates,key=lambda item:(item[1].stamp_ns,item[0])):
+            if snapshot.stamp_ns<=self.last_local.get(rid,-1):
+                key=f'r{rid}_duplicate_or_old_frames';self.stats[key]=self.stats.get(key,0)+1
+                continue
+            self.last_local[rid]=snapshot.stamp_ns;self.live_agents.add(rid)
+            key=f'r{rid}_accepted_frames';self.stats[key]=self.stats.get(key,0)+1
+            if not np.any(snapshot.grid>=0):continue
+            transform=(0.,0.,0.) if rid==0 else alignment
+            projected=compose_grids([(snapshot,transform)],self.resolution,max_cells=self.max_cells)
+            if self.temporal_config.enabled:
+                g=snapshot.geometry
+                center=transform_xy([[g.width*g.resolution/2,g.height*g.resolution/2]],
+                                    (g.origin_x,g.origin_y,g.origin_yaw))
+                sensor_xy=transform_xy(center,transform)[0]
+                self.layers[rid].observe(projected,sensor_xy)
+                self.common.observe(projected,sensor_xy)
+            else:self.layers[rid].add(projected)
         layers={rid:layer.snapshot() for rid,layer in self.layers.items()}
+        if self.temporal_config.enabled:
+            return self.common.snapshot(),layers
         merged=OccupancyAccumulator(self.resolution,max_cells=self.max_cells)
         for snapshot in layers.values():
             if snapshot is not None:merged.add(snapshot)

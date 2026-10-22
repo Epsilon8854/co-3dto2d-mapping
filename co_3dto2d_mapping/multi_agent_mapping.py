@@ -24,6 +24,7 @@ from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 from co_3dto2d_mapping.multi_agent_alignment import register_startup,StartupConfig
 from co_3dto2d_mapping.multi_agent_core import SnapshotConsensus,IncrementalFusion,atomic_write,save_map,json_safe,transform_xy
+from co_3dto2d_mapping.multi_agent_temporal import TemporalFusionConfig
 from co_3dto2d_mapping.multi_agent_ros import stamp_ns,yaw_of,pose_of,snapshot_of,grid_message,diagnostic,values_of,transformed_odometry
 from co_3dto2d_mapping.occupancy_submap import extract_local_patch
 from co_3dto2d_mapping.planar_transform_utils import world_from_source_odom,normalize_angle
@@ -40,7 +41,10 @@ class MultiAgentMapping(Node):
             input_timeout_sec=5.,submap_radius_m=12.,registration_resolution_m=.10,output_resolution_m=.05,
             max_grid_cells=16000000,merged_period_sec=.5,checkpoint_sec=10.,require_sessions=True,
             local_queue_size=100,path_publish_period_sec=1.,path_max_poses=5000,
-            verification_prior_growth_ratio=.25,verification_translation_range_m=.15)
+            verification_prior_growth_ratio=.25,verification_translation_range_m=.15,
+            merged_dynamic_filter_enabled=True,merged_dynamic_free_clear_count=30,
+            merged_dynamic_evidence_timeout_sec=5.,merged_dynamic_observation_bin_sec=.1,
+            merged_dynamic_clear_max_range_m=6.)
         for key,value in defaults.items():self.declare_parameter(key,value)
         self.p={key:self.get_parameter(key).value for key in defaults}
         if self.p['mode'] not in ('auto_validated_locked','manual_reference'):raise ValueError('invalid mode')
@@ -63,7 +67,14 @@ class MultiAgentMapping(Node):
         self.io_worker=ThreadPoolExecutor(max_workers=1,thread_name_prefix='map-save')
         self.path_worker=ThreadPoolExecutor(max_workers=1,thread_name_prefix='path-build')
         self.path_future=None
-        self.fusion=IncrementalFusion(self.p['output_resolution_m'],self.p['max_grid_cells'])
+        self.temporal_config=TemporalFusionConfig(
+            enabled=self.p['merged_dynamic_filter_enabled'],
+            free_clear_count=self.p['merged_dynamic_free_clear_count'],
+            evidence_timeout_sec=self.p['merged_dynamic_evidence_timeout_sec'],
+            observation_bin_sec=self.p['merged_dynamic_observation_bin_sec'],
+            clear_max_range_m=self.p['merged_dynamic_clear_max_range_m']).validated()
+        self.fusion=IncrementalFusion(self.p['output_resolution_m'],self.p['max_grid_cells'],self.temporal_config)
+        self.fusion_report={}
         self.search_future=None;self.map_future=None;self.io_jobs=[];self.checkpoint_future=None
         self.maps={};self.layers={};self.merged=None;self.aligned_map=None;self.odom={};self.raw={};self.sessions={}
         self.receipt={};self.first_global_stamps={};self.last_attempt_stamps={};self.last_local={};self.anchors={}
@@ -90,6 +101,9 @@ class MultiAgentMapping(Node):
         self.create_service(Trigger,'/multi_agent/reset_alignment',self.reset_service)
         self.create_timer(.1,self.tick);self.ready_pub.publish(Bool(data=False))
         atomic_write(self.out/'effective_central_config.json',json.dumps({**self.p,'registration':asdict(self.reg),'search':asdict(self.search)},indent=2).encode())
+        self.get_logger().info('Central temporal occupancy: enabled=%s free_clear=%d timeout=%.2fs bin=%.3fs clear_range=%.2fm; source=local observations' % (
+            self.temporal_config.enabled,self.temporal_config.free_clear_count,self.temporal_config.evidence_timeout_sec,
+            self.temporal_config.observation_bin_sec,self.temporal_config.clear_max_range_m))
 
     def set_subscriptions(self,kind,enabled,ids=(0,1)):
         subscriptions=self.global_map_subscriptions if kind=='global' else self.local_map_subscriptions
@@ -123,6 +137,7 @@ class MultiAgentMapping(Node):
         self.receipt.clear();self.first_global_stamps.clear();self.last_attempt_stamps.clear();self.last_local.clear();self.anchors.clear()
         self.odom.clear();self.raw.clear();self.updates.clear();self.pending_seeds.clear();self.cached_modes=None;self.cached_sizes=None
         self.local_input_stats={rid:Counter() for rid in (0,1)}
+        self.fusion_report={}
         for group in self.paths.values():
             for path in group.values():path.clear()
         self.set_subscriptions('local',False);self.set_subscriptions('global',True)
@@ -175,6 +190,7 @@ class MultiAgentMapping(Node):
         counts=self.local_input_stats[rid];counts['received']+=1
         if self.alignment is None or msg.header.frame_id!=f'r{rid}/odom':counts['invalid_phase_or_frame']+=1;return
         ns=stamp_ns(msg.header.stamp)
+        if ns<0:counts['invalid_stamp']+=1;return
         if ns<=self.last_local.get(rid,-1):counts['duplicate_or_seeded_stamp']+=1;return
         try:snapshot=snapshot_of(msg)
         except (ValueError,TypeError):counts['invalid_grid']+=1;return
@@ -249,9 +265,13 @@ class MultiAgentMapping(Node):
         if self.map_future is not None and self.map_future.done():
             future,generation=self.map_future,self.map_generation;self.map_future=None
             try:
-                merged,layers,runtime=future.result()
+                merged,layers,runtime,fusion_report=future.result()
                 if generation==self.generation and self.alignment is not None:
                     self.merged,self.layers=merged,layers;self.aligned_map=layers.get(1);self.last_report['merge_runtime_ms']=runtime
+                    previous=self.fusion_report.get('common',{}).get('cleared_cells',0)
+                    self.fusion_report=fusion_report
+                    cleared=fusion_report.get('common',{}).get('cleared_cells',0)
+                    if cleared>previous:self.get_logger().info(f'Central temporal occupancy: cleared={cleared-previous} cells ({cleared} total)')
                     if merged is not None:self.merged_pub.publish(grid_message(merged))
                     if self.aligned_map is not None:self.aligned_map_pub.publish(grid_message(self.aligned_map))
             except Exception as exc:self.reason='map worker failed: '+str(exc);self.get_logger().error(self.reason)
@@ -260,7 +280,7 @@ class MultiAgentMapping(Node):
             alignment=self.alignment;generation=self.generation
             def update_maps():
                 began=time.perf_counter();merged,layers=self.fusion.update(generation,seeds,updates,alignment)
-                return merged,layers,(time.perf_counter()-began)*1000
+                return merged,layers,(time.perf_counter()-began)*1000,self.fusion.diagnostics()
             self.map_future=self.map_worker.submit(update_maps);self.last_map_submit=now
         if self.path_future is not None and self.path_future.done():
             try:
@@ -290,7 +310,9 @@ class MultiAgentMapping(Node):
             local_map_subscriptions_active=bool(self.local_map_subscriptions),global_map_subscriptions_active=bool(self.global_map_subscriptions),
             local_input_stats=self.local_input_stats,pending_local_updates=len(self.updates),source_map_stamps={r:s.stamp_ns for r,s in self.maps.items()},
             startup_accumulation_sec=self.p['startup_accumulation_sec'],snapshot_spans_sec={r:(s.stamp_ns-self.first_global_stamps[r])/1e9 for r,s in self.maps.items() if r in self.first_global_stamps},
-            metrics=self.last_report,evidence_kind='cumulative snapshot stability; not independent observations')
+            metrics=self.last_report,temporal_fusion=self.fusion_report,
+            temporal_filter_config=asdict(self.temporal_config),
+            evidence_kind='cumulative snapshots for startup; source-time local observations for fusion')
         msg=DiagnosticArray();msg.header.stamp=self.get_clock().now().to_msg();msg.status=[diagnostic('multi_agent/startup_alignment',values,DiagnosticStatus.OK if ready else DiagnosticStatus.WARN,values['reason'])]
         self.status_pub.publish(msg);self.ready_pub.publish(Bool(data=ready))
 
@@ -336,7 +358,8 @@ function draw(){const v=candidates[Number(sel.value)]||{transform:[0,0,0]},t=v.t
     def capture_bundle(self,stage):
         return dict(stage=stage,merged=self.merged,layers=dict(self.layers),maps=dict(self.maps),alignment=self.alignment,
             paths={kind:{r:tuple(values) for r,values in group.items()} for kind,group in self.paths.items()},
-            sessions=dict(self.sessions),reason=self.reason,fresh=self.fresh(),metrics=deepcopy(self.last_report),generation=self.generation)
+            sessions=dict(self.sessions),reason=self.reason,fresh=self.fresh(),metrics=deepcopy(self.last_report),generation=self.generation,
+            temporal_fusion=deepcopy(self.fusion_report),temporal_filter_config=asdict(self.temporal_config))
 
     def write_bundle(self,bundle):
         stage=bundle['stage'];directory=self.out/('checkpoint' if stage=='checkpoint' else 'maps');paths={}
@@ -354,7 +377,8 @@ function draw(){const v=candidates[Number(sel.value)]||{transform:[0,0,0]},t=v.t
         atomic_write(self.out/('checkpoint_status.json' if stage=='checkpoint' else 'save_status.json'),json.dumps(json_safe(dict(
             stage=stage,merged_saved=bundle['merged'] is not None,alignment=bundle['alignment'],sessions=bundle['sessions'],
             inputs_fresh=bundle['fresh'],reason=bundle['reason'],metrics=bundle['metrics'],generation=bundle['generation'],
-            fusion_policy='initial global seeds + conservative local observations; occupied wins',paths_saved=True)),indent=2).encode())
+            fusion_policy='timestamped_local_evidence' if self.temporal_config.enabled else 'occupied_wins',
+            temporal_filter_config=bundle['temporal_filter_config'],temporal_fusion=bundle['temporal_fusion'],paths_saved=True)),indent=2).encode())
         return bundle['merged'] is not None
 
     def save_outputs(self,stage):
@@ -373,11 +397,13 @@ function draw(){const v=candidates[Number(sel.value)]||{transform:[0,0,0]},t=v.t
         self.closing=True;self.search_worker.shutdown(wait=True,cancel_futures=True)
         if self.map_future is not None:
             try:
-                merged,layers,_=self.map_future.result(timeout=120)
-                if self.map_generation==self.generation:self.merged,self.layers=merged,layers
+                merged,layers,_,report=self.map_future.result(timeout=120)
+                if self.map_generation==self.generation:self.merged,self.layers,self.fusion_report=merged,layers,report
             except Exception as exc:self.get_logger().error(str(exc))
         if self.alignment is not None and (self.pending_seeds or self.updates):
-            try:self.merged,self.layers=self.fusion.update(self.generation,self.pending_seeds,list(self.updates),self.alignment)
+            try:
+                self.merged,self.layers=self.fusion.update(self.generation,self.pending_seeds,list(self.updates),self.alignment)
+                self.fusion_report=self.fusion.diagnostics()
             except Exception as exc:self.get_logger().error(str(exc))
         self.map_worker.shutdown(wait=True,cancel_futures=True)
         self.path_worker.shutdown(wait=True,cancel_futures=True)

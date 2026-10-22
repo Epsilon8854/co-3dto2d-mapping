@@ -8,4 +8,5 @@ roles:
 - fusion
 - all
 raw_icp_input: true
-dynamic_filter_enabled: false
+single_agent_dynamic_filter_enabled: false
+merged_dynamic_filter_enabled: true

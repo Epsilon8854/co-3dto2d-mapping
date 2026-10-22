@@ -30,10 +30,10 @@
 ## 현재 병합 코드에서 먼저 구분할 점
 
 - 현재 checkout의 개별 agent temporal 필터는 `occupancy_mapper/global_grid.inc`의 `updateGlobalGrid()`에서 global cell의 occupied→free 갱신을 처리한다.
-- r0는 정합 후 agent별 **local grid**를 받으며, `multi_agent_core.py`의 `OccupancyAccumulator.add()`는 기존 occupied를 incoming free로 지우지 않는 보수적 누적이다. local grid 자체는 현재 scan의 occupied/free 관측이다.
-- 따라서 **agent의 `dynamic_filter_enabled`만 ON으로 바꿔도 merged map의 잔상이 제거되는 구조는 아니다.** 중앙 누적에도 시간에 따른 free 증거를 반영하거나, 필터가 적용된 갱신 결과를 전달하는 경로를 마련해야 한다.
-- r1에서 별도 보완한 코드가 있다면 그 동작부터 재확인한다. 이번 변경은 데이터 취득 준비이며 병합 필터 구현은 바꾸지 않는다.
-- 필터 OFF 상태로 취득해도 된다. 저장하는 cloud는 temporal 필터 이전 관측이므로, 향후 같은 관측으로 merged-map 필터를 재평가할 수 있다.
+- r0는 정합 후 agent별 **local grid**를 받는다. local grid 자체는 현재 scan의 occupied/free 관측이며 개별 global map의 temporal 필터 결과가 아니다.
+- 중앙은 이제 `merged_dynamic_filter_enabled: true`일 때 `TemporalOccupancyAccumulator`로 새 관측을 직접 누적한다. free 30회/관측 공백 5초/동일 0.1초 구간 중복 집계 방지를 기본으로 사용한다. [설정과 동작](experiment_04_temporal_fusion.md)을 참고한다.
+- agent의 `dynamic_filter_enabled`는 개별 global map용이고 중앙 설정과 독립적이다. 중앙 OFF는 기존 occupied 우선 누적이며 agent 필터만 ON으로 해서는 중앙 잔상이 지워지지 않는다.
+- r1에서 별도 보완한 코드가 있다면 그 동작부터 재확인한다. 필터 OFF 상태로 취득해도 저장하는 cloud가 temporal 필터 이전 관측이므로 같은 입력으로 재평가할 수 있다. filtered-input replay 실행기는 별도 구현이 필요하다는 아래 제한은 유지된다.
 
 ## 실행 순서
 

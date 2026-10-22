@@ -139,6 +139,12 @@ class StatusConsole:
             if value.get('global_map_subscriptions_active') and spans:
                 text+=' | 누적 지도 경과 '+', '.join(f'r{rid}={span:.1f}s' for rid,span in spans.items())
             if isinstance(runtime,(float,int)):text+=f' | 중앙 처리={runtime:.0f}ms'
+            temporal=value.get('temporal_fusion',{})
+            if temporal:
+                text+=' | 중앙 동적 필터='+('ON' if temporal.get('enabled') else 'OFF')
+                if temporal.get('enabled'):
+                    common=temporal.get('common',{})
+                    text+=f' 삭제누적={common.get("cleared_cells",0)}cells 과거관측제외={common.get("stale_cell_observations",0)}cells'
             relay_ms=self.relay_status.get('callback_p95_ms')
             if isinstance(relay_ms,(float,int)):
                 ages=self.relay_status.get('receipt_ages_sec',{})
