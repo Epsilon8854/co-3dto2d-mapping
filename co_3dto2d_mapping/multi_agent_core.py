@@ -21,7 +21,7 @@ from co_3dto2d_mapping.occupancy_png import (
     OccupancyGridGeometry, TrajectoryOverlay, occupancy_grid_png,
     occupancy_grid_png_with_trajectories, trajectory_pixels,
 )
-from co_3dto2d_mapping.planar_transform_utils import normalize_angle
+from co_3dto2d_mapping.planar_transform_utils import normalize_angle,compose_planar
 from co_3dto2d_mapping.multi_agent_temporal import TemporalFusionConfig,TemporalOccupancyAccumulator
 
 
@@ -211,15 +211,16 @@ class IncrementalFusion:
     With filtering enabled the common map ingests fresh observations directly;
     it is never rebuilt as a union of stale per-agent occupied layers.
     """
-    def __init__(self,resolution=.05,max_cells=16_000_000,temporal_config=None):
+    def __init__(self,resolution=.05,max_cells=16_000_000,temporal_config=None,frame='r0/odom'):
         self.resolution=resolution;self.max_cells=max_cells;self.generation=None;self.layers={}
+        self.frame=frame;self.world_from_reference=None;self.alignment=None
         self.temporal_config=(temporal_config or TemporalFusionConfig()).validated()
         self.common=None;self.last_local={};self.live_agents=set();self.stats={}
 
     def _accumulator(self):
         if self.temporal_config.enabled:
-            return TemporalOccupancyAccumulator(self.resolution,self.temporal_config,max_cells=self.max_cells)
-        return OccupancyAccumulator(self.resolution,max_cells=self.max_cells)
+            return TemporalOccupancyAccumulator(self.resolution,self.temporal_config,frame=self.frame,max_cells=self.max_cells)
+        return OccupancyAccumulator(self.resolution,frame=self.frame,max_cells=self.max_cells)
 
     def diagnostics(self):
         return dict(enabled=self.temporal_config.enabled,
@@ -230,19 +231,24 @@ class IncrementalFusion:
                     agents={rid:layer.diagnostics() for rid,layer in self.layers.items()}
                     if self.temporal_config.enabled else {})
 
-    def update(self,generation,seeds,updates,alignment):
+    def update(self,generation,seeds,updates,alignment,world_from_reference=(0.,0.,0.)):
         if generation!=self.generation:
             self.generation=generation
             self.layers={rid:self._accumulator() for rid in (0,1)}
             self.common=self._accumulator() if self.temporal_config.enabled else None
             self.last_local={};self.live_agents=set();self.stats={}
+            self.world_from_reference=tuple(world_from_reference);self.alignment=tuple(alignment)
+        elif self.world_from_reference!=tuple(world_from_reference) or self.alignment!=tuple(alignment):
+            # A transform change requires source-observation replay, not silent
+            # insertion into a lattice containing old transformed evidence.
+            raise ValueError('fusion transform changed: source-observation reprojection is required')
         # Global snapshots are bootstrap/recovery data, not new observations.
         # They cannot overwrite cells already observed live, even if a global
         # resync arrives late following a queue overflow.
         for rid,snapshot in sorted(seeds.items()):
-            transform=(0.,0.,0.) if rid==0 else alignment
+            transform=world_from_reference if rid==0 else compose_planar(world_from_reference,alignment)
             if not np.any(snapshot.grid>=0):continue
-            projected=compose_grids([(snapshot,transform)],self.resolution,max_cells=self.max_cells)
+            projected=compose_grids([(snapshot,transform)],self.resolution,frame=self.frame,max_cells=self.max_cells)
             if self.temporal_config.enabled:
                 self.layers[rid].seed(projected);self.common.seed(projected)
             else:self.layers[rid].add(projected)
@@ -257,8 +263,8 @@ class IncrementalFusion:
             self.last_local[rid]=snapshot.stamp_ns;self.live_agents.add(rid)
             key=f'r{rid}_accepted_frames';self.stats[key]=self.stats.get(key,0)+1
             if not np.any(snapshot.grid>=0):continue
-            transform=(0.,0.,0.) if rid==0 else alignment
-            projected=compose_grids([(snapshot,transform)],self.resolution,max_cells=self.max_cells)
+            transform=world_from_reference if rid==0 else compose_planar(world_from_reference,alignment)
+            projected=compose_grids([(snapshot,transform)],self.resolution,frame=self.frame,max_cells=self.max_cells)
             if self.temporal_config.enabled:
                 g=snapshot.geometry
                 center=transform_xy([[g.width*g.resolution/2,g.height*g.resolution/2]],
@@ -270,7 +276,7 @@ class IncrementalFusion:
         layers={rid:layer.snapshot() for rid,layer in self.layers.items()}
         if self.temporal_config.enabled:
             return self.common.snapshot(),layers
-        merged=OccupancyAccumulator(self.resolution,max_cells=self.max_cells)
+        merged=OccupancyAccumulator(self.resolution,frame=self.frame,max_cells=self.max_cells)
         for snapshot in layers.values():
             if snapshot is not None:merged.add(snapshot)
         return merged.snapshot(),layers

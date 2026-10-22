@@ -140,6 +140,8 @@ class StatusConsole:
             if value.get('global_map_subscriptions_active') and spans:
                 text+=' | 누적 지도 경과 '+', '.join(f'r{rid}={span:.1f}s' for rid,span in spans.items())
             if isinstance(runtime,(float,int)):text+=f' | 중앙 처리={runtime:.0f}ms'
+            if value.get('world_frame'):
+                text+=f' | world={value["world_frame"]} map_revision={value.get("map_revision",0)}'
             temporal=value.get('temporal_fusion',{})
             if temporal:
                 text+=' | 중앙 동적 필터='+('ON' if temporal.get('enabled') else 'OFF')
@@ -241,7 +243,7 @@ def topics(args):
                    prefix+'/mapping/local_occupancy',prefix+'/mapping/global_occupancy',prefix+'/mapping/pipeline_diagnostics',
                    f'/multi_agent/r{rid}/session']
     if args.scope in ('central','combined'):
-        result += ['/multi_agent/'+suffix for suffix in ('r1_to_r0_transform','alignment_ready','alignment_status',
+        result += ['/multi_agent/'+suffix for suffix in ('r1_to_r0_transform','map_anchor','map_status','alignment_ready','alignment_status',
             'pose_relay_status',
             'r1/aligned_global_occupancy','merged_global_occupancy','r0/aligned_odometry','r1/aligned_odometry',
             'r0/aligned_path','r1/aligned_path','r0/raw_path','r1/raw_path')]

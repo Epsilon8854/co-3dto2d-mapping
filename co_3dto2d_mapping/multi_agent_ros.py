@@ -38,13 +38,13 @@ def diagnostic(name,values,level=DiagnosticStatus.OK,message=''):
     item=DiagnosticStatus(name=name,level=level,message=message)
     item.values=[KeyValue(key=str(k),value=json.dumps(json_safe(v),ensure_ascii=False)) for k,v in values.items()]
     return item
-def transformed_odometry(msg,rid,transform):
+def transformed_odometry(msg,rid,transform,frame='r0/odom',child_frame=None):
     out=deepcopy(msg);p=out.pose.pose
     p.position.x,p.position.y=map(float,transform_xy([[p.position.x,p.position.y]],transform)[0])
     c,s=math.cos(transform[2]/2),math.sin(transform[2]/2);q=deepcopy(p.orientation)
     p.orientation.x=c*q.x-s*q.y;p.orientation.y=s*q.x+c*q.y
     p.orientation.z=c*q.z+s*q.w;p.orientation.w=c*q.w-s*q.z
-    out.header.frame_id='r0/odom';out.child_frame_id=f'r{rid}/mapping_base_link'
+    out.header.frame_id=frame;out.child_frame_id=child_frame or f'r{rid}/mapping_base_link'
     r=np.eye(6);c,s=math.cos(transform[2]),math.sin(transform[2]);r[:2,:2]=[[c,-s],[s,c]];r[3:5,3:5]=r[:2,:2]
     out.pose.covariance=(r@np.asarray(msg.pose.covariance).reshape(6,6)@r.T).ravel().tolist()
     return out

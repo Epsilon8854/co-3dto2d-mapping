@@ -22,12 +22,14 @@ shared:
   mapping_required:
     - {topic: /tf_static, type: tf2_msgs/msg/TFMessage, latched: true, reliable: true, depth: 100}
   alignment_required:
+    - {topic: /multi_agent/map_anchor, type: geometry_msgs/msg/TransformStamped, latched: true}
     - {topic: /multi_agent/r1_to_r0_transform, type: geometry_msgs/msg/TransformStamped, latched: true}
     - {topic: /multi_agent/alignment_ready, type: std_msgs/msg/Bool, latched: true}
   reference:
     - {topic: /tf, type: tf2_msgs/msg/TFMessage, depth: 400}
     - {topic: /parameter_events, type: rcl_interfaces/msg/ParameterEvent, depth: 1000}
     - {topic: /multi_agent/alignment_status, type: diagnostic_msgs/msg/DiagnosticArray, latched: true}
+    - {topic: /multi_agent/map_status, type: diagnostic_msgs/msg/DiagnosticArray, latched: true}
     - {topic: /multi_agent/pose_relay_status, type: diagnostic_msgs/msg/DiagnosticArray, latched: true}
     - {topic: /multi_agent/merged_global_occupancy, type: nav_msgs/msg/OccupancyGrid, latched: true}
 sensor_static_frames:

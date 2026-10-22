@@ -1,5 +1,8 @@
 /**:
   ros__parameters:
+    world_frame: map
+    pose_relay_pose_timeout_sec: 2.0
+    pose_relay_tf_wait_timeout_sec: 1.0
     mode: auto_validated_locked
     confirmation_windows: 1
     consensus_translation_m: 0.1

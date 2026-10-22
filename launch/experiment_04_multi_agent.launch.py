@@ -30,7 +30,7 @@ def setup(context):
             publish_tf_odom='true',publish_sensor_static_tf=value('publish_sensor_static_tf'),
             enable_rear_lidar_filter='true',icp_topic_queue_size='1',
             sensor_parent_frame=f'r{rid}/base_link',sensor_child_frame=f'r{rid}/livox_frame',
-            local_frame_id=f'r{rid}/base_link',global_frame_id=f'r{rid}/odom',use_odom_header_frame='true',
+            local_frame_id=f'r{rid}/base_link',global_frame_id=f'r{rid}/mapping_odom',use_odom_header_frame='false',
             bag_lidar_topic=prefix+'/livox/lidar',icp_scan_cloud_topic=prefix+'/livox/lidar',
             scan_cloud_topic=prefix+'/mapping/lidar_rear_filtered',
             imu_raw_topic=prefix+'/livox/imu',imu_filtered_topic=prefix+'/mapping/imu_filtered',
@@ -47,7 +47,7 @@ def setup(context):
             name=f'robot{rid}_session',parameters=[dict(robot_id=rid,config_file=config,use_sim_time=sim)]))
     if role in ('fusion','all'):
         actions.append(Node(package='co_3dto2d_mapping',executable='multi_agent_pose_relay.py',
-            parameters=[dict(use_sim_time=sim)],output='screen'))
+            parameters=[value('alignment_config_file'),dict(use_sim_time=sim)],output='screen'))
         actions.append(Node(package='co_3dto2d_mapping',executable='multi_agent_mapping.py',
             parameters=[value('alignment_config_file'),dict(output_directory=str(output),use_sim_time=sim)],output='screen'))
     if value('rviz').lower()=='true':

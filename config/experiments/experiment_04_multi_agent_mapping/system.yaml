@@ -2,7 +2,11 @@ robot_ids:
 - 0
 - 1
 ros_domain_id: 72
-common_frame: r0/odom
+common_frame: map
+world_anchor: first_r0_mapping_pose_xy_yaw
+raw_odometry_frames: [r0/odom, r1/odom]
+mapping_frames: [r0/mapping_odom, r1/mapping_odom]
+periodic_registration_enabled: false
 roles:
 - robot
 - fusion

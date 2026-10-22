@@ -80,7 +80,7 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 
 - 초기에는 두 센서를 고정하고 공통 벽·코너를 관측합니다. 같은 방향일 필요는 없습니다.
 - 각 agent의 global map이 최소 3초 범위로 갱신된 뒤, 기본 `confirmation_windows: 1`로 정합합니다. 전체 yaw 검색과 모든 품질 기준을 통과한 첫 후보를 바로 확정합니다. 거절된 검색은 다시 시도하므로 검색을 딱 한 번만 수행한다는 의미는 아닙니다. 시간에 따른 변환 일관성 재검사는 생략합니다. 실제 대기시간은 map 생성·검색 시간에 따라 늘어납니다. 대칭 공간·overlap 부족은 거절될 수 있습니다.
-- RViz fixed frame은 `r0/odom`입니다. `alignment_ready=true`와 벽·코너 정합을 확인한 뒤 주행을 시작합니다.
+- RViz fixed frame은 **`map`**입니다. 최초 r0 mapping pose의 XY/yaw로 원점을 고정합니다. **양쪽 PC를 함께 업데이트·빌드**해야 하며, mapper 입력·TF·회사 연동 규약은 [고정 world frame 인터페이스](experiment_04_world_frame.md)를 참고합니다. 주기적 정합·기존 관측 재투영은 보류 상태로 초기 정합 정책을 유지합니다.
 - r0/r1 실행 터미널에 session ID와 `WAIT_INPUT`(입력 대기), `COLLECTING`(정지 관측 수집), `SEARCHING`(정합 검색), `VERIFYING`(반복 검증), `LOCKED`(완료), `STALE`(입력 지연)를 표시합니다. 상태 변경 시 즉시, 유지 중에는 5초마다 출력합니다. 중앙 상태가 5초 이상 끊기면 별도 수신 공백 경고를 출력합니다.
 - 자세한 driver/ICP 로그는 기존 로그 파일에 보관합니다. 터미널은 진단 topic과 session만 구독하며 raw cloud/IMU/map을 추가 구독하지 않습니다.
 - ICP는 raw cloud, deskew off, queue 1을 유지합니다. rear/height filter는 mapping 입력에 적용합니다. 고정 높이·IMU gravity 및 PHT full_se2/history 5가 각 single pipeline에 적용됩니다.
@@ -89,7 +89,8 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 ```bash
 ros2 topic echo /multi_agent/alignment_ready --qos-durability transient_local
 ros2 topic echo /multi_agent/alignment_status --qos-durability transient_local
-ros2 run tf2_ros tf2_echo r0/odom r1/odom
+ros2 run tf2_ros tf2_echo map r0/base_link
+ros2 run tf2_ros tf2_echo map r1/base_link
 ros2 service call /multi_agent/save_map std_srvs/srv/Trigger '{}'
 # 두 센서를 멈춘 후 초기 정합 재시도
 ros2 service call /multi_agent/reset_alignment std_srvs/srv/Trigger '{}'
@@ -104,11 +105,11 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 
 - 초기에는 중앙이 각 agent의 **누적 global map**을 구독합니다. map별 pose timestamp를 0.4초 이내로 짝짓는 조건과 local map 15개 조건을 제거했습니다. 고정된 초기 anchor를 사용해 지도 좌표를 변환합니다. pose/session은 정지 여부·재시작 감지를 위해 계속 확인합니다.
 - 최초 360° 검색 → 중간 검증에서 이전 후보군 우선 탐색 → 최종 360° 재검사 순서입니다. 후보군이 불충분하거나 품질 검사를 통과하지 못하면 전체 검색으로 돌아갑니다. 지도 경계 점 수가 크게 변해도 전체 검색합니다. default free-space conflict는 18%, 후보 간 점수 차이·기하·XY/yaw 일관성 검사는 유지합니다.
-- 변환 확정 후 초기 global snapshot으로 두 지도 layer를 채우고 **global 구독 OFF / local 구독 ON**으로 전환합니다. 이후 `rN/odom` 기준 local grid에 고정 agent 변환만 적용합니다. pose를 다시 곱하지 않습니다.
+- 변환 확정 후 초기 global snapshot으로 두 지도 layer를 채우고 **global 구독 OFF / local 구독 ON**으로 전환합니다. 이후 `rN/mapping_odom` 기준 local grid에 고정 agent 변환과 최초 r0→map anchor를 적용합니다. pose를 다시 곱하지 않습니다. raw `rN/odom`과 mapper의 보정 좌표계를 분리합니다.
 - 중앙 merged map은 기본적으로 **새 local 관측의 시간 증거**로 갱신합니다. free 30회 확인 후 occupied→free, occupied 재관측 시 free 증거 초기화, 관측 공백 5초 초과 시 카운터만 초기화합니다. 같은 0.1초 구간의 두 agent free는 셀당 한 번만 세며 해당 구간 occupied가 우선합니다. unknown은 기존 지도·증거를 지우지 않습니다. 설정·시각 처리·평가 범위는 [중앙 동적 흔적 제거](experiment_04_temporal_fusion.md)를 참고합니다.
 - local map이 누락되면 해당 관측이 없는 영역을 복구하지 못할 수 있습니다. 내부 local queue 초과 시 해당 agent의 global snapshot을 한 번 받아 아직 live 관측하지 않은 셀만 보완합니다. 이 snapshot은 free 카운터를 늘리지 않으며 live 갱신된 셀을 덮어쓰지 않습니다. DDS 이전 단계의 모든 누락을 자동 검출하거나 누락된 free 증거를 복원하는 기능은 아닙니다.
 - 각 single mapper의 발행·로컬 녹화는 유지됩니다. 다른 원격 RViz/녹화기가 global map을 구독하면 해당 전송은 계속됩니다. 전체 지도 송신 주기를 낮추는 producer bridge는 아직 추가하지 않았습니다.
-- **별도 `multi_agent_pose_relay.py` 프로세스**가 pose·TF를 전담합니다. source timestamp를 보존하고 입력 Best Effort / depth 1, 출력 Reliable / depth 1로 최신 pose를 중계합니다. 출력은 기존 Reliable RViz/녹화 구독자와 호환됩니다. RViz의 aligned odometry도 Best Effort / depth 1로 설정했습니다. 포즈 발행 주파수를 인위적으로 늘리거나 과거 pose의 시각을 현재로 바꾸지 않습니다.
+- **별도 `multi_agent_pose_relay.py` 프로세스**가 map 기준 pose·TF를 전담합니다. source timestamp를 보존하고 입력 Best Effort / depth 1, 출력 Reliable / depth 1을 사용합니다. raw TF와 mapping pose를 같은 source timestamp로 맞춰 `map→rN/odom` 보정을 계산합니다. TF가 아직 도착하지 않으면 최신 pose를 제한 시간 동안 재시도하며 최신 TF로 대신 계산하지 않습니다. 출력은 기존 Reliable RViz/녹화 구독자와 호환됩니다.
 - 지도 통합, 경로 생성, checkpoint/PNG/HTML 저장은 pose relay에서 수행하지 않습니다. 지도 노드는 각각의 worker에서 처리하며 시각화 path는 기본 1초마다, 최대 5000 pose를 표시합니다. raw ICP TF와 mapping_base_link TF의 소유자를 분리했습니다.
 - `/multi_agent/pose_relay_status`에는 수신·발행 수, callback p95/max, 입력 수신 공백을 표시합니다. `alignment_status`에는 단계별 구독·local queue·합성 연산시간을 표시합니다. callback 시간과 실제 무선 지연은 서로 다른 지표입니다.
 - session 변경·clock reset·명시적 reset 시 초기 global 구독으로 복구하고 누적 지도/경로를 초기화합니다. pose relay도 session/epoch를 확인해 이전 변환을 재사용하지 않습니다.
@@ -152,12 +153,15 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 
 | Topic | 내용 |
 | --- | --- |
-| `/multi_agent/r1_to_r0_transform` | 확정 후 고정된 r1 → r0 변환 |
+| `/multi_agent/r1_to_r0_transform` | 초기 정합의 `r0/mapping_odom ← r1/mapping_odom` 변환 |
+| `/multi_agent/map_anchor` | 고정 `map ← r0/mapping_odom` 변환 |
+| `/multi_agent/map_status` | world frame·coordinate epoch·지도 revision·ready |
 | `/multi_agent/alignment_ready`, `/multi_agent/alignment_status` | 정합·session·입력 지연 상태와 후보 평가 |
 | `/multi_agent/pose_relay_status` | 별도 pose 중계 처리시간·수신 공백 |
-| `/multi_agent/r1/aligned_global_occupancy` | r0 frame으로 변환한 r1 map |
-| `/multi_agent/merged_global_occupancy` | `r0/odom` 기준 합성 map |
-| `/multi_agent/rN/aligned_odometry`, `/multi_agent/rN/aligned_path` | r0 frame의 최종 pose·경로 |
+| `/multi_agent/r1/aligned_global_occupancy` | `map`으로 변환한 r1 map |
+| `/multi_agent/merged_global_occupancy` | `map` 기준 병합 지도 |
+| `/multi_agent/rN/global_pose` | `map` 기준 PoseWithCovarianceStamped |
+| `/multi_agent/rN/aligned_odometry`, `/multi_agent/rN/aligned_path` | 기존 토픽명 유지, 기준 프레임은 `map` |
 | `/multi_agent/rN/raw_path`, `/multi_agent/rN/session` | raw 비교 경로·session 정보 |
 
 ## 5. 녹화·재생·저장

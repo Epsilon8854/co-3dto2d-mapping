@@ -5,7 +5,7 @@
 - 주요 목적: **동적 객체 필터를 적용한 multi-agent system이 잔상을 제거하면서 정적 구조를 보존하고 최종 merged map을 적절하게 만드는지** 확인한다. 개별 agent 지도와 최종 병합 지도 양쪽을 평가한다.
 - 같은 bag의 **동일한 관측·경로·agent 변환**으로 off/on을 비교해 pose/정합 차이와 동적 필터 효과를 분리한다. 이후 live 시스템의 갱신율·지연도 확인한다.
 - 현재 높이·후방 필터를 유지한다면 **mapper 입력 filtered cloud + odometry + TF**로 충분하다. raw LiDAR/IMU는 기본에서 제외한다.
-- 기본 토픽은 **22개**다. `recording_r0.yaml`에서 이름·필수 여부·기록 QoS를 관리한다.
+- 기본 토픽은 **24개**다. `recording_r0.yaml`에서 이름·필수 여부·기록 QoS를 관리한다. 고정 world 도입 이후 `map_anchor`, `map_status`를 추가했다.
 - r1에서 보완한 코드가 이 저장소와 다를 경우 실제 토픽명을 확인한다. 이 문서의 이름은 현재 checkout의 launch·config에서 확인한 공개 토픽 기준이다.
 
 | 기본 저장 토픽 | 용도 |
@@ -15,8 +15,9 @@
 | `/rN/mapping/occupancy_mapper_odometry` | PHT까지 적용한 pose. 동적 필터 비교에서 경로를 고정하는 기준 |
 | `/rN/odom` | raw ICP odometry 비교 기준 |
 | `/tf`, `/tf_static` | 원래 TF와 양쪽 센서 장착 변환 |
-| `/multi_agent/rN/aligned_odometry` | 당시 r0 좌표계의 pose 결과 |
-| `/multi_agent/r1_to_r0_transform` | 당시 고정된 agent 간 변환 |
+| `/multi_agent/rN/aligned_odometry` | 당시 `map` 좌표계의 pose 결과. 새 global_pose와 같은 pose이므로 중복 기록하지 않음 |
+| `/multi_agent/r1_to_r0_transform` | 당시 고정된 agent mapping 좌표계 간 변환 |
+| `/multi_agent/map_anchor`, `/multi_agent/map_status` | 고정 world anchor·coordinate epoch·지도 revision |
 | `/multi_agent/alignment_ready`, `/multi_agent/alignment_status` | 정합 완료·입력 지연·session 상태 |
 | `/multi_agent/rN/session`, `/rN/mapping/pipeline_diagnostics`, `/multi_agent/pose_relay_status` | 재시작·처리/발행/중계 지연 진단. 미발행이면 누락 목록에 표시 |
 | `/multi_agent/merged_global_occupancy` | 당시 최종 지도 기준 결과. r0 내부 구독 |
@@ -76,7 +77,7 @@ bash scripts/record_experiment_04_r0.sh --name hallway_maps --with-agent-maps
 bash scripts/record_experiment_04_r0.sh --dry-run
 ```
 
-- `--include-raw`: `/rN/livox/lidar`, `/rN/livox/imu` 4개 추가. 기본 22개 → 26개.
+- `--include-raw`: `/rN/livox/lidar`, `/rN/livox/imu` 4개 추가. 기본 24개 → 28개.
 - `--with-agent-maps`: `/rN/mapping/local_occupancy`, `/rN/mapping/global_occupancy` 4개 추가. 원격 지도 전송과 저장량이 늘어난다.
 - 현재 목적의 기본 권장은 **추가 옵션 없이 filtered 관측만 저장**하는 것이다.
 - filtered cloud에서 이미 제거한 높이·후방 관측은 나중에 복원할 수 없다. raw를 제외한 bag으로 ICP 재계산이나 전처리 범위 확대를 수행할 수는 없다.
@@ -111,6 +112,8 @@ outputs/experiment_04_multi_agent_mapping/captures/hallway_dynamic_실행시각/
   - floor/fixed·mapper 보정 pose가 양쪽 모두 있다.
 - `alignment_reference_available: true`
   - 고정 agent 변환이 기록됐다. true만으로 정합 정확도를 보장하지는 않는다.
+- `world_anchor_reference_available: true`
+  - `map ← r0/mapping_odom` anchor가 기록됐다. 현재 capture의 epoch와 일치하는지는 `map_status`/`alignment_status`와 함께 확인한다.
 - `alignment_was_ready: true`, `multi_agent_minimum_complete: true`
   - 실제 `alignment_ready=true` 메시지와 필수 관측·pose·변환을 저장했다. 최종 merged map 정확도나 전 구간 무지연을 보장하지 않는다.
 - `merged_map_reference_available: true`

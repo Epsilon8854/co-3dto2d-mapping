@@ -56,6 +56,9 @@ class GravityPlaneHeightCloudFusion(GravityPlanePoseFusion):
         super().__init__()
 
         self.declare_parameter("ground_plane_height_filter_enabled", True)
+        # Empty preserves legacy single-agent output headers. Experiment 4
+        # separates corrected mapping coordinates from raw odometry TF.
+        self.declare_parameter("ground_plane_output_frame_id", "")
         self.declare_parameter(
             "ground_plane_height_reference_mode", "estimated_plane"
         )
@@ -94,6 +97,7 @@ class GravityPlaneHeightCloudFusion(GravityPlanePoseFusion):
         )
 
         value = lambda name: self.get_parameter(name).value
+        self.output_frame_id = str(value("ground_plane_output_frame_id"))
         self.height_filter_enabled = bool(
             value("ground_plane_height_filter_enabled")
         )
@@ -616,6 +620,8 @@ class GravityPlaneHeightCloudFusion(GravityPlanePoseFusion):
     ) -> Tuple[Odometry, Optional[float], Optional[float], Optional[float]]:
         output = deepcopy(input_odometry)
         output.header.stamp = cloud.header.stamp
+        if self.output_frame_id:
+            output.header.frame_id = self.output_frame_id
         if not self.enabled:
             return output, None, None, None
 

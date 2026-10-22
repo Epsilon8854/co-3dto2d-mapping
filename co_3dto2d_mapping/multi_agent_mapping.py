@@ -27,14 +27,14 @@ from co_3dto2d_mapping.multi_agent_core import SnapshotConsensus,IncrementalFusi
 from co_3dto2d_mapping.multi_agent_temporal import TemporalFusionConfig
 from co_3dto2d_mapping.multi_agent_ros import stamp_ns,yaw_of,pose_of,snapshot_of,grid_message,diagnostic,values_of,transformed_odometry
 from co_3dto2d_mapping.occupancy_submap import extract_local_patch
-from co_3dto2d_mapping.planar_transform_utils import world_from_source_odom,normalize_angle
+from co_3dto2d_mapping.planar_transform_utils import world_from_source_odom,normalize_angle,invert_planar,compose_planar
 from co_3dto2d_mapping.se2_map_registration import RegistrationConfig
 
 
 class MultiAgentMapping(Node):
     def __init__(self):
         super().__init__('multi_agent_mapping')
-        defaults=dict(output_directory='outputs/experiment_04_multi_agent_mapping/runs/direct',
+        defaults=dict(output_directory='outputs/experiment_04_multi_agent_mapping/runs/direct',world_frame='map',
             mode='auto_validated_locked',manual_x_m=0.,manual_y_m=0.,manual_yaw_deg=0.,
             startup_accumulation_sec=3.,verification_interval_sec=1.,confirmation_windows=1,
             consensus_translation_m=.10,consensus_yaw_deg=.5,stationary_translation_m=.15,stationary_yaw_deg=2.,
@@ -47,6 +47,9 @@ class MultiAgentMapping(Node):
             merged_dynamic_clear_max_range_m=6.)
         for key,value in defaults.items():self.declare_parameter(key,value)
         self.p={key:self.get_parameter(key).value for key in defaults}
+        self.world_frame=self.p['world_frame']
+        if not self.world_frame or self.world_frame.startswith('/') or self.world_frame.startswith(('r0/','r1/')):
+            raise ValueError('world_frame must be a separate global frame, e.g. map')
         if self.p['mode'] not in ('auto_validated_locked','manual_reference'):raise ValueError('invalid mode')
         for key in ('startup_accumulation_sec','verification_interval_sec','input_timeout_sec','submap_radius_m',
                     'registration_resolution_m','output_resolution_m','merged_period_sec','checkpoint_sec','path_publish_period_sec'):
@@ -73,7 +76,8 @@ class MultiAgentMapping(Node):
             evidence_timeout_sec=self.p['merged_dynamic_evidence_timeout_sec'],
             observation_bin_sec=self.p['merged_dynamic_observation_bin_sec'],
             clear_max_range_m=self.p['merged_dynamic_clear_max_range_m']).validated()
-        self.fusion=IncrementalFusion(self.p['output_resolution_m'],self.p['max_grid_cells'],self.temporal_config)
+        self.fusion=IncrementalFusion(self.p['output_resolution_m'],self.p['max_grid_cells'],self.temporal_config,frame=self.world_frame)
+        self.world_from_reference=None;self.world_anchor=None;self.map_revision=0
         self.fusion_report={}
         self.search_future=None;self.map_future=None;self.io_jobs=[];self.checkpoint_future=None
         self.maps={};self.layers={};self.merged=None;self.aligned_map=None;self.odom={};self.raw={};self.sessions={}
@@ -85,6 +89,8 @@ class MultiAgentMapping(Node):
         self.latched=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.latest=QoSProfile(depth=1,reliability=ReliabilityPolicy.BEST_EFFORT)
         self.transform_pub=self.create_publisher(TransformStamped,'/multi_agent/r1_to_r0_transform',self.latched)
+        self.anchor_pub=self.create_publisher(TransformStamped,'/multi_agent/map_anchor',self.latched)
+        self.map_status_pub=self.create_publisher(DiagnosticArray,'/multi_agent/map_status',self.latched)
         self.ready_pub=self.create_publisher(Bool,'/multi_agent/alignment_ready',self.latched)
         self.status_pub=self.create_publisher(DiagnosticArray,'/multi_agent/alignment_status',self.latched)
         self.merged_pub=self.create_publisher(OccupancyGrid,'/multi_agent/merged_global_occupancy',self.latched)
@@ -123,7 +129,7 @@ class MultiAgentMapping(Node):
         now=time.monotonic()
         return all(key in self.receipt and now-self.receipt[key]<=self.p['input_timeout_sec'] for key in self.required_input_keys())
 
-    def invalidate(self,reason):
+    def invalidate(self,reason,reset_world=True):
         # Finish old IO before archiving: an old checkpoint must not overwrite a new session.
         for future in self.io_jobs:
             try:future.result(timeout=90)
@@ -134,6 +140,8 @@ class MultiAgentMapping(Node):
             p=self.out/name
             if p.exists():archive.mkdir(parents=True,exist_ok=True);p.rename(archive/name)
         self.generation+=1;self.alignment=None;self.consensus.reset();self.maps.clear();self.layers.clear();self.merged=None;self.aligned_map=None
+        if reset_world:self.world_from_reference=None;self.world_anchor=None
+        self.map_revision=0
         self.receipt.clear();self.first_global_stamps.clear();self.last_attempt_stamps.clear();self.last_local.clear();self.anchors.clear()
         self.odom.clear();self.raw.clear();self.updates.clear();self.pending_seeds.clear();self.cached_modes=None;self.cached_sizes=None
         self.local_input_stats={rid:Counter() for rid in (0,1)}
@@ -142,23 +150,33 @@ class MultiAgentMapping(Node):
             for path in group.values():path.clear()
         self.set_subscriptions('local',False);self.set_subscriptions('global',True)
         self.state='WAIT_INPUT';self.reason=reason;self.ready_pub.publish(Bool(data=False))
-        empty=OccupancyGrid();empty.header.frame_id='r0/odom';self.merged_pub.publish(empty);self.aligned_map_pub.publish(empty)
-        for pub in self.path_pubs.values():path=RosPath();path.header.frame_id='r0/odom';pub.publish(path)
+        empty=OccupancyGrid();empty.header.frame_id=self.world_frame;self.merged_pub.publish(empty);self.aligned_map_pub.publish(empty)
+        for pub in self.path_pubs.values():path=RosPath();path.header.frame_id=self.world_frame;pub.publish(path)
         self.publish_status();self.get_logger().warn('Alignment invalidated: '+reason)
 
     def session(self,msg,rid):
         identifier=values_of(msg).get('session_id')
         if identifier is None:return
-        if rid in self.sessions and identifier!=self.sessions[rid]:self.invalidate(f'r{rid} session changed')
+        if rid in self.sessions and identifier!=self.sessions[rid]:self.invalidate(f'r{rid} session changed',reset_world=rid==0)
         self.sessions[rid]=identifier;self.receipt['session',rid]=time.monotonic()
 
     def pose(self,msg,rid):
-        if msg.header.frame_id!=f'r{rid}/odom' or not np.all(np.isfinite(pose_of(msg))):return
+        if msg.header.frame_id!=f'r{rid}/mapping_odom' or not np.all(np.isfinite(pose_of(msg))):return
         ns=stamp_ns(msg.header.stamp)
-        if rid in self.odom and ns<stamp_ns(self.odom[rid].header.stamp):self.invalidate(f'r{rid} pose clock reset')
+        if rid in self.odom and ns<stamp_ns(self.odom[rid].header.stamp):self.invalidate(f'r{rid} pose clock reset',reset_world=rid==0)
         if rid in self.odom and ns==stamp_ns(self.odom[rid].header.stamp):return
         self.odom[rid]=msg;self.receipt['pose',rid]=time.monotonic();self.paths['aligned'][rid].append(msg)
         current=pose_of(msg)
+        if rid==0 and self.world_from_reference is None:
+            # Freeze the first r0 XY/yaw, not the later stationary-search anchor.
+            # z remains floor-referenced: the fixed base height is retained.
+            self.world_from_reference=invert_planar(current)
+            self.world_anchor=dict(source_frame=msg.header.frame_id,source_stamp_ns=ns,
+                initial_xy_yaw=list(current),world_from_reference=list(self.world_from_reference),z_reference='floor')
+            t=TransformStamped();t.header.stamp=msg.header.stamp;t.header.frame_id=self.world_frame;t.child_frame_id=msg.header.frame_id
+            x,y,yaw=self.world_from_reference;t.transform.translation.x=x;t.transform.translation.y=y
+            t.transform.rotation.z=math.sin(yaw/2);t.transform.rotation.w=math.cos(yaw/2);self.anchor_pub.publish(t)
+            self.get_logger().info(f'World anchor fixed: {self.world_frame} <- {msg.header.frame_id} {self.world_from_reference}')
         if self.alignment is None:
             if rid not in self.anchors:self.anchors[rid]=current
             anchor=self.anchors[rid]
@@ -174,9 +192,9 @@ class MultiAgentMapping(Node):
         self.raw[rid]=msg;self.paths['raw'][rid].append(msg)
 
     def global_map(self,msg,rid):
-        if msg.header.frame_id!=f'r{rid}/odom':return
+        if msg.header.frame_id!=f'r{rid}/mapping_odom':return
         ns=stamp_ns(msg.header.stamp)
-        if rid in self.maps and ns<self.maps[rid].stamp_ns:self.invalidate(f'r{rid} map clock reset');return
+        if rid in self.maps and ns<self.maps[rid].stamp_ns:self.invalidate(f'r{rid} map clock reset',reset_world=rid==0);return
         if rid in self.maps and ns==self.maps[rid].stamp_ns:return
         try:snapshot=snapshot_of(msg)
         except (ValueError,TypeError):return
@@ -188,7 +206,7 @@ class MultiAgentMapping(Node):
 
     def local_map(self,msg,rid):
         counts=self.local_input_stats[rid];counts['received']+=1
-        if self.alignment is None or msg.header.frame_id!=f'r{rid}/odom':counts['invalid_phase_or_frame']+=1;return
+        if self.alignment is None or msg.header.frame_id!=f'r{rid}/mapping_odom':counts['invalid_phase_or_frame']+=1;return
         ns=stamp_ns(msg.header.stamp)
         if ns<0:counts['invalid_stamp']+=1;return
         if ns<=self.last_local.get(rid,-1):counts['duplicate_or_seeded_stamp']+=1;return
@@ -217,13 +235,16 @@ class MultiAgentMapping(Node):
         return report,patches
 
     def lock(self,transform):
+        if self.world_from_reference is None:raise ValueError('r0 initial world anchor unavailable')
         self.alignment=tuple(map(float,transform));self.state='LOCKED';self.reason='startup global snapshots verified; transform frozen'
         self.pending_seeds=dict(self.maps);self.last_local={r:s.stamp_ns for r,s in self.maps.items()}
         self.set_subscriptions('global',False);self.set_subscriptions('local',True)
-        t=TransformStamped();t.header.stamp=self.get_clock().now().to_msg();t.header.frame_id='r0/odom';t.child_frame_id='r1/odom'
+        t=TransformStamped();t.header.stamp=self.get_clock().now().to_msg();t.header.frame_id='r0/mapping_odom';t.child_frame_id='r1/mapping_odom'
         t.transform.translation.x=transform[0];t.transform.translation.y=transform[1]
         t.transform.rotation.z=math.sin(transform[2]/2);t.transform.rotation.w=math.cos(transform[2]/2);self.transform_pub.publish(t)
-        payload=dict(parent='r0/odom',child='r1/odom',x_m=transform[0],y_m=transform[1],yaw_rad=transform[2],sessions=dict(self.sessions),mode=self.p['mode'])
+        payload=dict(parent='r0/mapping_odom',child='r1/mapping_odom',x_m=transform[0],y_m=transform[1],yaw_rad=transform[2],
+            world_frame=self.world_frame,world_anchor=deepcopy(self.world_anchor),coordinate_epoch=f'{self.instance}:{self.generation}',
+            sessions=dict(self.sessions),mode=self.p['mode'])
         def write_alignment():
             import yaml
             atomic_write(self.out/'alignment/r1_to_r0_transform.json',json.dumps(payload,indent=2).encode())
@@ -268,6 +289,7 @@ class MultiAgentMapping(Node):
                 merged,layers,runtime,fusion_report=future.result()
                 if generation==self.generation and self.alignment is not None:
                     self.merged,self.layers=merged,layers;self.aligned_map=layers.get(1);self.last_report['merge_runtime_ms']=runtime
+                    self.map_revision+=1
                     previous=self.fusion_report.get('common',{}).get('cleared_cells',0)
                     self.fusion_report=fusion_report
                     cleared=fusion_report.get('common',{}).get('cleared_cells',0)
@@ -277,9 +299,9 @@ class MultiAgentMapping(Node):
             except Exception as exc:self.reason='map worker failed: '+str(exc);self.get_logger().error(self.reason)
         if self.alignment is not None and self.map_future is None and (self.pending_seeds or self.updates) and now-self.last_map_submit>=self.p['merged_period_sec']:
             seeds,self.pending_seeds=self.pending_seeds,{};updates=list(self.updates);self.updates.clear();self.map_generation=self.generation
-            alignment=self.alignment;generation=self.generation
+            alignment=self.alignment;generation=self.generation;world_from_reference=self.world_from_reference
             def update_maps():
-                began=time.perf_counter();merged,layers=self.fusion.update(generation,seeds,updates,alignment)
+                began=time.perf_counter();merged,layers=self.fusion.update(generation,seeds,updates,alignment,world_from_reference)
                 return merged,layers,(time.perf_counter()-began)*1000,self.fusion.diagnostics()
             self.map_future=self.map_worker.submit(update_maps);self.last_map_submit=now
         if self.path_future is not None and self.path_future.done():
@@ -291,7 +313,7 @@ class MultiAgentMapping(Node):
             self.path_future=None
         if self.alignment is not None and self.path_future is None and now-self.last_path_publish>=self.p['path_publish_period_sec']:
             paths={kind:{r:tuple(v) for r,v in group.items()} for kind,group in self.paths.items()}
-            self.path_future=self.path_worker.submit(self.build_paths,paths,self.alignment,self.generation);self.last_path_publish=now
+            self.path_future=self.path_worker.submit(self.build_paths,paths,self.alignment,self.generation,self.world_from_reference,self.world_frame);self.last_path_publish=now
         if self.merged is not None and now-self.last_checkpoint>=self.p['checkpoint_sec'] and (self.checkpoint_future is None or self.checkpoint_future.done()):
             self.checkpoint_future=self.io_worker.submit(self.write_bundle,self.capture_bundle('checkpoint'));self.io_jobs.append(self.checkpoint_future);self.last_checkpoint=now
         self.io_jobs=[f for f in self.io_jobs if not f.done()]
@@ -306,6 +328,9 @@ class MultiAgentMapping(Node):
         ready=self.alignment is not None and self.merged is not None and not missing
         values=dict(state=state,reason=self.reason if not missing else 'waiting for fresh input: '+', '.join(missing),ready=ready,
             transform=self.alignment,sessions=self.sessions,generation=self.generation,central_instance=self.instance,
+            world_frame=self.world_frame,world_from_reference=self.world_from_reference,world_anchor=self.world_anchor,
+            mapping_frames={r:f'r{r}/mapping_odom' for r in (0,1)},
+            coordinate_epoch=f'{self.instance}:{self.generation}',map_revision=self.map_revision,
             consistent_windows=len(self.consensus.evidence),required_windows=self.consensus.count,input_receipt_ages_sec=ages,missing_inputs=missing,
             local_map_subscriptions_active=bool(self.local_map_subscriptions),global_map_subscriptions_active=bool(self.global_map_subscriptions),
             local_input_stats=self.local_input_stats,pending_local_updates=len(self.updates),source_map_stamps={r:s.stamp_ns for r,s in self.maps.items()},
@@ -315,17 +340,26 @@ class MultiAgentMapping(Node):
             evidence_kind='cumulative snapshots for startup; source-time local observations for fusion')
         msg=DiagnosticArray();msg.header.stamp=self.get_clock().now().to_msg();msg.status=[diagnostic('multi_agent/startup_alignment',values,DiagnosticStatus.OK if ready else DiagnosticStatus.WARN,values['reason'])]
         self.status_pub.publish(msg);self.ready_pub.publish(Bool(data=ready))
+        map_status=DiagnosticArray();map_status.header=msg.header
+        map_status.status=[diagnostic('multi_agent/map',dict(world_frame=self.world_frame,coordinate_epoch=values['coordinate_epoch'],
+            revision=self.map_revision,ready=ready,world_anchor=self.world_anchor,
+            map_source_stamp_ns=self.merged.stamp_ns if self.merged is not None else None,
+            periodic_registration_enabled=False,geometry_reprojection_applied=False,
+            source_stamps_ns=self.fusion_report.get('latest_source_stamps_ns',{})),
+            DiagnosticStatus.OK if ready else DiagnosticStatus.WARN,'fixed world frame; startup-only inter-agent alignment')]
+        self.map_status_pub.publish(map_status)
 
     @staticmethod
-    def build_paths(paths,alignment,generation):
+    def build_paths(paths,alignment,generation,world_from_reference=(0.,0.,0.),world_frame='map'):
         result={}
         for kind in ('aligned','raw'):
             for rid in (0,1):
-                path=RosPath();path.header.frame_id='r0/odom';transform=alignment if rid else (0.,0.,0.)
+                path=RosPath();path.header.frame_id=world_frame
+                transform=compose_planar(world_from_reference,alignment) if rid else world_from_reference
                 poses=paths[kind][rid];xy=transform_xy([[m.pose.pose.position.x,m.pose.pose.position.y] for m in poses],transform)
                 c,s=math.cos(transform[2]/2),math.sin(transform[2]/2)
                 for odom,point in zip(poses,xy):
-                    pose=PoseStamped();pose.header=deepcopy(odom.header);pose.header.frame_id='r0/odom';pose.pose=deepcopy(odom.pose.pose)
+                    pose=PoseStamped();pose.header=deepcopy(odom.header);pose.header.frame_id=world_frame;pose.pose=deepcopy(odom.pose.pose)
                     pose.pose.position.x,pose.pose.position.y=map(float,point);q=deepcopy(pose.pose.orientation)
                     pose.pose.orientation.x=c*q.x-s*q.y;pose.pose.orientation.y=s*q.x+c*q.y
                     pose.pose.orientation.z=c*q.z+s*q.w;pose.pose.orientation.w=c*q.w-s*q.z;path.poses.append(pose)
@@ -359,6 +393,8 @@ function draw(){const v=candidates[Number(sel.value)]||{transform:[0,0,0]},t=v.t
         return dict(stage=stage,merged=self.merged,layers=dict(self.layers),maps=dict(self.maps),alignment=self.alignment,
             paths={kind:{r:tuple(values) for r,values in group.items()} for kind,group in self.paths.items()},
             sessions=dict(self.sessions),reason=self.reason,fresh=self.fresh(),metrics=deepcopy(self.last_report),generation=self.generation,
+            world_frame=self.world_frame,world_from_reference=self.world_from_reference,world_anchor=deepcopy(self.world_anchor),
+            coordinate_epoch=f'{self.instance}:{self.generation}',map_revision=self.map_revision,
             temporal_fusion=deepcopy(self.fusion_report),temporal_filter_config=asdict(self.temporal_config))
 
     def write_bundle(self,bundle):
@@ -366,7 +402,7 @@ function draw(){const v=candidates[Number(sel.value)]||{transform:[0,0,0]},t=v.t
         if bundle['merged'] is not None:
             for kind,group in bundle['paths'].items():
                 for rid,poses in group.items():
-                    transform=bundle['alignment'] if rid else (0.,0.,0.)
+                    transform=compose_planar(bundle['world_from_reference'],bundle['alignment']) if rid else bundle['world_from_reference']
                     paths[f'r{rid}_{kind}']=transform_xy([[m.pose.pose.position.x,m.pose.pose.position.y] for m in poses],transform).tolist()
             save_map(directory,'merged_global_map',bundle['merged'],paths)
             for rid,snapshot in bundle['layers'].items():
@@ -376,6 +412,7 @@ function draw(){const v=candidates[Number(sel.value)]||{transform:[0,0,0]},t=v.t
             for rid,snapshot in bundle['maps'].items():save_map(directory,f'r{rid}_unaligned_global_map',snapshot)
         atomic_write(self.out/('checkpoint_status.json' if stage=='checkpoint' else 'save_status.json'),json.dumps(json_safe(dict(
             stage=stage,merged_saved=bundle['merged'] is not None,alignment=bundle['alignment'],sessions=bundle['sessions'],
+            world_frame=bundle['world_frame'],world_anchor=bundle['world_anchor'],coordinate_epoch=bundle['coordinate_epoch'],map_revision=bundle['map_revision'],
             inputs_fresh=bundle['fresh'],reason=bundle['reason'],metrics=bundle['metrics'],generation=bundle['generation'],
             fusion_policy='timestamped_local_evidence' if self.temporal_config.enabled else 'occupied_wins',
             temporal_filter_config=bundle['temporal_filter_config'],temporal_fusion=bundle['temporal_fusion'],paths_saved=True)),indent=2).encode())
@@ -390,7 +427,8 @@ function draw(){const v=candidates[Number(sel.value)]||{transform:[0,0,0]},t=v.t
         response.success=self.save_outputs('requested');response.message=str(self.out);return response
 
     def reset_service(self,request,response):
-        self.invalidate('explicit reset requested');response.success=True;response.message='stationary global-snapshot startup reset';return response
+        self.invalidate('explicit alignment reset requested',reset_world=False)
+        response.success=True;response.message='startup alignment reset; r0 world anchor preserved';return response
 
     def close(self):
         if self.closing:return
@@ -398,11 +436,13 @@ function draw(){const v=candidates[Number(sel.value)]||{transform:[0,0,0]},t=v.t
         if self.map_future is not None:
             try:
                 merged,layers,_,report=self.map_future.result(timeout=120)
-                if self.map_generation==self.generation:self.merged,self.layers,self.fusion_report=merged,layers,report
+                if self.map_generation==self.generation:
+                    self.merged,self.layers,self.fusion_report=merged,layers,report;self.map_revision+=1
             except Exception as exc:self.get_logger().error(str(exc))
         if self.alignment is not None and (self.pending_seeds or self.updates):
             try:
-                self.merged,self.layers=self.fusion.update(self.generation,self.pending_seeds,list(self.updates),self.alignment)
+                self.merged,self.layers=self.fusion.update(self.generation,self.pending_seeds,list(self.updates),self.alignment,self.world_from_reference)
+                self.map_revision+=1
                 self.fusion_report=self.fusion.diagnostics()
             except Exception as exc:self.get_logger().error(str(exc))
         self.map_worker.shutdown(wait=True,cancel_futures=True)

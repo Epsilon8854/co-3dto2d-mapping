@@ -143,6 +143,7 @@ def audit_bag(bag,items,frames):
         raw_replay_minimum_complete=raw_requested and not incomplete('optional_raw') and static_present and ranges_overlap(('optional_raw',)),
         fixed_pose_reference_minimum_complete=not incomplete('pose_required'),
         alignment_reference_available=stats.get('/multi_agent/r1_to_r0_transform',{}).get('count',0)>0,
+        world_anchor_reference_available=stats.get('/multi_agent/map_anchor',{}).get('count',0)>0,
         merged_map_reference_available=stats.get('/multi_agent/merged_global_occupancy',{}).get('count',0)>0,
         note='Minimum presence/type/TF checks only. Receipt rate does not prove loss-free sensor delivery or clock synchronization.')
 
