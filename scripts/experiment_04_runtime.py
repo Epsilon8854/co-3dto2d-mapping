@@ -16,6 +16,7 @@ import sys
 import time
 
 import yaml
+from livox_driver_guard import conflicting_drivers
 
 ROOT=Path(__file__).resolve().parents[1]
 CONFIG=ROOT/'config/experiments/experiment_04_multi_agent_mapping'
@@ -159,7 +160,8 @@ class StatusConsole:
 
 def start(command,log,kind):
     logfile=log.open('wb')
-    try:proc=subprocess.Popen(list(map(str,command)),start_new_session=True,stdout=logfile,stderr=subprocess.STDOUT)
+    env=dict(os.environ,LIVOX_LAUNCHER_PID=str(os.getpid())) if kind=='driver' else None
+    try:proc=subprocess.Popen(list(map(str,command)),start_new_session=True,stdout=logfile,stderr=subprocess.STDOUT,env=env)
     finally:logfile.close()
     children.append((proc,kind))
     console('START',f'{kind} pid={proc.pid} | log={log}')
@@ -169,22 +171,24 @@ def start(command,log,kind):
 def stop_process(proc,timeout=30):
     # The launch leader may already have exited while its children remain.
     # Always address our original owned process group, not a name-wide pkill.
-    try:os.killpg(proc.pid,signal.SIGINT)
-    except ProcessLookupError:return
-    try:proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        os.killpg(proc.pid,signal.SIGTERM)
-        try:proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:os.killpg(proc.pid,signal.SIGKILL);proc.wait()
-    # Catch surviving grandchildren even if the leader exited cleanly.
-    try:os.killpg(proc.pid,signal.SIGTERM)
-    except ProcessLookupError:pass
+    def group_alive():
+        proc.poll()  # Reap our child; waiting for it alone misses grandchildren.
+        try:os.killpg(proc.pid,0);return True
+        except ProcessLookupError:return False
+    for sig,grace in ((signal.SIGINT,timeout),(signal.SIGTERM,10),(signal.SIGKILL,5)):
+        if not group_alive():return
+        console('STOP',f'owned process group {proc.pid}: {sig.name}, waiting up to {grace}s for all children')
+        try:os.killpg(proc.pid,sig)
+        except ProcessLookupError:return
+        end=time.monotonic()+grace
+        while group_alive() and time.monotonic()<end:time.sleep(.1)
+    if group_alive():console('STOP',f'process group {proc.pid} remains after SIGKILL; inspect OS process state')
 
 
 def cleanup():
     # Finish producers first. Fusion remains alive to drain their final maps.
     for proc,kind in children:
-        if kind in ('driver','player','robot','recorder'):stop_process(proc)
+        if kind in ('driver','player','robot','recorder'):stop_process(proc,timeout=5 if kind=='driver' else 30)
     if any(kind=='fusion' and proc.poll() is None for proc,kind in children):time.sleep(2)
     for proc,kind in children:
         if kind=='fusion':stop_process(proc,timeout=90)
@@ -194,6 +198,10 @@ def cleanup():
 
 
 def graph_preflight(args):
+    if args.start_driver:
+        config=args.driver_config or os.environ.get('LIVOX_CONFIG')
+        found=conflicting_drivers(config)
+        if found:raise RuntimeError('local Livox driver process already running (even if no topics yet): '+json.dumps(found))
     import rclpy
     rclpy.init();node=rclpy.create_node('experiment04_preflight')
     try:
@@ -353,10 +361,14 @@ def main():
                         if kind!='rviz' and proc.poll() is not None:raise RuntimeError(kind+' exited; see logs')
                     time.sleep(.2)
     finally:
-        if monitor is not None:monitor.close()
-        cleanup()
-        meta['finished_at']=datetime.now(ZoneInfo('Asia/Seoul')).isoformat()
-        (run/'run.yaml').write_text(yaml.safe_dump(meta,sort_keys=False))
+        # Console teardown must not skip owned process cleanup if ROS shutdown
+        # itself fails while a driver is still running.
+        try:
+            if monitor is not None:monitor.close()
+        finally:
+            cleanup()
+            meta['finished_at']=datetime.now(ZoneInfo('Asia/Seoul')).isoformat()
+            (run/'run.yaml').write_text(yaml.safe_dump(meta,sort_keys=False))
 
 if __name__=='__main__':
     try:main()

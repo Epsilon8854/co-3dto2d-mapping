@@ -76,6 +76,7 @@ install(
     co_3dto2d_mapping/occupancy_png_exporter.py
     co_3dto2d_mapping/rerun_mapping_node.py
     scripts/run_livox_robot.sh
+    scripts/livox_driver_guard.py
     scripts/run_two_mid360_2d_mapping.sh
     scripts/run_two_live_combined_bag.sh
     scripts/run_two_mid360_2d_mapping_bag.sh

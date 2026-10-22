@@ -63,6 +63,7 @@ if ! ros2 pkg prefix livox_ros_driver2 >/dev/null 2>&1; then
   set -u
 fi
 
+livox_prefix="$(ros2 pkg prefix livox_ros_driver2)"
 livox_share="$(ros2 pkg prefix --share livox_ros_driver2)"
 livox_config="${LIVOX_CONFIG:-${livox_share}/config/MID360_config.json}"
 if [[ ! -r "${livox_config}" ]]; then
@@ -78,7 +79,12 @@ printf 'Starting physical robot %s as %s on ROS_DOMAIN_ID=%s\n' \
 printf 'LiDAR: /%s/livox/lidar  IMU: /%s/livox/imu\n' \
   "${robot_namespace}" "${robot_namespace}"
 
-exec ros2 run livox_ros_driver2 livox_ros_driver2_node --ros-args \
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+driver_executable="${livox_prefix}/lib/livox_ros_driver2/livox_ros_driver2_node"
+# Direct exec keeps the owned child PID equal to the actual driver PID.
+# The guard rejects physical endpoint duplicates before ROS topics exist.
+exec python3 "${script_dir}/livox_driver_guard.py" --config "${livox_config}" -- \
+  "${driver_executable}" --ros-args \
   -r "__node:=livox_lidar_${robot_namespace}" \
   -r "/livox/lidar:=/${robot_namespace}/livox/lidar" \
   -r "/livox/imu:=/${robot_namespace}/livox/imu" \

@@ -44,6 +44,7 @@ bash build.sh humble
 - Driver `config/MID360_config.json`을 각 PC에서 복사해 센서 IP와 host IP를 설정합니다. 현재 PC의 실센서 IP 설정은 Git에 올리지 않습니다.
 - 실행 시 `--driver-config /absolute/path/MID360_config.json`을 지정합니다. 실행기가 LiDAR/IMU를 `/rN/livox/*`, frame을 `rN/livox_frame`으로 구분하고 PointCloud2를 사용합니다.
 - 같은 물리 센서의 driver를 중복 실행하지 않습니다. 이미 실행 중이면 `--start-driver`를 빼십시오.
+- 실행기는 ROS 발행자뿐 아니라 로컬 driver 프로세스도 검사합니다. driver 실행 스크립트는 센서 IP·수신 UDP endpoint별 잠금으로 같은 장치의 중복 실행을 차단하고 `ros2 run` wrapper 없이 실제 driver를 직접 실행합니다. 종료 시 소유 process group의 잔류 자식까지 SIGINT→SIGTERM→SIGKILL로 정리합니다. 자세한 원인·적용 범위는 [driver 수명 관리](experiment_04_driver_lifecycle.md)를 참고하십시오.
 
 ## 3. 두 PC 네트워크·시간
 
