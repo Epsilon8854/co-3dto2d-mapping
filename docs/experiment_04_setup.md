@@ -203,6 +203,26 @@ bash scripts/replay_experiment_04_multi_agent_mapping.sh \
 - `monitor_experiment_04_pipeline.py`는 raw odometry → fixed/gravity 보정 odometry → mapper/PHT 보정 odometry의 수신율·공백·header 시각을 기록합니다. raw point cloud는 구독하지 않습니다.
 - `local` 역할은 반드시 해당 센서가 연결된 PC에서 실행합니다. local/global grid는 Python 역직렬화 없이 byte 수·수신율만 관측하고, 작은 `/multi_agent/rN/pipeline_metrics` 진단 메시지를 1 Hz로 발행합니다. 지도 구독 자체의 계측 부하는 존재합니다.
 - `receiver` 역할은 r0에서 실행하며 원격 지도 구독을 추가하지 않습니다. r1 pose·aligned pose와 작은 진단 메시지를 JSON으로 저장합니다. 계측 프로세스는 정해진 시간 후 종료됩니다.
+- mapper 내부 계측은 실험 4의 `pipeline_metrics_enabled: true`, `pipeline_metrics_period_ms: 1000`으로 켜집니다. `/rN/mapping/pipeline_diagnostics`를 자동 발행하며, 기존 입력 구독에서 수신 횟수를 셉니다. 단일 mapper executor의 타이머이므로 무거운 콜백에 막히면 1초보다 늦어질 수 있고 `report_interval_sec`에 실제 간격이 남습니다. 다른 실험의 기본은 OFF입니다.
+- 내부 진단을 처음 추가한 버전은 `git pull` 후 C++ **빌드 및 매핑 재시작이 필요**합니다. 매핑이 정상 시작된 뒤 계측 스크립트를 실행합니다. 계측 스크립트 자체를 다시 실행할 때는 mapper 재시작이 필요 없습니다.
+- local/receiver 양쪽 스크립트가 내부 진단을 자동 구독하고 결과 JSON의 `mapper_reports`에 저장합니다. local 역할은 최신 내부 진단을 작은 계측 메시지에도 포함합니다. r0 receiver만으로도 실제 mapper 발행 카운터를 받을 수 있습니다. 녹화 스크립트의 토픽 목록에도 내부 진단을 포함합니다.
+
+| 내부 진단 | 해석 |
+| --- | --- |
+| `cloud_input_count/hz`, `odom_input_count/hz` | 기존 mapper 구독까지 전달된 입력. sensor 발행 총수나 DDS 손실 카운터는 아님 |
+| `*_arrival_gap_*`, `*_stamp_gap_*`, `*_last_stamp_ns`, `*_duplicate_stamps`, `*_backward_stamps` | 콜백 도착 간격·원 header 간격·중복·역행 |
+| `synchronized_callbacks/hz`, `sync_stamp_delta_*` | 동기화 콜백 수와 선택된 cloud/odom timestamp 차이의 절댓값 |
+| `completed_callbacks/hz`, `skipped_tracking/alignment/tf/xyz` | 정상 처리 완료와 조기 반환 사유 |
+| `odom_publish_calls/returns`, `odom_published_hz` | 보정 odometry `publish()` 호출·정상 반환 횟수와 실제 보고 구간의 반환률 |
+| `callback_*`, `pose_refinement_*`, `pht_*`, `point_processing_*` | 전체 동기화 콜백·pose 보정·PHT·point 변환/필터링 wall time |
+| `local_grid_*`, `global_grid_*`, `local_visualization_*`, `debug_publish_*`, `path_publish_*` | 지도 생성·누적·시각화/디버그 point cloud·경로 처리/발행 wall time |
+| `odom_publish_*`, `local_map_publish_*`, `global_map_publish_*`, `maps_timer_*` | 개별 `publish()`와 전체 지도 타이머 wall time. DDS backpressure 등의 지연을 구분하는 단서 |
+| `local/global_map_publish_returns`, `local/global_map_published_hz`, `last_published_*_stamp_ns` | 지도 발행 API 반환 횟수/주기와 실제 발행한 데이터 시각. cached map 재발행도 횟수에 포함 |
+| `instance_id`, `uptime_sec`, `report_sequence`, `report_interval_sec`, `*_subscribers` | 프로세스 재시작 구분·실제 계측 구간·진단 누락·구독 부하 확인 |
+
+- `*_p95_ms`는 최근 256개 표본, `*_mean_ms/max_ms`와 횟수는 프로세스 시작 이후 누적입니다. 중첩 시간(PHT ⊂ pose 보정 ⊂ callback)은 합산하지 않습니다. 입력이 없을 때 receipt age는 -1입니다.
+- 입력 수와 동기화 수의 차이는 대기 중 메시지도 포함하므로 drop 수로 단정하지 않습니다. 입력이 충분한데 동기화가 적으면 timestamp/동기화 조건을, 콜백/지도/발행 시간이 길면 해당 구간을 우선 확인합니다. 실제 발행 횟수에 비해 r0 수신이 적으면 DDS 전달·수신 측을 조사합니다. 비교 구간과 mapper `instance_id`를 맞춥니다.
+- `publish()` 정상 반환은 RMW에 전달했다는 의미이며 원격 수신 보장은 아닙니다. 새 계측은 알고리즘·기존 큐·주기를 바꾸지 않습니다. 진단 집계·발행 비용은 추가되며, 원인별 최적화는 계측 결과를 확인한 뒤 수행합니다.
 - 두 PC의 겹치는 관측 구간을 비교합니다. r1 로컬도 느리면 내부 파이프라인을, 로컬은 빠르고 r0 수신만 느리면 전달/QoS/수신 부하를 먼저 점검합니다. 모두 구독자 관측치이므로 실제 publisher 카운터나 순수 무선 지연과 동일하지 않습니다. header-age 비교에는 PC clock sync가 필요합니다.
 - bash 실행 파일이 ROS 환경을 자동 설정합니다. 기본은 r1 로컬 계측 40초, domain 72이며 빌드나 mapper 재시작 없이 실행됩니다. 결과는 `outputs/experiment_04_multi_agent_mapping/diagnostics/실행시각/` 아래에 저장해 실행별로 구분합니다. `--output`으로 경로를 지정할 수도 있습니다.
 

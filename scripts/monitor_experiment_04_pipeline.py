@@ -2,8 +2,8 @@
 """Compare on-robot receipt rates with fusion-PC receipt rates, without clouds.
 
 Run --role local on the PC owning --robot-id. Run --role receiver on r0.
-Map messages are observed only in local mode, as serialized bytes. Measurements
-are subscriber observations, not instrumented publisher counters or wire latency.
+Map messages are observed only in local mode, as serialized bytes. Subscriber
+observations are kept separate from the mapper's instrumented publisher counters.
 """
 import argparse
 from collections import deque
@@ -59,6 +59,7 @@ def main():
     small=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)
     rid=args.robot_id;prefix=f'/r{rid}';start=time.monotonic();identity=str(uuid.uuid4())
     stats={};remote=[];snapshots=[];last_report=0.;subscriptions=[]
+    mapper_reports=[];mapper_latest={};mapper_received_at=None
     diagnostic_topic=f'/multi_agent/r{rid}/pipeline_metrics'
     publisher=node.create_publisher(DiagnosticArray,diagnostic_topic,small) if args.role=='local' else None
     def observe(topic,msg):
@@ -82,11 +83,25 @@ def main():
                     try:remote.append(dict(receiver_elapsed_sec=time.monotonic()-start,report=json.loads(item.value)))
                     except (ValueError,TypeError):pass
     if args.role=='receiver':subscriptions.append(node.create_subscription(DiagnosticArray,diagnostic_topic,receive_metrics,small))
+    def receive_mapper_metrics(msg):
+        nonlocal mapper_latest,mapper_received_at
+        values={}
+        for status in msg.status:
+            for item in status.values:
+                try:values[item.key]=json.loads(item.value)
+                except (ValueError,TypeError):values[item.key]=item.value
+        mapper_received_at=time.monotonic()
+        mapper_latest=values
+        mapper_reports.append(dict(receiver_elapsed_sec=mapper_received_at-start,
+            header_stamp_ns=msg.header.stamp.sec*10**9+msg.header.stamp.nanosec,metrics=values))
+    subscriptions.append(node.create_subscription(DiagnosticArray,prefix+'/mapping/pipeline_diagnostics',receive_mapper_metrics,small))
     def report():
         now=time.monotonic()
         result=dict(role=args.role,robot_id=rid,hostname=socket.gethostname(),monitor_id=identity,
             elapsed_sec=now-start,report_ros_stamp_ns=node.get_clock().now().nanoseconds,
             topics={topic:value.summary(now) for topic,value in stats.items()},
+            mapper_diagnostics=mapper_latest,
+            mapper_report_age_sec=now-mapper_received_at if mapper_received_at is not None else None,
             note='Subscriber observations with Best Effort depth 1. Header age includes clock offset; no raw cloud subscription.')
         snapshots.append(result)
         if publisher is not None:
@@ -94,7 +109,9 @@ def main():
             msg.status=[DiagnosticStatus(name=f'r{rid}/pipeline_metrics',level=bytes([0]),message='on-robot subscriber observation',
                 values=[KeyValue(key='metrics',value=json.dumps(result))])]
             publisher.publish(msg)
-        print(json.dumps(dict(elapsed_sec=round(now-start,1),receipt_hz={t:round(s['receipt_hz'],2) for t,s in result['topics'].items()},local_reports_received=len(remote))),flush=True)
+        print(json.dumps(dict(elapsed_sec=round(now-start,1),receipt_hz={t:round(s['receipt_hz'],2) for t,s in result['topics'].items()},local_reports_received=len(remote),
+            mapper_reports_received=len(mapper_reports),mapper_report_age_sec=result['mapper_report_age_sec'],
+            mapper={k:mapper_latest.get(k) for k in ('cloud_input_hz','odom_input_hz','synchronized_hz','odom_published_hz','callback_p95_ms','pht_p95_ms','odom_publish_max_ms','report_interval_sec')})),flush=True)
         return result
     try:
         while time.monotonic()-start<args.duration:
@@ -104,8 +121,8 @@ def main():
     except KeyboardInterrupt:pass
     finally:
         final=report();args.output.parent.mkdir(parents=True,exist_ok=True)
-        args.output.write_text(json.dumps(dict(final=final,snapshots=snapshots,local_reports=remote,
-            interpretation='Compare overlapping elapsed intervals and matching monitor_id. Different hosts require clock-sync checks for header-age comparisons. Local/remote subscribers may independently drop samples.'),indent=2))
+        args.output.write_text(json.dumps(dict(final=final,snapshots=snapshots,local_reports=remote,mapper_reports=mapper_reports,
+            interpretation='Compare overlapping intervals and matching mapper instance_id/monitor_id. Different hosts require clock-sync checks for header-age comparisons. Subscriber counts may independently lose samples. Mapper publish returns count RMW API returns, not remote delivery acknowledgements.'),indent=2))
         node.destroy_node()
         if rclpy.ok():rclpy.shutdown()
 

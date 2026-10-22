@@ -107,6 +107,8 @@
       const std::vector<Point2> &points, const builtin_interfaces::msg::Time &stamp)
   {
     if (!enable_local_pht_submap_pose_graph_ || !local_pht_submap_pose_graph_) return raw;
+    co_3dto2d_mapping::metrics::Scope pht_metrics(
+      pipeline_metrics_enabled_ ? &pipeline_metrics_.pht : nullptr);
     const auto start = std::chrono::steady_clock::now();
     const uint64_t frame = local_pht_submap_frame_++;
     const auto patch = co_3dto2d_mapping::submap::makeOccupancyBoundary(points, resolution_);

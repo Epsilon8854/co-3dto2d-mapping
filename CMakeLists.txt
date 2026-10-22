@@ -4,6 +4,7 @@ project(co_3dto2d_mapping)
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(builtin_interfaces REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -25,6 +26,7 @@ target_link_libraries(occupancy_mapper ${OpenCV_LIBS})
 ament_target_dependencies(
   occupancy_mapper
   builtin_interfaces
+  diagnostic_msgs
   geometry_msgs
   message_filters
   nav_msgs

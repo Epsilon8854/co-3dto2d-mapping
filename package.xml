@@ -11,6 +11,7 @@
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <depend>builtin_interfaces</depend>
+  <depend>diagnostic_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>message_filters</depend>
   <depend>libopencv-dev</depend>
@@ -23,7 +24,6 @@
   <depend>tf2_ros</depend>
 
   <exec_depend>ament_index_python</exec_depend>
-  <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>imu_filter_madgwick</exec_depend>
   <exec_depend>launch</exec_depend>

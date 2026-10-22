@@ -198,6 +198,16 @@
   nav_msgs::msg::Path local_submap_path_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
+  bool pipeline_metrics_enabled_ = false;
+  co_3dto2d_mapping::metrics::Pipeline pipeline_metrics_;
+  std::array<uint64_t, 7> pipeline_previous_counts_{};
+  uint64_t pipeline_report_sequence_ = 0;
+  std::string pipeline_metrics_instance_;
+  co_3dto2d_mapping::metrics::Clock::time_point pipeline_metrics_started_, pipeline_metrics_last_report_;
+  message_filters::Connection pipeline_cloud_connection_, pipeline_odom_connection_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pipeline_metrics_pub_;
+  rclcpp::TimerBase::SharedPtr pipeline_metrics_timer_;
+
   builtin_interfaces::msg::Time latest_stamp_;
   nav_msgs::msg::OccupancyGrid latest_local_grid_;
   bool latest_local_grid_ready_ = false;

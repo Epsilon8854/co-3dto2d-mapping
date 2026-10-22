@@ -138,6 +138,8 @@
     odom_topic: /r0/mapping/floor_based_odometry
     publish_corrected_odometry: true
     publish_period_ms: 200
+    pipeline_metrics_enabled: true
+    pipeline_metrics_period_ms: 1000
     publish_slice_debug_points: true
     range_max_m: 12.0
     range_min_m: 0.8

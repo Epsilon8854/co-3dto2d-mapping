@@ -224,7 +224,7 @@ def topics(args):
         prefix=f'/r{rid}'
         if args.scope!='central':result += [prefix+'/livox/lidar',prefix+'/livox/imu']
         result += [prefix+'/odom',prefix+'/mapping/floor_based_odometry',prefix+'/mapping/occupancy_mapper_odometry',
-                   prefix+'/mapping/local_occupancy',prefix+'/mapping/global_occupancy',
+                   prefix+'/mapping/local_occupancy',prefix+'/mapping/global_occupancy',prefix+'/mapping/pipeline_diagnostics',
                    f'/multi_agent/r{rid}/session']
     if args.scope in ('central','combined'):
         result += ['/multi_agent/'+suffix for suffix in ('r1_to_r0_transform','alignment_ready','alignment_status',

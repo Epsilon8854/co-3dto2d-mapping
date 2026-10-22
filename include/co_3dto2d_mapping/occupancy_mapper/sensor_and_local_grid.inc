@@ -2,7 +2,17 @@
       const sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud,
       const nav_msgs::msg::Odometry::ConstSharedPtr odom)
   {
+    co_3dto2d_mapping::metrics::Scope callback_metrics(
+      pipeline_metrics_enabled_ ? &pipeline_metrics_.callback : nullptr);
+    if (pipeline_metrics_enabled_) {
+      ++pipeline_metrics_.synchronized;
+      pipeline_metrics_.last_cloud_stamp_ns = stampToNanoseconds(cloud->header.stamp);
+      pipeline_metrics_.last_odom_stamp_ns = stampToNanoseconds(odom->header.stamp);
+      pipeline_metrics_.sync_stamp_delta.add(std::abs(static_cast<double>(
+        pipeline_metrics_.last_cloud_stamp_ns - pipeline_metrics_.last_odom_stamp_ns)) / 1e6);
+    }
     if (odom->pose.covariance[0] > 1000.0) {
+      if (pipeline_metrics_enabled_) ++pipeline_metrics_.skipped_tracking;
       resetIcpState("odometry tracking failure");
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
@@ -10,6 +20,7 @@
       return;
     }
     if (alignment_required_ && !alignment_ready_) {
+      if (pipeline_metrics_enabled_) ++pipeline_metrics_.skipped_alignment;
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
           "Skipping occupancy update until initial XY alignment is available.");
@@ -34,6 +45,7 @@
             local_frame_id_, cloud->header.frame_id, tf2::TimePointZero);
         use_cloud_to_local_transform = true;
       } catch (const std::exception &exc) {
+        if (pipeline_metrics_enabled_) ++pipeline_metrics_.skipped_tf;
         RCLCPP_WARN_THROTTLE(
             get_logger(), *get_clock(), 2000,
             "Skipping occupancy update because transform %s <- %s is unavailable: %s",
@@ -65,6 +77,8 @@
     double global_z_max = std::numeric_limits<double>::lowest();
 
     try {
+      co_3dto2d_mapping::metrics::Scope point_metrics(
+        pipeline_metrics_enabled_ ? &pipeline_metrics_.point_processing : nullptr);
       sensor_msgs::PointCloud2ConstIterator<float> iter_x(*cloud, "x");
       sensor_msgs::PointCloud2ConstIterator<float> iter_y(*cloud, "y");
       sensor_msgs::PointCloud2ConstIterator<float> iter_z(*cloud, "z");
@@ -139,6 +153,7 @@
         local_occupied_points.push_back(local_point);
       }
     } catch (const std::exception &exc) {
+      if (pipeline_metrics_enabled_) ++pipeline_metrics_.skipped_xyz;
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
           "Skipping occupancy update because PointCloud2 xyz iteration failed: %s",
@@ -174,9 +189,12 @@
         static_cast<std::size_t>(icp_max_source_points_));
 
     const Pose2 raw_planar_pose{raw_t.x, raw_t.y, yawFromQuaternion(raw_q)};
-    const auto local_submap_result = refinePoseWithLocalSubmapRegistration(
+    const Pose2 corrected_planar_pose = [&]() {
+      co_3dto2d_mapping::metrics::Scope pose_metrics(
+        pipeline_metrics_enabled_ ? &pipeline_metrics_.pose_refinement : nullptr);
+      const auto local_submap_result = refinePoseWithLocalSubmapRegistration(
         raw_planar_pose, occupancy_patch_points, cloud->header.stamp);
-    const Pose2 corrected_planar_pose = enable_local_pht_submap_pose_graph_
+      return enable_local_pht_submap_pose_graph_
         ? refinePoseWithLocalPhtSubmapPoseGraph(
             raw_planar_pose, occupancy_patch_points, cloud->header.stamp)
         : (enable_local_line_pose_graph_
@@ -186,6 +204,7 @@
             : (enable_local_submap_registration_
             ? local_submap_result.pose
             : refinePoseWithLocalWindowIcp(raw_planar_pose, icp_scan_points, cloud->header.stamp))));
+    }();
     const double yaw_correction = co_3dto2d_mapping::icp::normalizeAngle(
         corrected_planar_pose.yaw - raw_planar_pose.yaw);
     const Quaternion corrected_q = multiplyQuaternion(
@@ -206,8 +225,19 @@
       corrected_odom.pose.pose.orientation.y = aligned_q.y;
       corrected_odom.pose.pose.orientation.z = aligned_q.z;
       corrected_odom.pose.pose.orientation.w = aligned_q.w;
-      corrected_odom_pub_->publish(corrected_odom);
+      {
+        co_3dto2d_mapping::metrics::Scope publish_metrics(
+          pipeline_metrics_enabled_ ? &pipeline_metrics_.odom_publish : nullptr);
+        if (pipeline_metrics_enabled_) ++pipeline_metrics_.odom_publish_calls;
+        corrected_odom_pub_->publish(corrected_odom);
+        if (pipeline_metrics_enabled_) {
+          ++pipeline_metrics_.odom_publish_returns;
+          pipeline_metrics_.last_published_stamp_ns = stampToNanoseconds(corrected_odom.header.stamp);
+        }
+      }
       if (local_submap_path_pub_) {
+        co_3dto2d_mapping::metrics::Scope path_metrics(
+          pipeline_metrics_enabled_ ? &pipeline_metrics_.path_publish : nullptr);
         geometry_msgs::msg::PoseStamped pose_stamped;
         pose_stamped.header = corrected_odom.header;
         pose_stamped.pose = corrected_odom.pose.pose;
@@ -259,14 +289,26 @@
     // Its cell coordinates therefore contain the exact same corrected odometry
     // projection as the persistent global grid, without requiring downstream
     // consumers to reconstruct a rotated robot-centric OccupancyGrid origin.
-    latest_local_grid_ = buildLocalGrid(
-        global_hits, global_free_ray_hits, cloud->header.stamp, aligned_t);
-    latest_local_grid_ready_ = true;
-    flushLocalLinePoseGraphVisualization(latest_local_grid_, corrected_q, corrected_t);
+    {
+      co_3dto2d_mapping::metrics::Scope local_metrics(
+        pipeline_metrics_enabled_ ? &pipeline_metrics_.local_grid : nullptr);
+      latest_local_grid_ = buildLocalGrid(
+          global_hits, global_free_ray_hits, cloud->header.stamp, aligned_t);
+      latest_local_grid_ready_ = true;
+    }
+    {
+      co_3dto2d_mapping::metrics::Scope visualization_metrics(
+        pipeline_metrics_enabled_ ? &pipeline_metrics_.local_visualization : nullptr);
+      flushLocalLinePoseGraphVisualization(latest_local_grid_, corrected_q, corrected_t);
+    }
 
-    updateGlobalGrid(
-        global_hits, global_free_ray_hits, {aligned_t.x, aligned_t.y},
-        cloud->header.stamp);
+    {
+      co_3dto2d_mapping::metrics::Scope global_metrics(
+        pipeline_metrics_enabled_ ? &pipeline_metrics_.global_grid : nullptr);
+      updateGlobalGrid(
+          global_hits, global_free_ray_hits, {aligned_t.x, aligned_t.y},
+          cloud->header.stamp);
+    }
 
     RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), icp_log_period_ms_,
@@ -283,8 +325,11 @@
         global_frame_id_.c_str());
 
     if (publish_slice_debug_points_) {
+      co_3dto2d_mapping::metrics::Scope debug_metrics(
+        pipeline_metrics_enabled_ ? &pipeline_metrics_.debug_publish : nullptr);
       publishDebugPointClouds(kept_debug_points, rejected_debug_points, cloud->header.stamp);
     }
+    if (pipeline_metrics_enabled_) ++pipeline_metrics_.completed;
   }
 
   sensor_msgs::msg::PointCloud2 buildDebugPointCloud(

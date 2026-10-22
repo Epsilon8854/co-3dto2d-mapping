@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <builtin_interfaces/msg/time.hpp>
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
@@ -42,6 +43,7 @@
 #include "co_3dto2d_mapping/local_pose_graph.hpp"
 #include "co_3dto2d_mapping/occupancy_line_registration.hpp"
 #include "co_3dto2d_mapping/temporal_occupancy.hpp"
+#include "co_3dto2d_mapping/mapper_pipeline_metrics.hpp"
 
 class ToyOccupancyMapper : public rclcpp::Node
 {
@@ -57,6 +59,7 @@ public:
     initializeLocalPoseGraph();
     initializeLocalLinePoseGraph();
     initializeLocalPhtSubmapPoseGraph();
+    initializePipelineMetrics();
 
     local_pub_ = create_publisher<nav_msgs::msg::OccupancyGrid>("mapping/local_occupancy", 10);
     global_pub_ = create_publisher<nav_msgs::msg::OccupancyGrid>("mapping/global_occupancy", 10);
@@ -73,6 +76,20 @@ public:
 
     cloud_sub_.subscribe(this, scan_cloud_topic_, rmw_qos_profile_sensor_data);
     odom_sub_.subscribe(this, odom_topic_, rmw_qos_profile_sensor_data);
+    if (pipeline_metrics_enabled_) {
+      // Register before Synchronizer so input receipts are counted before any
+      // paired callback runs. Reuse the existing subscriptions; no extra clouds.
+      pipeline_cloud_connection_ = cloud_sub_.registerCallback(
+        std::function<void(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &)>(
+          [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg) {
+            pipeline_metrics_.cloud.observe(stampToNanoseconds(msg->header.stamp));
+          }));
+      pipeline_odom_connection_ = odom_sub_.registerCallback(
+        std::function<void(const nav_msgs::msg::Odometry::ConstSharedPtr &)>(
+          [this](const nav_msgs::msg::Odometry::ConstSharedPtr &msg) {
+            pipeline_metrics_.odom.observe(stampToNanoseconds(msg->header.stamp));
+          }));
+    }
     sync_ = std::make_shared<Synchronizer>(
         SyncPolicy(sync_queue_size_), cloud_sub_, odom_sub_);
     sync_->registerCallback(std::bind(
@@ -173,6 +190,7 @@ private:
   // and occupancy integration can be reviewed and tested independently.
 #include "co_3dto2d_mapping/occupancy_mapper/parameters.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/geometry.inc"
+#include "co_3dto2d_mapping/occupancy_mapper/pipeline_metrics.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/local_window_icp.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/local_submap_registration.inc"
 #include "co_3dto2d_mapping/occupancy_mapper/local_pose_graph.inc"

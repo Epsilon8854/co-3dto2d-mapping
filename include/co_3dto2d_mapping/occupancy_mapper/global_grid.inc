@@ -300,10 +300,24 @@
 
   void publishMaps()
   {
+    co_3dto2d_mapping::metrics::Scope timer_metrics(
+      pipeline_metrics_enabled_ ? &pipeline_metrics_.maps_timer : nullptr);
     if (latest_local_grid_ready_) {
+      co_3dto2d_mapping::metrics::Scope publish_metrics(
+        pipeline_metrics_enabled_ ? &pipeline_metrics_.local_publish : nullptr);
       local_pub_->publish(latest_local_grid_);
+      if (pipeline_metrics_enabled_) {
+        ++pipeline_metrics_.local_publish_returns;
+        pipeline_metrics_.last_local_published_stamp_ns = stampToNanoseconds(latest_local_grid_.header.stamp);
+      }
     }
     if (global_grid_ready_) {
+      co_3dto2d_mapping::metrics::Scope publish_metrics(
+        pipeline_metrics_enabled_ ? &pipeline_metrics_.global_publish : nullptr);
       global_pub_->publish(global_grid_);
+      if (pipeline_metrics_enabled_) {
+        ++pipeline_metrics_.global_publish_returns;
+        pipeline_metrics_.last_global_published_stamp_ns = stampToNanoseconds(global_grid_.header.stamp);
+      }
     }
   }
