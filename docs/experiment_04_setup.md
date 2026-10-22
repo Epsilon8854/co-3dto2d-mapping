@@ -204,17 +204,12 @@ bash scripts/replay_experiment_04_multi_agent_mapping.sh \
 - `local` 역할은 반드시 해당 센서가 연결된 PC에서 실행합니다. local/global grid는 Python 역직렬화 없이 byte 수·수신율만 관측하고, 작은 `/multi_agent/rN/pipeline_metrics` 진단 메시지를 1 Hz로 발행합니다. 지도 구독 자체의 계측 부하는 존재합니다.
 - `receiver` 역할은 r0에서 실행하며 원격 지도 구독을 추가하지 않습니다. r1 pose·aligned pose와 작은 진단 메시지를 JSON으로 저장합니다. 계측 프로세스는 정해진 시간 후 종료됩니다.
 - 두 PC의 겹치는 관측 구간을 비교합니다. r1 로컬도 느리면 내부 파이프라인을, 로컬은 빠르고 r0 수신만 느리면 전달/QoS/수신 부하를 먼저 점검합니다. 모두 구독자 관측치이므로 실제 publisher 카운터나 순수 무선 지연과 동일하지 않습니다. header-age 비교에는 PC clock sync가 필요합니다.
+- bash 실행 파일이 ROS 환경을 자동 설정합니다. 기본은 r1 로컬 계측 40초, domain 72이며 빌드나 mapper 재시작 없이 실행됩니다. 결과는 `outputs/experiment_04_multi_agent_mapping/diagnostics/실행시각/` 아래에 저장해 실행별로 구분합니다. `--output`으로 경로를 지정할 수도 있습니다.
 
 ```bash
 # r0 PC: 먼저 실행
-source /opt/ros/humble/setup.bash
-ROS_DOMAIN_ID=72 ROS_LOCALHOST_ONLY=0 python3 scripts/monitor_experiment_04_pipeline.py \
-  --role receiver --robot-id 1 --duration 60 \
-  --output outputs/experiment_04_multi_agent_mapping/diagnostics/r1_received_on_r0.json
+bash scripts/monitor_experiment_04_pipeline.sh --role receiver
 
 # r1 PC: 최신 코드 git pull 후 별도 터미널에서 실행. mapper 재시작은 불필요.
-source /opt/ros/humble/setup.bash
-ROS_DOMAIN_ID=72 ROS_LOCALHOST_ONLY=0 python3 scripts/monitor_experiment_04_pipeline.py \
-  --role local --robot-id 1 --duration 40 \
-  --output outputs/experiment_04_multi_agent_mapping/diagnostics/r1_local.json
+bash scripts/monitor_experiment_04_pipeline.sh
 ```
