@@ -44,7 +44,7 @@ def main():
     proc=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
     rclpy.init();node=Node('experiment04_synthetic_probe')
     latched=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)
-    state=dict(ready=False,transform=None,merged=None,aligned=None,pose=None,status=None,pose_count=0)
+    state=dict(ready=False,transform=None,merged=None,aligned=None,pose=None,status=None,pose_count=0,reliable_pose_count=0)
     published={};latencies=[]
     node.create_subscription(Bool,'/multi_agent/alignment_ready',lambda m:state.update(ready=m.data),latched)
     node.create_subscription(TransformStamped,'/multi_agent/r1_to_r0_transform',lambda m:state.update(transform=m),latched)
@@ -55,6 +55,9 @@ def main():
         key=msg.header.stamp.sec*10**9+msg.header.stamp.nanosec
         if key in published:latencies.append(time.monotonic()-published[key])
     node.create_subscription(Odometry,'/multi_agent/r1/aligned_odometry',got_pose,qos_profile_sensor_data)
+    node.create_subscription(Odometry,'/multi_agent/r1/aligned_odometry',
+        lambda m:state.update(reliable_pose_count=state['reliable_pose_count']+1),
+        QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE))
     node.create_subscription(DiagnosticArray,'/multi_agent/alignment_status',lambda m:state.update(status=m),latched)
     publishers={}
     for rid in (0,1):
@@ -95,7 +98,7 @@ def main():
         while time.monotonic()<deadline:
             if proc.poll() is not None:raise RuntimeError('central process exited; see node.log')
             spin()
-            if state['ready'] and state['merged'] and state['pose']:break
+            if state['ready'] and state['merged'] and state['aligned'] and state['pose']:break
         assert state['ready'],'did not reach ready'
         t=state['transform'];found=(t.transform.translation.x,t.transform.translation.y,yaw_of(t.transform.rotation))
         assert math.hypot(found[0]-truth[0],found[1]-truth[1])<.10,found
@@ -110,6 +113,7 @@ def main():
         publish_global=False;extension=True
         deadline=time.monotonic()+4
         while time.monotonic()<deadline:spin()
+        assert state['reliable_pose_count']>0,'Reliable pose subscriber received no output'
         merged=state['merged'];origin=merged.info.origin.position
         values=np.asarray(merged.data).reshape(merged.info.height,merged.info.width)
         rr,cc=np.nonzero(values>50)
@@ -140,6 +144,7 @@ def main():
             truth=truth,estimated=found,translation_error_m=math.hypot(found[0]-truth[0],found[1]-truth[1]),
             yaw_error_deg=math.degrees(abs(normalize_angle(found[2]-truth[2]))),
             confirmation_cases=len(cases),map_save=True,session_reset=True,local_only_extension=True,
+            reliable_pose_compatible=state['reliable_pose_count']>0,
             pose_latency_median_ms=round(statistics.median(latencies)*1000,3) if latencies else None,
             pose_latency_p95_ms=round(float(np.percentile(latencies,95))*1000,3) if latencies else None,
             pose_latency_max_ms=round(max(latencies)*1000,3) if latencies else None,

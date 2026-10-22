@@ -106,7 +106,7 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 - 변환 확정 후 초기 global snapshot으로 두 지도 layer를 채우고 **global 구독 OFF / local 구독 ON**으로 전환합니다. 이후 `rN/odom` 기준 local grid에 고정 agent 변환만 적용합니다. pose를 다시 곱하지 않습니다.
 - Unknown은 기존 증거를 지우지 않고 occupied가 free보다 우선합니다. 이번 통신 변경에는 동적 clear를 추가하지 않습니다. local map이 누락되면 해당 관측이 없는 영역을 복구하지 못할 수 있습니다. 내부 local queue 초과 시에는 해당 agent의 global snapshot을 한 번 재수신하여 보완하고 다시 local-only로 돌아갑니다. DDS 이전 단계에서의 모든 누락을 자동 검출하는 기능은 아닙니다.
 - 각 single mapper의 발행·로컬 녹화는 유지됩니다. 다른 원격 RViz/녹화기가 global map을 구독하면 해당 전송은 계속됩니다. 전체 지도 송신 주기를 낮추는 producer bridge는 아직 추가하지 않았습니다.
-- **별도 `multi_agent_pose_relay.py` 프로세스**가 pose·TF를 전담합니다. source timestamp를 보존하고 Best Effort / depth 1로 최신 pose를 중계합니다. RViz의 aligned odometry도 Best Effort / depth 1로 설정했습니다. 포즈 발행 주파수를 인위적으로 늘리거나 과거 pose의 시각을 현재로 바꾸지 않습니다.
+- **별도 `multi_agent_pose_relay.py` 프로세스**가 pose·TF를 전담합니다. source timestamp를 보존하고 입력 Best Effort / depth 1, 출력 Reliable / depth 1로 최신 pose를 중계합니다. 출력은 기존 Reliable RViz/녹화 구독자와 호환됩니다. RViz의 aligned odometry도 Best Effort / depth 1로 설정했습니다. 포즈 발행 주파수를 인위적으로 늘리거나 과거 pose의 시각을 현재로 바꾸지 않습니다.
 - 지도 통합, 경로 생성, checkpoint/PNG/HTML 저장은 pose relay에서 수행하지 않습니다. 지도 노드는 각각의 worker에서 처리하며 시각화 path는 기본 1초마다, 최대 5000 pose를 표시합니다. raw ICP TF와 mapping_base_link TF의 소유자를 분리했습니다.
 - `/multi_agent/pose_relay_status`에는 수신·발행 수, callback p95/max, 입력 수신 공백을 표시합니다. `alignment_status`에는 단계별 구독·local queue·합성 연산시간을 표시합니다. callback 시간과 실제 무선 지연은 서로 다른 지표입니다.
 - session 변경·clock reset·명시적 reset 시 초기 global 구독으로 복구하고 누적 지도/경로를 초기화합니다. pose relay도 session/epoch를 확인해 이전 변환을 재사용하지 않습니다.
@@ -192,5 +192,7 @@ bash scripts/replay_experiment_04_multi_agent_mapping.sh \
 
 - 단위 테스트와 합성 ROS 입력에서 yaw/XY 정합·local-only 지도 확장·map 저장·session reset을 확인했습니다.
 - production config 합성 검증의 검색 시간은 최초 2093 ms / 중간 후보 재사용 33 ms / 최종 2118 ms였습니다. source publish→aligned pose 수신 지연 중앙값 2.87 ms, p95 6.74 ms였습니다. 실제 두 센서의 정합 오차나 무선 지연을 의미하지 않습니다.
-- 실제 두 MID-360의 방향 차이, clock/네트워크 조건, 초기 정합 정확도·실시간 처리율은 다음 실증에서 확인해야 합니다.
+- 2026-10-22 실제 두 MID-360 확인: r1 재시작으로 이전 누적 지도를 초기화한 뒤 약 31초 후 3회 검증을 통과했습니다. 고정 변환은 x=0.156 m, y=-0.329 m, yaw=2.03°였으며, global 구독 OFF / local 구독 ON과 병합 지도 checkpoint 저장을 확인했습니다. 최종 후보의 free conflict는 17.43%로 기본 18% 이내였습니다. 실측 정답에 대한 오차는 아닙니다.
+- 같은 25초 관측에서 r0 aligned pose는 약 6.33 Hz, r1 aligned pose는 약 1.02 Hz였습니다. 동일 stamp를 두 topic에서 받은 관측자의 수신시각 차이 p95는 r0 2.28 ms / r1 1.16 ms였습니다. 원격 raw odometry는 약 6.37 Hz로 보였지만 corrected pose는 드물게 수신됐습니다. 각 구독자의 Best Effort 수신 손실과 스케줄링이 달라 관측 수가 같지는 않습니다. r1 producer 부하와 무선 전달 손실은 r1 PC의 로컬 계측을 통해 구분해야 합니다. 중계 분리만으로 axes 갱신 지연이 완전히 해결됐다고 판단하지 않습니다.
+- 실제 두 센서의 다양한 방향 차이, clock/네트워크 조건, 초기 정합 정확도·주행 중 처리율은 추가 실증에서 확인해야 합니다.
 - 센서 없이 재검사하려면 별도 domain에서 `scripts/validate_experiment_04_startup.py`를 실행할 수 있습니다. 생성 결과는 `outputs/`에만 저장합니다.

@@ -23,13 +23,16 @@ class MultiAgentPoseRelay(Node):
         self.received={0:0,1:0};self.callback_samples=deque(maxlen=500)
         self.latched=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.latest=QoSProfile(depth=1,reliability=ReliabilityPolicy.BEST_EFFORT)
+        # Keep output compatible with existing Reliable RViz/record clients.
+        # Small pose messages retain depth 1; map traffic never enters this process.
+        self.output_qos=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE)
         self.create_subscription(DiagnosticArray,'/multi_agent/alignment_status',self.status,self.latched)
         self.pubs={}
         for rid in (0,1):
             self.create_subscription(Odometry,f'/r{rid}/mapping/occupancy_mapper_odometry',
                                      lambda msg,r=rid:self.pose(msg,r),self.latest)
             self.create_subscription(DiagnosticArray,f'/multi_agent/r{rid}/session',lambda msg,r=rid:self.session(msg,r),self.latched)
-            self.pubs[rid]=self.create_publisher(Odometry,f'/multi_agent/r{rid}/aligned_odometry',self.latest)
+            self.pubs[rid]=self.create_publisher(Odometry,f'/multi_agent/r{rid}/aligned_odometry',self.output_qos)
         self.diagnostics=self.create_publisher(DiagnosticArray,'/multi_agent/pose_relay_status',self.latched)
         self.create_timer(.05,self.broadcast_alignment)
         self.create_timer(1.,self.report)
@@ -97,7 +100,7 @@ class MultiAgentPoseRelay(Node):
             epoch=self.epoch,published=self.counts,callback_ms=self.last_callback_ms,max_callback_ms=self.max_callback_ms,
             received=self.received,callback_p95_ms=float(np.percentile(self.callback_samples,95)) if self.callback_samples else None,
             receipt_ages_sec={r:time.monotonic()-t for r,t in self.receipt.items()},queue_depth=1,
-            reliability='best_effort',source_timestamp_preserved=True))]
+            input_reliability='best_effort',output_reliability='reliable',source_timestamp_preserved=True))]
         self.diagnostics.publish(msg)
 
 
