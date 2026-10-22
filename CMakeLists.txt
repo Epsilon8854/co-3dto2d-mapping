@@ -65,6 +65,7 @@ install(
 install(
   PROGRAMS
     co_3dto2d_mapping/multi_agent_mapping.py
+    co_3dto2d_mapping/multi_agent_pose_relay.py
     co_3dto2d_mapping/multi_agent_session.py
     co_3dto2d_mapping/pointcloud_rear_sector_filter.py
     co_3dto2d_mapping/pointcloud_frame_republisher.py
@@ -316,6 +317,12 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_experiment_timing_monitor
     test/test_experiment_timing_monitor.py
+    PYTHON_EXECUTABLE /usr/bin/python3
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+  )
+  ament_add_pytest_test(
+    test_experiment_04_core
+    test/test_experiment_04_core.py
     PYTHON_EXECUTABLE /usr/bin/python3
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
   )

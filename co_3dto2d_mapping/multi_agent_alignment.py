@@ -64,7 +64,7 @@ def _observability(target, source, transform, config):
     return float(max(0,eigen[0])/max(eigen[-1],1e-12))
 
 
-def register_startup(target,source,config=None,startup=None):
+def register_startup(target,source,config=None,startup=None,candidate_priors=None):
     config = (config or RegistrationConfig(max_free_conflict_ratio=.18)).validated()
     startup = (startup or StartupConfig()).validated()
     started = time.perf_counter()
@@ -79,7 +79,7 @@ def register_startup(target,source,config=None,startup=None):
     offsets = _translation_offsets(config.coarse_translation_range_m, config.coarse_translation_step_m)
     coarse = []
     # Always cover the entire circle, even when descriptor yaw is ambiguous.
-    for angle in np.arange(-180.,180.,startup.coarse_yaw_step_deg):
+    for angle in ([] if candidate_priors else np.arange(-180.,180.,startup.coarse_yaw_step_deg)):
         yaw = math.radians(float(angle))
         c,s=math.cos(yaw),math.sin(yaw)
         center = tp.mean(axis=0)-sp.mean(axis=0)@np.array([[c,s],[-s,c]])
@@ -88,6 +88,10 @@ def register_startup(target,source,config=None,startup=None):
             coarse.append((score,pose))
     coarse.sort(key=lambda item:(item[0],item[1]))
     modes=[]
+    if candidate_priors:
+        for pose in candidate_priors:
+            if np.all(np.isfinite(pose)) and all(_distinct(pose,p,startup) for _,p in modes):modes.append((math.inf,tuple(pose)))
+        modes=modes[:startup.top_candidates]
     for score,pose in coarse:
         if all(_distinct(pose,p, startup) for _,p in modes): modes.append((score,pose))
         if len(modes)>=startup.top_candidates:break
@@ -131,4 +135,6 @@ def register_startup(target,source,config=None,startup=None):
     gap=(refined[1]['score']-best['score'])/max(refined[1]['score'],1e-9)
     if gap<startup.min_score_gap_ratio:return result('ambiguous_yaw_or_translation',refined,score_gap_ratio=gap)
     return result('accepted',refined,transform=best['transform'],score_gap_ratio=float(gap),
-                  searched_yaw_deg=[-180,180],coarse_yaw_count=len(np.arange(-180,180,startup.coarse_yaw_step_deg)))
+                  search_mode='cached_modes' if candidate_priors else 'full_circle',
+                  searched_yaw_deg=None if candidate_priors else [-180,180],
+                  coarse_yaw_count=0 if candidate_priors else len(np.arange(-180,180,startup.coarse_yaw_step_deg)))

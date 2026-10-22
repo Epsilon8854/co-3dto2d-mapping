@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from co_3dto2d_mapping.multi_agent_core import Snapshot,compose_grids,StationaryConsensus,save_map,transform_xy
+from co_3dto2d_mapping.multi_agent_core import SnapshotConsensus,OccupancyAccumulator,IncrementalFusion
 from co_3dto2d_mapping.occupancy_submap import GridGeometry,extract_local_patch
 from co_3dto2d_mapping.multi_agent_alignment import register_startup,StartupConfig
 from co_3dto2d_mapping.se2_map_registration import RegistrationConfig
@@ -101,3 +102,53 @@ def test_symmetric_rectangle_is_not_false_locked():
     result=register_startup(target,source,reg)
     assert not result['accepted']
     assert result['reason']=='ambiguous_yaw_or_translation'
+
+
+def test_cumulative_snapshot_consensus_rejects_repeated_source_stamps():
+    c=SnapshotConsensus(3,.1,1.)
+    assert c.add((0,0,0),(10,10)) is None
+    assert c.add((0,0,0),(10,20)) is None
+    assert len(c.evidence)==1
+    assert c.add((.01,0,0),(20,20)) is None
+    assert c.add((0,0,0),(30,30)) is not None
+
+
+def test_incremental_updates_expand_preserve_unknown_and_keep_static_occupied():
+    a=OccupancyAccumulator(.1)
+    a.add(Snapshot([[100,0]],GridGeometry(.1,2,1),1,'r0/odom'))
+    a.add(Snapshot([[0,-1,100]],GridGeometry(.1,3,1),2,'r0/odom'))
+    result=a.snapshot()
+    assert result.grid.tolist()==[[100,0,100]]
+    assert result.stamp_ns==2
+    with pytest.raises(ValueError):a.add(Snapshot([[0]],GridGeometry(.2,1,1),3,'r0/odom'))
+    tiny=OccupancyAccumulator(.1,max_cells=1)
+    with pytest.raises(ValueError):tiny.add(result)
+
+
+def test_incremental_map_matches_conservative_union_without_double_pose():
+    seeds={0:Snapshot([[0,100]],GridGeometry(.1,2,1),1,'r0/odom'),
+           1:Snapshot([[100]],GridGeometry(.1,1,1),1,'r1/odom')}
+    local=Snapshot([[100,0]],GridGeometry(.1,2,1,1.,0.),2,'r1/odom');alignment=(.3,-.2,math.pi/2)
+    engine=IncrementalFusion(.1)
+    engine.update(0,seeds,[],alignment)
+    merged,layers=engine.update(0,{},[(1,local)],alignment)
+    expected=compose_grids([(seeds[0],(0,0,0)),(seeds[1],alignment),(local,alignment)],.1)
+    def occupied(snapshot):
+        rows,cols=np.nonzero(snapshot.grid>50);g=snapshot.geometry
+        return set(zip(np.round(g.origin_x+(cols+.5)*g.resolution,5),np.round(g.origin_y+(rows+.5)*g.resolution,5)))
+    assert occupied(merged)==occupied(expected)
+    assert layers[1].frame=='r0/odom'
+    reset,_=engine.update(1,{0:Snapshot([[0]],GridGeometry(.1,1,1),3,'r0/odom')},[],alignment)
+    assert not np.any(reset.grid==100)
+
+
+def test_cached_verification_keeps_competing_modes_and_recovers_transform():
+    target,source,truth=patches(90)
+    reg=RegistrationConfig(coarse_translation_range_m=1.,search_max_points=150,min_correspondences=50)
+    full=register_startup(target,source,reg)
+    assert full['accepted']
+    cached=register_startup(target,source,reg,candidate_priors=[c['transform'] for c in full['candidates']])
+    assert cached['accepted'] and cached['search_mode']=='cached_modes'
+    assert cached['coarse_yaw_count']==0
+    assert abs(normalize_angle(cached['transform'][2]-truth[2]))<math.radians(1.)
+    assert len(cached['candidates'])>=2

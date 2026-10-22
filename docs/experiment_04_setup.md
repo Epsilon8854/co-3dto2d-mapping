@@ -78,7 +78,7 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 ```
 
 - 초기에는 두 센서를 고정하고 공통 벽·코너를 관측합니다. 같은 방향일 필요는 없습니다.
-- 3초 관측 창 3회와 후보 검증으로 정합을 확정합니다. 실제 대기시간은 map 생성·검색 시간에 따라 늘어납니다. 대칭 공간·overlap 부족은 거절될 수 있습니다.
+- 각 agent의 global map이 최소 3초 범위로 갱신된 뒤, 서로 다른 timestamp의 누적 snapshot 3회로 변환 안정성을 확인합니다. 같은 누적 지도의 반복 검증이며 독립 관측 3회를 의미하지 않습니다. 실제 대기시간은 map 생성·검색 시간에 따라 늘어납니다. 대칭 공간·overlap 부족은 거절될 수 있습니다.
 - RViz fixed frame은 `r0/odom`입니다. `alignment_ready=true`와 벽·코너 정합을 확인한 뒤 주행을 시작합니다.
 - r0/r1 실행 터미널에 session ID와 `WAIT_INPUT`(입력 대기), `COLLECTING`(정지 관측 수집), `SEARCHING`(정합 검색), `VERIFYING`(반복 검증), `LOCKED`(완료), `STALE`(입력 지연)를 표시합니다. 상태 변경 시 즉시, 유지 중에는 5초마다 출력합니다. 중앙 상태가 5초 이상 끊기면 별도 수신 공백 경고를 출력합니다.
 - 자세한 driver/ICP 로그는 기존 로그 파일에 보관합니다. 터미널은 진단 topic과 session만 구독하며 raw cloud/IMU/map을 추가 구독하지 않습니다.
@@ -101,11 +101,15 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
   --role robot --robot-id 0 --domain-id 72 --status-only
 ```
 
-- 초기에는 중앙이 local map만 구독하고 global map은 구독하지 않습니다. 정합 확정 후 local map 구독을 해제하고 global map 구독을 시작합니다. 첫 global map 수신까지 `WAIT_GLOBAL_MAP`과 `ready=false`를 표시합니다. session 변경·clock reset·정합 reset 시 초기 구독 단계로 복구합니다.
-- 각 single mapper의 local/global map 발행·로컬 녹화는 유지됩니다. 다른 원격 RViz/녹화기가 map을 구독하면 해당 전송은 계속되므로 단계 분리의 효과가 줄어듭니다.
-- pose/session은 두 단계에서 계속 수신합니다. 지도는 현재 전체 grid를 주기적으로 전송하며 증분 전송·별도 저주기 bridge는 아직 적용하지 않았습니다. raw odometry는 비교 경로용입니다.
-- `alignment_status`의 `input_receipt_ages_sec`는 중앙 콜백의 수신 공백(PC clock 차이 제외), `central_tick_runtime_ms`는 지도 합성·경로 발행·checkpoint를 포함한 중앙 주기 처리시간입니다. 이 지표만으로 실제 무선 지연이나 원격 센서 처리 지연을 단정하지 않습니다.
-- `local_input_stats`에는 map 수신 수, 채택 수, 중복 stamp·pose 없음·pose 시각 오차 초과 등 제외 사유를 기록합니다. 터미널의 `현재 창 rN=.../15 maps`는 현재 누적 창의 채택된 **map 메시지 수**입니다. 창마다 최소 15개와 source timestamp 범위 3초를 모두 만족해야 합니다. 같은 stamp의 반복 발행은 새 관측으로 세지 않습니다. 완성 창은 `pending_windows`로 넘어가고 현재 창 count는 0부터 다시 시작합니다. 센서가 정지한 여러 관측이며, 서로 독립된 시점·위치의 정답 측정을 의미하지 않습니다.
+- 초기에는 중앙이 각 agent의 **누적 global map**을 구독합니다. map별 pose timestamp를 0.4초 이내로 짝짓는 조건과 local map 15개 조건을 제거했습니다. 고정된 초기 anchor를 사용해 지도 좌표를 변환합니다. pose/session은 정지 여부·재시작 감지를 위해 계속 확인합니다.
+- 최초 360° 검색 → 중간 검증에서 이전 후보군 우선 탐색 → 최종 360° 재검사 순서입니다. 후보군이 불충분하거나 품질 검사를 통과하지 못하면 전체 검색으로 돌아갑니다. 지도 경계 점 수가 크게 변해도 전체 검색합니다. default free-space conflict는 18%, 후보 간 점수 차이·기하·XY/yaw 일관성 검사는 유지합니다.
+- 변환 확정 후 초기 global snapshot으로 두 지도 layer를 채우고 **global 구독 OFF / local 구독 ON**으로 전환합니다. 이후 `rN/odom` 기준 local grid에 고정 agent 변환만 적용합니다. pose를 다시 곱하지 않습니다.
+- Unknown은 기존 증거를 지우지 않고 occupied가 free보다 우선합니다. 이번 통신 변경에는 동적 clear를 추가하지 않습니다. local map이 누락되면 해당 관측이 없는 영역을 복구하지 못할 수 있습니다. 내부 local queue 초과 시에는 해당 agent의 global snapshot을 한 번 재수신하여 보완하고 다시 local-only로 돌아갑니다. DDS 이전 단계에서의 모든 누락을 자동 검출하는 기능은 아닙니다.
+- 각 single mapper의 발행·로컬 녹화는 유지됩니다. 다른 원격 RViz/녹화기가 global map을 구독하면 해당 전송은 계속됩니다. 전체 지도 송신 주기를 낮추는 producer bridge는 아직 추가하지 않았습니다.
+- **별도 `multi_agent_pose_relay.py` 프로세스**가 pose·TF를 전담합니다. source timestamp를 보존하고 Best Effort / depth 1로 최신 pose를 중계합니다. RViz의 aligned odometry도 Best Effort / depth 1로 설정했습니다. 포즈 발행 주파수를 인위적으로 늘리거나 과거 pose의 시각을 현재로 바꾸지 않습니다.
+- 지도 통합, 경로 생성, checkpoint/PNG/HTML 저장은 pose relay에서 수행하지 않습니다. 지도 노드는 각각의 worker에서 처리하며 시각화 path는 기본 1초마다, 최대 5000 pose를 표시합니다. raw ICP TF와 mapping_base_link TF의 소유자를 분리했습니다.
+- `/multi_agent/pose_relay_status`에는 수신·발행 수, callback p95/max, 입력 수신 공백을 표시합니다. `alignment_status`에는 단계별 구독·local queue·합성 연산시간을 표시합니다. callback 시간과 실제 무선 지연은 서로 다른 지표입니다.
+- session 변경·clock reset·명시적 reset 시 초기 global 구독으로 복구하고 누적 지도/경로를 초기화합니다. pose relay도 session/epoch를 확인해 이전 변환을 재사용하지 않습니다.
 
 ### Free-space 충돌 기준 비교
 
@@ -130,24 +134,25 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 
 | 항목 | 참고 브랜치의 기본 direct 모드 | 실험 4 |
 | --- | --- | --- |
-| 입력 | 최신 global occupancy pair | 정지 시점의 local map 누적 창 |
+| 입력 | 최신 global occupancy pair | 정지 상태에서 누적한 global snapshot |
 | 정합 연산 | raster search + trimmed ICP | 같은 raster/ICP 기반, 전체 yaw 검색·다중 후보 검증 |
 | yaw coarse 검색 | 초기 가설 주변 ±12°, 2° 간격(13개) | −180°~180°, 5° 간격(72개) |
 | 확정 조건 | 유한한 결과이면 발행; overlap/RMSE/free conflict/consensus gate 생략 | 품질·대안 후보 차이·기하 조건 + 관측 창 3회 일관성 |
 | 정합 반복 | 새 pair마다 direct 검색(처리 timer 1초); world republisher는 기본적으로 첫 변환을 고정 | 초기 확정 후 검색 중단; session/reset 시 재시도 |
 | pose 시각화 | 별도 record republisher에서 최신 pose를 200ms마다 재발행, source stamp를 현재 시각으로 변경; TF Axes 사용 | 수신 pose callback에서 변환·발행, 원 stamp 유지; aligned odometry Axes 사용 |
-| 주행 중 부하 | 정합 노드와 record republisher가 별도 프로세스; republisher 자체의 지도 부하는 여전히 존재 | 지도 합성·전체 경로 생성·checkpoint가 pose callback과 한 ROS 실행 스레드를 공유 |
+| 주행 중 부하 | 정합 노드와 record republisher가 별도 프로세스; republisher 자체의 지도 부하는 여전히 존재 | pose/TF 전용 프로세스와 지도/검색/경로/저장 worker 분리 |
 
 - 참고 브랜치가 빠르게 결과를 내도록 구성된 이유는 좁은 탐색 범위와 판정 생략입니다. 완전히 다른 고속 정합 기법을 사용한다고 볼 수 없습니다. 같은 입력·장비에서 계산시간을 재측정한 비교는 아닙니다.
 - 참고 브랜치가 갱신한 timestamp는 최신 센서 관측을 뜻하지 않습니다. 기존 방식의 동작과 현재 방식의 지연을 비교할 때 pose 값 변화, 원 관측 시각, 수신 시각을 함께 확인해야 합니다.
 - 초기 정합 속도와 주행 중 axes 지연은 별개입니다. 실험 4는 확정 후 검색하지 않으므로 초기 검색을 빠르게 바꾸는 것만으로 주행 중 pose 지연이 해결되지는 않습니다.
-- 권장 우선순위: (1) 최신 코드의 단계별 지도 구독 적용 (2) source stamp를 유지하는 별도 pose/TF 중계 프로세스와 latest-only queue (3) 지도 합성·경로 생성·저장 작업의 분리 및 시각화 경로 간소화 (4) global map 전송 주기를 local 추정과 별도로 낮추기 (5) 첫 전체 yaw 검색 후 후속 검증은 이전 후보 주변 우선 검색+대안 검증·전체 검색 fallback.
+- 단계별 global→local 구독, 별도 pose/TF 중계, 지도/경로/저장 worker 분리, 중간 검증 후보 재사용은 구현했습니다. 입력 local grid의 원격 전송량 자체가 큰 환경에서는 producer 측 전송 주기·압축을 추가로 검토해야 합니다.
 - 입력이 약 5~6Hz라면 중계 발행률만 높여도 새 motion 관측이 늘어나지 않습니다. 우선 불필요한 대기·누적 backlog를 줄이는 것이 목적입니다.
 
 | Topic | 내용 |
 | --- | --- |
 | `/multi_agent/r1_to_r0_transform` | 확정 후 고정된 r1 → r0 변환 |
 | `/multi_agent/alignment_ready`, `/multi_agent/alignment_status` | 정합·session·입력 지연 상태와 후보 평가 |
+| `/multi_agent/pose_relay_status` | 별도 pose 중계 처리시간·수신 공백 |
 | `/multi_agent/r1/aligned_global_occupancy` | r0 frame으로 변환한 r1 map |
 | `/multi_agent/merged_global_occupancy` | `r0/odom` 기준 합성 map |
 | `/multi_agent/rN/aligned_odometry`, `/multi_agent/rN/aligned_path` | r0 frame의 최종 pose·경로 |
@@ -185,6 +190,7 @@ bash scripts/replay_experiment_04_multi_agent_mapping.sh \
 
 ## 6. 검증 범위
 
-- 단위 테스트와 합성 ROS 입력에서 yaw/XY 정합·map 저장·session reset을 확인했습니다.
+- 단위 테스트와 합성 ROS 입력에서 yaw/XY 정합·local-only 지도 확장·map 저장·session reset을 확인했습니다.
+- production config 합성 검증의 검색 시간은 최초 2093 ms / 중간 후보 재사용 33 ms / 최종 2118 ms였습니다. source publish→aligned pose 수신 지연 중앙값 2.87 ms, p95 6.74 ms였습니다. 실제 두 센서의 정합 오차나 무선 지연을 의미하지 않습니다.
 - 실제 두 MID-360의 방향 차이, clock/네트워크 조건, 초기 정합 정확도·실시간 처리율은 다음 실증에서 확인해야 합니다.
 - 센서 없이 재검사하려면 별도 domain에서 `scripts/validate_experiment_04_startup.py`를 실행할 수 있습니다. 생성 결과는 `outputs/`에만 저장합니다.

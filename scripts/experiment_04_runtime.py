@@ -73,8 +73,10 @@ class StatusConsole:
         params=yaml.safe_load(args.alignment_config.read_text())['/**']['ros__parameters']
         self.required_windows=params.get('confirmation_windows',3)
         self.latest=None;self.received=0.;self.last_print=0.;self.signature=None;self.sessions={}
+        self.relay_status={}
         qos=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.node.create_subscription(DiagnosticArray,'/multi_agent/alignment_status',self.status,qos)
+        self.node.create_subscription(DiagnosticArray,'/multi_agent/pose_relay_status',lambda msg:setattr(self,'relay_status',self.values(msg)),qos)
         ids=(0,1) if args.action=='replay' or args.role in ('fusion','all') else (args.robot_id,)
         for rid in ids:
             self.node.create_subscription(DiagnosticArray,f'/multi_agent/r{rid}/session',
@@ -113,7 +115,7 @@ class StatusConsole:
             signature=(state,reason,count,ready)
             labels={'WAIT_INPUT':'정합 입력 대기','COLLECTING':'초기 정지 관측 수집 중',
                     'SEARCHING':'XY/yaw 정합 검색 중','VERIFYING':'정합 반복 검증 중',
-                    'WAIT_GLOBAL_MAP':'정합 변환 확정; 병합용 global map 수신 대기',
+                    'WAIT_GLOBAL_MAP':'정합 변환 확정; 병합용 global map 수신 대기','SEEDING_MAP':'초기 지도 구성 중',
                     'LOCKED':'초기 정합 완료·변환 고정','STALE':'입력 수신 지연'}
             text=f'{state}: {labels.get(state,state)} | 검증 {count}/{total} | ready={str(ready).lower()}'
             transform=value.get('transform')
@@ -121,7 +123,7 @@ class StatusConsole:
                 text+=f' | r0←r1 x={transform[0]:.3f}m y={transform[1]:.3f}m yaw={math.degrees(transform[2]):.2f}deg'
             else:text+=' | '+str(reason)
             if 'local_map_subscriptions_active' in value:
-                text+=' | 초기 local-map 구독='+('ON' if value['local_map_subscriptions_active'] else 'OFF')
+                text+=' | local-map 구독='+('ON' if value['local_map_subscriptions_active'] else 'OFF')
             if 'global_map_subscriptions_active' in value:
                 text+=' global-map 구독='+('ON' if value['global_map_subscriptions_active'] else 'OFF')
             frames=value.get('window_frames',{});minimum=value.get('window_min_frames',15)
@@ -133,7 +135,14 @@ class StatusConsole:
                     drops.append(f'r{rid}:수신={counts.get("received",0)},채택={counts.get("accepted",0)},제외={selected}')
                 if drops:text+=' | '+'; '.join(drops)
             runtime=value.get('metrics',{}).get('central_tick_runtime_ms')
+            spans=value.get('snapshot_spans_sec',{})
+            if value.get('global_map_subscriptions_active') and spans:
+                text+=' | 누적 지도 경과 '+', '.join(f'r{rid}={span:.1f}s' for rid,span in spans.items())
             if isinstance(runtime,(float,int)):text+=f' | 중앙 처리={runtime:.0f}ms'
+            relay_ms=self.relay_status.get('callback_p95_ms')
+            if isinstance(relay_ms,(float,int)):
+                ages=self.relay_status.get('receipt_ages_sec',{})
+                text+=f' | pose 중계 p95={relay_ms:.2f}ms 수신공백={ages}'
         if signature!=self.signature or now-self.last_print>=5.:
             console(self.label,text);self.signature=signature;self.last_print=now
 
@@ -219,6 +228,7 @@ def topics(args):
                    f'/multi_agent/r{rid}/session']
     if args.scope in ('central','combined'):
         result += ['/multi_agent/'+suffix for suffix in ('r1_to_r0_transform','alignment_ready','alignment_status',
+            'pose_relay_status',
             'r1/aligned_global_occupancy','merged_global_occupancy','r0/aligned_odometry','r1/aligned_odometry',
             'r0/aligned_path','r1/aligned_path','r0/raw_path','r1/raw_path')]
     return result

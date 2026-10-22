@@ -151,6 +151,84 @@ class StationaryConsensus:
                 float(math.atan2(np.sin(poses[:,2]).mean(), np.cos(poses[:,2]).mean())))
 
 
+class SnapshotConsensus(StationaryConsensus):
+    """Stability over advancing cumulative snapshots, not independent scans."""
+    def add(self,transform,stamps):
+        if len(stamps)!=2 or not np.all(np.isfinite(transform)):return None
+        if self.evidence:
+            if any(now<=old for now,old in zip(stamps,self.evidence[-1][1])):return None
+            if any(math.hypot(transform[0]-t[0],transform[1]-t[1])>self.translation_m or
+                   abs(normalize_angle(transform[2]-t[2]))>self.yaw_rad for t,_ in self.evidence):self.reset()
+        self.evidence.append((tuple(transform),tuple(stamps)));self.evidence=self.evidence[-self.count:]
+        if len(self.evidence)<self.count:return None
+        poses=np.asarray([t for t,_ in self.evidence])
+        return float(poses[:,0].mean()),float(poses[:,1].mean()),float(math.atan2(np.sin(poses[:,2]).mean(),np.cos(poses[:,2]).mean()))
+
+
+class OccupancyAccumulator:
+    """Mutable, worker-owned aligned lattice. Unknown never erases evidence.
+
+    Occupied wins over free, matching the previous conservative merged union.
+    Dynamic clearing is intentionally not introduced by this transport change.
+    """
+    def __init__(self,resolution,frame='r0/odom',max_cells=16_000_000):
+        if not math.isfinite(resolution) or resolution<=0:raise ValueError('invalid resolution')
+        self.resolution=resolution;self.frame=frame;self.max_cells=max_cells
+        self.grid=None;self.origin=None;self.stamp_ns=0
+
+    def add(self,snapshot):
+        g=snapshot.geometry
+        if abs(g.resolution-self.resolution)>1e-7 or abs(g.origin_yaw)>1e-7 or snapshot.frame!=self.frame:
+            raise ValueError('accumulator requires the common aligned lattice')
+        if not np.any(snapshot.grid>=0):return
+        corner=np.asarray([g.origin_x,g.origin_y]);end=corner+[g.width*self.resolution,g.height*self.resolution]
+        if self.grid is None:
+            if snapshot.grid.size>self.max_cells:raise ValueError('accumulator exceeds max_cells')
+            self.origin=corner;self.grid=np.array(snapshot.grid,copy=True)
+        else:
+            old_end=self.origin+np.array(self.grid.shape[::-1])*self.resolution
+            low=np.minimum(self.origin,corner);high=np.maximum(old_end,end)
+            width,height=np.rint((high-low)/self.resolution).astype(int)
+            if int(width)*int(height)>self.max_cells:raise ValueError('accumulator exceeds max_cells')
+            if not np.array_equal(low,self.origin) or (height,width)!=self.grid.shape:
+                expanded=np.full((height,width),-1,dtype=np.int8)
+                col,row=np.rint((self.origin-low)/self.resolution).astype(int)
+                expanded[row:row+self.grid.shape[0],col:col+self.grid.shape[1]]=self.grid
+                self.grid=expanded;self.origin=low
+            offset=(corner-self.origin)/self.resolution
+            if not np.allclose(offset,np.rint(offset),atol=1e-5):raise ValueError('misaligned lattice origins')
+            col,row=np.rint(offset).astype(int);view=self.grid[row:row+g.height,col:col+g.width]
+            incoming=snapshot.grid;known=incoming>=0
+            free=known&(incoming<=50)&(view<=50);view[free]=0;view[incoming>50]=100
+        self.stamp_ns=max(self.stamp_ns,snapshot.stamp_ns)
+
+    def snapshot(self):
+        if self.grid is None:return None
+        height,width=self.grid.shape
+        return Snapshot(self.grid,GridGeometry(self.resolution,width,height,*map(float,self.origin)),self.stamp_ns,self.frame)
+
+
+class IncrementalFusion:
+    """One map-worker owns all state; seeds once, integrates observed local cells."""
+    def __init__(self,resolution=.05,max_cells=16_000_000):
+        self.resolution=resolution;self.max_cells=max_cells;self.generation=None;self.layers={}
+
+    def update(self,generation,seeds,updates,alignment):
+        if generation!=self.generation:
+            self.generation=generation
+            self.layers={rid:OccupancyAccumulator(self.resolution,max_cells=self.max_cells) for rid in (0,1)}
+        for rid,snapshot in list(seeds.items())+list(updates):
+            transform=(0.,0.,0.) if rid==0 else alignment
+            if not np.any(snapshot.grid>=0):continue
+            projected=compose_grids([(snapshot,transform)],self.resolution,max_cells=self.max_cells)
+            self.layers[rid].add(projected)
+        layers={rid:layer.snapshot() for rid,layer in self.layers.items()}
+        merged=OccupancyAccumulator(self.resolution,max_cells=self.max_cells)
+        for snapshot in layers.values():
+            if snapshot is not None:merged.add(snapshot)
+        return merged.snapshot(),layers
+
+
 def atomic_write(path, data):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

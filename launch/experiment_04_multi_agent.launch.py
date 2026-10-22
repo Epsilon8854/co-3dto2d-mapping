@@ -46,6 +46,8 @@ def setup(context):
         actions.append(Node(package='co_3dto2d_mapping',executable='multi_agent_session.py',
             name=f'robot{rid}_session',parameters=[dict(robot_id=rid,config_file=config,use_sim_time=sim)]))
     if role in ('fusion','all'):
+        actions.append(Node(package='co_3dto2d_mapping',executable='multi_agent_pose_relay.py',
+            parameters=[dict(use_sim_time=sim)],output='screen'))
         actions.append(Node(package='co_3dto2d_mapping',executable='multi_agent_mapping.py',
             parameters=[value('alignment_config_file'),dict(output_directory=str(output),use_sim_time=sim)],output='screen'))
     if value('rviz').lower()=='true':

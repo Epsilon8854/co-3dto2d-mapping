@@ -10,7 +10,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from nav_msgs.msg import Odometry
-from co_3dto2d_mapping.multi_agent_mapping import diagnostic, stamp_ns, pose_of
+from co_3dto2d_mapping.multi_agent_ros import diagnostic, stamp_ns, pose_of
 from diagnostic_msgs.msg import DiagnosticArray
 
 

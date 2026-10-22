@@ -1,16 +1,11 @@
-# Compatibility profile: the same 18% limit as the Experiment 4 default.
 /**:
   ros__parameters:
     mode: auto_validated_locked
-    window_sec: 3.0
-    window_min_frames: 15
-    window_max_frames: 80
     confirmation_windows: 3
     consensus_translation_m: 0.1
     consensus_yaw_deg: 0.5
     stationary_translation_m: 0.15
     stationary_yaw_deg: 2.0
-    pose_stamp_tolerance_sec: 0.4
     input_timeout_sec: 5.0
     submap_radius_m: 12.0
     registration_resolution_m: 0.1
@@ -33,3 +28,10 @@
     search.top_candidates: 5
     search.min_score_gap_ratio: 0.1
     search.min_observability_ratio: 0.001
+    startup_accumulation_sec: 3.0
+    verification_interval_sec: 1.0
+    local_queue_size: 100
+    path_publish_period_sec: 1.0
+    path_max_poses: 5000
+    verification_prior_growth_ratio: 0.25
+    verification_translation_range_m: 0.15
