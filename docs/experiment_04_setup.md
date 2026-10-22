@@ -200,6 +200,7 @@ bash scripts/replay_experiment_04_multi_agent_mapping.sh \
 
 ## 7. r1 내부 처리율과 r0 수신율 구분
 
+- r1 노트북 Codex 진단 인계: [r1 mapper 발행 지연 근거와 분리 설계 검토](experiment_04_r1_mapper_publish_diagnosis.md).
 - `monitor_experiment_04_pipeline.py`는 raw odometry → fixed/gravity 보정 odometry → mapper/PHT 보정 odometry의 수신율·공백·header 시각을 기록합니다. raw point cloud는 구독하지 않습니다.
 - `local` 역할은 반드시 해당 센서가 연결된 PC에서 실행합니다. local/global grid는 Python 역직렬화 없이 byte 수·수신율만 관측하고, 작은 `/multi_agent/rN/pipeline_metrics` 진단 메시지를 1 Hz로 발행합니다. 지도 구독 자체의 계측 부하는 존재합니다.
 - `receiver` 역할은 r0에서 실행하며 원격 지도 구독을 추가하지 않습니다. r1 pose·aligned pose와 작은 진단 메시지를 JSON으로 저장합니다. 계측 프로세스는 정해진 시간 후 종료됩니다.
