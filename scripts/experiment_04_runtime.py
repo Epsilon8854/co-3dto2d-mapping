@@ -5,6 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import hashlib
 import json
+import math
 import os
 import platform
 from pathlib import Path
@@ -40,6 +41,7 @@ def args_parser():
     p.add_argument('--domain-id',type=int,default=int(os.environ.get('ROS_DOMAIN_ID','72')))
     p.add_argument('--run-id',default=datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f'))
     p.add_argument('--no-rviz',action='store_true')
+    p.add_argument('--status-only',action='store_true',help='show live session/alignment status without starting or stopping mapping nodes')
     p.add_argument('--dry-run',action='store_true',help='show resolved roles/configs only')
     return p
 
@@ -49,11 +51,93 @@ def shutdown_signal(*_):
     stop_requested=True
 
 
+def console(label,message):
+    stamp=datetime.now(ZoneInfo('Asia/Seoul')).strftime('%H:%M:%S')
+    print(f'[{stamp}] [{label}] {message}',flush=True)
+
+
+class StatusConsole:
+    """Small diagnostic subscriptions only; never subscribe to raw sensors/maps."""
+    def __init__(self,args):
+        import rclpy
+        from diagnostic_msgs.msg import DiagnosticArray
+        from rclpy.context import Context
+        from rclpy.executors import SingleThreadedExecutor
+        from rclpy.qos import QoSProfile,ReliabilityPolicy,DurabilityPolicy
+        self.rclpy=rclpy;self.context=Context()
+        rclpy.init(context=self.context,signal_handler_options=rclpy.signals.SignalHandlerOptions.NO)
+        self.node=rclpy.create_node(f'experiment04_console_{os.getpid()}',context=self.context)
+        self.executor=SingleThreadedExecutor(context=self.context)
+        self.executor.add_node(self.node)
+        self.label='fusion' if args.role=='fusion' else f'r{args.robot_id}'
+        params=yaml.safe_load(args.alignment_config.read_text())['/**']['ros__parameters']
+        self.required_windows=params.get('confirmation_windows',3)
+        self.latest=None;self.received=0.;self.last_print=0.;self.signature=None;self.sessions={}
+        qos=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.node.create_subscription(DiagnosticArray,'/multi_agent/alignment_status',self.status,qos)
+        ids=(0,1) if args.action=='replay' or args.role in ('fusion','all') else (args.robot_id,)
+        for rid in ids:
+            self.node.create_subscription(DiagnosticArray,f'/multi_agent/r{rid}/session',
+                                          lambda msg,r=rid:self.session(msg,r),qos)
+        console(self.label,'정합 상태 수신 대기 / waiting for fusion status (Ctrl+C: 종료)')
+
+    @staticmethod
+    def values(msg):
+        result={}
+        for item in msg.status:
+            for value in item.values:
+                try:result[value.key]=json.loads(value.value)
+                except (ValueError,TypeError):result[value.key]=value.value
+        return result
+
+    def session(self,msg,rid):
+        values=self.values(msg);identifier=values.get('session_id')
+        if identifier and self.sessions.get(rid)!=identifier:
+            restarted=rid in self.sessions;self.sessions[rid]=identifier
+            console(self.label,f'SESSION r{rid}: {identifier} / '+('변경됨; 초기 정합 재확인' if restarted else '수신 시작'))
+
+    def status(self,msg):
+        self.latest=self.values(msg);self.received=time.monotonic()
+
+    def poll(self):
+        for _ in range(5):self.executor.spin_once(timeout_sec=0.)
+        now=time.monotonic()
+        if self.latest is None or now-self.received>5.:
+            signature=('NO_FUSION_STATUS',)
+            text=('중앙 정합 상태 수신 대기; r0 fusion 실행·ROS domain·네트워크 확인'
+                  if self.latest is None else f'중앙 상태 수신 공백 {now-self.received:.1f}s; 정합 완료 상태를 신뢰하지 마세요')
+        else:
+            value=self.latest;state=value.get('state','UNKNOWN');reason=value.get('reason','')
+            count=value.get('consistent_windows',0);total=value.get('required_windows',self.required_windows)
+            ready=value.get('ready',False)
+            signature=(state,reason,count,ready)
+            labels={'WAIT_INPUT':'정합 입력 대기','COLLECTING':'초기 정지 관측 수집 중',
+                    'SEARCHING':'XY/yaw 정합 검색 중','VERIFYING':'정합 반복 검증 중',
+                    'LOCKED':'초기 정합 완료·변환 고정','STALE':'입력 수신 지연'}
+            text=f'{state}: {labels.get(state,state)} | 검증 {count}/{total} | ready={str(ready).lower()}'
+            transform=value.get('transform')
+            if ready and isinstance(transform,list) and len(transform)==3:
+                text+=f' | r0←r1 x={transform[0]:.3f}m y={transform[1]:.3f}m yaw={math.degrees(transform[2]):.2f}deg'
+            else:text+=' | '+str(reason)
+            if 'local_map_subscriptions_active' in value:
+                text+=' | 초기 local-map 구독='+('ON' if value['local_map_subscriptions_active'] else 'OFF')
+            runtime=value.get('metrics',{}).get('central_tick_runtime_ms')
+            if isinstance(runtime,(float,int)):text+=f' | 중앙 처리={runtime:.0f}ms'
+        if signature!=self.signature or now-self.last_print>=5.:
+            console(self.label,text);self.signature=signature;self.last_print=now
+
+    def close(self):
+        self.executor.remove_node(self.node);self.executor.shutdown()
+        self.node.destroy_node();self.rclpy.shutdown(context=self.context)
+
+
 def start(command,log,kind):
     logfile=log.open('wb')
     try:proc=subprocess.Popen(list(map(str,command)),start_new_session=True,stdout=logfile,stderr=subprocess.STDOUT)
     finally:logfile.close()
-    children.append((proc,kind));return proc
+    children.append((proc,kind))
+    console('START',f'{kind} pid={proc.pid} | log={log}')
+    return proc
 
 
 def stop_process(proc,timeout=30):
@@ -140,6 +224,13 @@ def main():
         print(json.dumps(dict(action=args.action,role=args.role,robot_id=args.robot_id,domain=args.domain_id,
             alignment_config=str(args.alignment_config),topics=topics(args) if args.action=='record' else []),indent=2));return
     os.environ['ROS_DOMAIN_ID']=str(args.domain_id);os.environ.setdefault('ROS_LOCALHOST_ONLY','0')
+    if args.status_only:
+        for sig in (signal.SIGINT,signal.SIGTERM):signal.signal(sig,shutdown_signal)
+        monitor=StatusConsole(args)
+        try:
+            while not stop_requested:monitor.poll();time.sleep(.1)
+        finally:monitor.close()
+        return
     if args.start_driver:
         candidates=([args.livox_workspace/'install/local_setup.bash'] if args.livox_workspace else [])
         if os.environ.get('LIVOX_SETUP'):candidates.append(Path(os.environ['LIVOX_SETUP']))
@@ -149,6 +240,7 @@ def main():
         if found is not None:os.environ['LIVOX_SETUP']=str(found.resolve())
         elif subprocess.run(['ros2','pkg','prefix','livox_ros_driver2'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
             raise ValueError('Livox workspace not found; pass --livox-workspace or set LIVOX_SETUP')
+    console('START',f'Experiment 4 {args.action} role={args.role} robot=r{args.robot_id} domain={args.domain_id}; 시작 전 topic 확인')
     graph_preflight(args)
     category='captures' if args.action=='record' else 'runs'
     run=ROOT/'outputs/experiment_04_multi_agent_mapping'/category/args.run_id
@@ -184,6 +276,7 @@ def main():
     (run/'source_sha256.json').write_text(json.dumps(source_hashes,indent=2))
     for sig in (signal.SIGINT,signal.SIGTERM):signal.signal(sig,shutdown_signal)
     print('Experiment 4 output:',run,flush=True)
+    monitor=None
     try:
         if args.action=='record':
             recorder=start(['ros2','bag','record','--storage','sqlite3','--output',run/'bag',*topics(args)],run/'logs/record.log','recorder')
@@ -192,6 +285,7 @@ def main():
         cycle=0
         while not stop_requested:
             cycle+=1;output=run/f'cycle_{cycle:03d}';output.mkdir()
+            monitor=StatusConsole(args)
             if args.action=='run' and args.start_driver:
                 env_config=str(args.driver_config.resolve()) if args.driver_config else os.environ.get('LIVOX_CONFIG','')
                 if env_config:os.environ['LIVOX_CONFIG']=env_config
@@ -216,19 +310,23 @@ def main():
                 player=start(['ros2','bag','play','--clock','--rate',str(args.rate),str(args.bag.resolve()),'--topics',
                     *sorted(required),'/tf_static'],output/'bag_play.log','player')
                 while not stop_requested and player.poll() is None:
+                    monitor.poll()
                     for proc,kind in children:
                         if kind in ('robot','fusion') and proc.poll() is not None:raise RuntimeError(kind+' exited; see logs')
                     time.sleep(.2)
                 if player.poll() not in (None,0) and not stop_requested:raise RuntimeError('bag playback failed')
                 time.sleep(2)
+                monitor.close();monitor=None
                 cleanup()
                 if not args.loop:break
             else:
                 while not stop_requested:
+                    monitor.poll()
                     for proc,kind in children:
                         if kind!='rviz' and proc.poll() is not None:raise RuntimeError(kind+' exited; see logs')
                     time.sleep(.2)
     finally:
+        if monitor is not None:monitor.close()
         cleanup()
         meta['finished_at']=datetime.now(ZoneInfo('Asia/Seoul')).isoformat()
         (run/'run.yaml').write_text(yaml.safe_dump(meta,sort_keys=False))

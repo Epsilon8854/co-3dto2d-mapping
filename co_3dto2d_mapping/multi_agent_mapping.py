@@ -123,25 +123,39 @@ class MultiAgentMapping(Node):
         self.status_pub=self.create_publisher(DiagnosticArray,'/multi_agent/alignment_status',self.latched)
         self.merged_pub=self.create_publisher(OccupancyGrid,'/multi_agent/merged_global_occupancy',self.latched)
         self.aligned_map_pub=self.create_publisher(OccupancyGrid,'/multi_agent/r1/aligned_global_occupancy',self.latched)
-        self.pose_pubs={};self.path_pubs={}
+        self.pose_pubs={};self.path_pubs={};self.local_map_subscriptions={}
         for rid in (0,1):
             prefix=f'/r{rid}/mapping/'
             # Input mapper grids are currently volatile. Subscriber durability
             # must stay compatible; the new central snapshots are latched.
             self.create_subscription(OccupancyGrid,prefix+'global_occupancy',lambda m,r=rid:self.global_map(m,r),1)
-            self.create_subscription(OccupancyGrid,prefix+'local_occupancy',lambda m,r=rid:self.local_map(m,r),10)
             self.create_subscription(Odometry,prefix+'occupancy_mapper_odometry',lambda m,r=rid:self.pose(m,r),50)
             self.create_subscription(Odometry,f'/r{rid}/odom',lambda m,r=rid:self.raw_pose(m,r),50)
             self.create_subscription(DiagnosticArray,f'/multi_agent/r{rid}/session',lambda m,r=rid:self.session(m,r),self.latched)
             self.pose_pubs[rid]=self.create_publisher(Odometry,f'/multi_agent/r{rid}/aligned_odometry',10)
             for kind in ('aligned','raw'):
                 self.path_pubs[kind,rid]=self.create_publisher(RosPath,f'/multi_agent/r{rid}/{kind}_path' if kind=='aligned' else f'/multi_agent/r{rid}/raw_path',10)
+        self.set_local_map_subscriptions(True)
         self.create_service(Trigger,'/multi_agent/save_map',self.save_service)
         self.create_service(Trigger,'/multi_agent/reset_alignment',self.reset_service)
         self.create_timer(self.p['merged_period_sec'],self.tick)
         self.ready_pub.publish(Bool(data=False))
         effective={**self.p,'registration':asdict(self.reg),'search':asdict(self.search)}
         atomic_write(self.out/'effective_central_config.json',json.dumps(effective,indent=2).encode())
+
+    def set_local_map_subscriptions(self,enabled):
+        # Ignoring callbacks after lock still transfers full grids over DDS.
+        # Remove the readers themselves; recreate them on session/reset changes.
+        if enabled:
+            for rid in (0,1):
+                if rid not in self.local_map_subscriptions:
+                    self.local_map_subscriptions[rid]=self.create_subscription(
+                        OccupancyGrid,f'/r{rid}/mapping/local_occupancy',
+                        lambda msg,r=rid:self.local_map(msg,r),10)
+        else:
+            for subscription in self.local_map_subscriptions.values():
+                self.destroy_subscription(subscription)
+            self.local_map_subscriptions.clear()
 
     def invalidate(self,reason):
         # Archive previous-session saves instead of leaving stale final names.
@@ -157,6 +171,7 @@ class MultiAgentMapping(Node):
         self.paths={kind:{i:deque(maxlen=10000) for i in (0,1)} for kind in ('aligned','raw')}
         self.last_local.clear();self.startup_origins.clear();self.receipt.clear();self.merged=None;self.aligned_map=None;self.map_dirty=True
         self.state='WAIT_INPUT';self.reason=reason;self.ready_pub.publish(Bool(data=False))
+        self.set_local_map_subscriptions(True)
         # Replace latched map contents with empty state so RViz does not retain
         # an apparently valid merged map from a previous odometry session.
         empty=OccupancyGrid();empty.header.frame_id='r0/odom'
@@ -244,6 +259,8 @@ class MultiAgentMapping(Node):
 
     def lock(self,transform):
         self.alignment=tuple(map(float,transform));self.state='LOCKED';self.reason='startup alignment verified and frozen'
+        self.set_local_map_subscriptions(False)
+        self.windows={i:[] for i in (0,1)};self.pending={i:deque(maxlen=3) for i in (0,1)}
         self.map_dirty=True;self.ready_pub.publish(Bool(data=True))
         t=self.transform_message(self.get_clock().now().to_msg());self.transform_pub.publish(t)
         atomic_write(self.out/'alignment/r1_to_r0_transform.json',json.dumps(dict(
@@ -303,6 +320,7 @@ class MultiAgentMapping(Node):
         self.last_report['merge_runtime_ms']=(time.perf_counter()-started)*1000
 
     def tick(self):
+        tick_started=time.perf_counter()
         now_ns=self.get_clock().now().nanoseconds
         if self.last_clock_ns is not None and now_ns<self.last_clock_ns:self.invalidate('ROS clock moved backwards')
         self.last_clock_ns=now_ns
@@ -341,12 +359,26 @@ class MultiAgentMapping(Node):
             self.publish_paths()
             if self.merged is not None and time.monotonic()-self.last_checkpoint>=self.p['checkpoint_sec']:
                 self.save_outputs('checkpoint');self.last_checkpoint=time.monotonic()
-        status=dict(state=self.state if fresh else 'STALE' if self.alignment else 'WAIT_INPUT',reason=self.reason,
+        now=time.monotonic()
+        required=[(kind,rid) for rid in (0,1) for kind in ('map','pose')]
+        if self.p['require_sessions']:required += [('session',rid) for rid in (0,1)]
+        ages={f'r{rid}/{kind}':now-self.receipt[kind,rid] if (kind,rid) in self.receipt else None
+              for kind,rid in required}
+        missing=[key for key,age in ages.items() if age is None or age>self.p['input_timeout_sec']]
+        fresh=not missing
+        state=self.state if fresh else 'STALE' if self.alignment else 'WAIT_INPUT'
+        if state=='WAIT_INPUT' and fresh:state='COLLECTING'
+        reason=self.reason if not missing else 'waiting for fresh input: '+', '.join(missing)
+        self.last_report['central_tick_runtime_ms']=(time.perf_counter()-tick_started)*1000
+        status=dict(state=state,reason=reason,
             ready=self.alignment is not None and fresh,inputs_fresh=fresh,transform=self.alignment,sessions=self.sessions,
             source_map_stamps={r:s.stamp_ns for r,s in self.maps.items()},
-            consistent_windows=len(self.consensus.evidence),metrics=self.last_report)
+            consistent_windows=len(self.consensus.evidence),required_windows=self.consensus.count,
+            input_receipt_ages_sec=ages,missing_inputs=missing,
+            local_map_subscriptions_active=bool(self.local_map_subscriptions),
+            window_frames={r:len(w) for r,w in self.windows.items()},metrics=self.last_report)
         msg=DiagnosticArray();msg.header.stamp=self.get_clock().now().to_msg()
-        msg.status=[diagnostic('multi_agent/startup_alignment',status,DiagnosticStatus.OK if self.alignment and fresh else DiagnosticStatus.WARN,self.reason)]
+        msg.status=[diagnostic('multi_agent/startup_alignment',status,DiagnosticStatus.OK if self.alignment and fresh else DiagnosticStatus.WARN,reason)]
         self.status_pub.publish(msg)
         self.ready_pub.publish(Bool(data=self.alignment is not None and fresh))
 

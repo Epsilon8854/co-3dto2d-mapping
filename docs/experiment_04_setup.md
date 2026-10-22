@@ -80,6 +80,8 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 - 초기에는 두 센서를 고정하고 공통 벽·코너를 관측합니다. 같은 방향일 필요는 없습니다.
 - 3초 관측 창 3회와 후보 검증으로 정합을 확정합니다. 실제 대기시간은 map 생성·검색 시간에 따라 늘어납니다. 대칭 공간·overlap 부족은 거절될 수 있습니다.
 - RViz fixed frame은 `r0/odom`입니다. `alignment_ready=true`와 벽·코너 정합을 확인한 뒤 주행을 시작합니다.
+- r0/r1 실행 터미널에 session ID와 `WAIT_INPUT`(입력 대기), `COLLECTING`(정지 관측 수집), `SEARCHING`(정합 검색), `VERIFYING`(반복 검증), `LOCKED`(완료), `STALE`(입력 지연)를 표시합니다. 상태 변경 시 즉시, 유지 중에는 5초마다 출력합니다. 중앙 상태가 5초 이상 끊기면 별도 수신 공백 경고를 출력합니다.
+- 자세한 driver/ICP 로그는 기존 로그 파일에 보관합니다. 터미널은 진단 topic과 session만 구독하며 raw cloud/IMU/map을 추가 구독하지 않습니다.
 - ICP는 raw cloud, deskew off, queue 1을 유지합니다. rear/height filter는 mapping 입력에 적용합니다. 고정 높이·IMU gravity 및 PHT full_se2/history 5가 각 single pipeline에 적용됩니다.
 - 센서 장착 높이·base 높이·extrinsic은 robot YAML의 `fixed_base_link_height_above_floor_m`, `lidar_mount_height_above_floor_m`, `experiment_sensor_tf_*`에서 변경합니다. 초기값은 높이 각각 0.30 m, extrinsic 0입니다.
 
@@ -91,6 +93,17 @@ ros2 service call /multi_agent/save_map std_srvs/srv/Trigger '{}'
 # 두 센서를 멈춘 후 초기 정합 재시도
 ros2 service call /multi_agent/reset_alignment std_srvs/srv/Trigger '{}'
 ```
+
+- 기존 mapping을 중단하지 않고 별도 터미널에서 상태만 확인할 수도 있습니다. 이 명령의 Ctrl+C는 표시기만 종료합니다. r1 PC에서는 `--robot-id 1`을 사용합니다.
+
+```bash
+bash scripts/run_experiment_04_multi_agent_mapping.sh \
+  --role robot --robot-id 0 --domain-id 72 --status-only
+```
+
+- 정합 확정 후 중앙의 local map 구독을 해제합니다. session 변경·clock reset·정합 reset 시 자동 복구합니다. 각 single mapper의 local map 발행·로컬 녹화는 유지됩니다. 다른 원격 RViz/녹화기가 local map을 구독하면 해당 전송은 계속됩니다.
+- Global map과 pose/session은 계속 수신합니다. 지도는 현재 전체 grid를 주기적으로 전송하며 증분 전송·별도 저주기 bridge는 아직 적용하지 않았습니다. raw odometry는 비교 경로용입니다.
+- `alignment_status`의 `input_receipt_ages_sec`는 중앙 콜백의 수신 공백(PC clock 차이 제외), `central_tick_runtime_ms`는 지도 합성·경로 발행·checkpoint를 포함한 중앙 주기 처리시간입니다. 이 지표만으로 실제 무선 지연이나 원격 센서 처리 지연을 단정하지 않습니다.
 
 | Topic | 내용 |
 | --- | --- |
