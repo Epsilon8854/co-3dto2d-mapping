@@ -113,6 +113,7 @@ class StatusConsole:
             signature=(state,reason,count,ready)
             labels={'WAIT_INPUT':'정합 입력 대기','COLLECTING':'초기 정지 관측 수집 중',
                     'SEARCHING':'XY/yaw 정합 검색 중','VERIFYING':'정합 반복 검증 중',
+                    'WAIT_GLOBAL_MAP':'정합 변환 확정; 병합용 global map 수신 대기',
                     'LOCKED':'초기 정합 완료·변환 고정','STALE':'입력 수신 지연'}
             text=f'{state}: {labels.get(state,state)} | 검증 {count}/{total} | ready={str(ready).lower()}'
             transform=value.get('transform')
@@ -121,6 +122,16 @@ class StatusConsole:
             else:text+=' | '+str(reason)
             if 'local_map_subscriptions_active' in value:
                 text+=' | 초기 local-map 구독='+('ON' if value['local_map_subscriptions_active'] else 'OFF')
+            if 'global_map_subscriptions_active' in value:
+                text+=' global-map 구독='+('ON' if value['global_map_subscriptions_active'] else 'OFF')
+            frames=value.get('window_frames',{});minimum=value.get('window_min_frames',15)
+            if not ready and value.get('local_map_subscriptions_active') and frames:
+                text+=' | 현재 창 '+', '.join(f'r{rid}={count}/{minimum} maps' for rid,count in frames.items())
+                drops=[]
+                for rid,counts in value.get('local_input_stats',{}).items():
+                    selected={k:v for k,v in counts.items() if k not in ('received','accepted') and v}
+                    drops.append(f'r{rid}:수신={counts.get("received",0)},채택={counts.get("accepted",0)},제외={selected}')
+                if drops:text+=' | '+'; '.join(drops)
             runtime=value.get('metrics',{}).get('central_tick_runtime_ms')
             if isinstance(runtime,(float,int)):text+=f' | 중앙 처리={runtime:.0f}ms'
         if signature!=self.signature or now-self.last_print>=5.:

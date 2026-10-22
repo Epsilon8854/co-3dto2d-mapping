@@ -7,7 +7,7 @@ worker; ROS callbacks never run the search synchronously.
 """
 from __future__ import annotations
 
-from collections import deque
+from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import asdict, fields
@@ -115,6 +115,7 @@ class MultiAgentMapping(Node):
         self.paths={kind:{i:deque(maxlen=10000) for i in (0,1)} for kind in ('aligned','raw')}
         self.last_local={};self.startup_origins={};self.map_dirty=True;self.merged=None;self.aligned_map=None
         self.last_checkpoint=0.;self.last_clock_ns=None;self.last_report={}
+        self.local_input_stats={rid:Counter() for rid in (0,1)}
         self.closing=False
         self.latched=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.tf=TransformBroadcaster(self)
@@ -123,12 +124,11 @@ class MultiAgentMapping(Node):
         self.status_pub=self.create_publisher(DiagnosticArray,'/multi_agent/alignment_status',self.latched)
         self.merged_pub=self.create_publisher(OccupancyGrid,'/multi_agent/merged_global_occupancy',self.latched)
         self.aligned_map_pub=self.create_publisher(OccupancyGrid,'/multi_agent/r1/aligned_global_occupancy',self.latched)
-        self.pose_pubs={};self.path_pubs={};self.local_map_subscriptions={}
+        self.pose_pubs={};self.path_pubs={};self.local_map_subscriptions={};self.global_map_subscriptions={}
         for rid in (0,1):
             prefix=f'/r{rid}/mapping/'
             # Input mapper grids are currently volatile. Subscriber durability
             # must stay compatible; the new central snapshots are latched.
-            self.create_subscription(OccupancyGrid,prefix+'global_occupancy',lambda m,r=rid:self.global_map(m,r),1)
             self.create_subscription(Odometry,prefix+'occupancy_mapper_odometry',lambda m,r=rid:self.pose(m,r),50)
             self.create_subscription(Odometry,f'/r{rid}/odom',lambda m,r=rid:self.raw_pose(m,r),50)
             self.create_subscription(DiagnosticArray,f'/multi_agent/r{rid}/session',lambda m,r=rid:self.session(m,r),self.latched)
@@ -157,6 +157,25 @@ class MultiAgentMapping(Node):
                 self.destroy_subscription(subscription)
             self.local_map_subscriptions.clear()
 
+    def set_global_map_subscriptions(self,enabled):
+        # Full global grids are only needed once the startup transform is fixed.
+        if enabled:
+            for rid in (0,1):
+                if rid not in self.global_map_subscriptions:
+                    self.global_map_subscriptions[rid]=self.create_subscription(
+                        OccupancyGrid,f'/r{rid}/mapping/global_occupancy',
+                        lambda msg,r=rid:self.global_map(msg,r),1)
+        else:
+            for subscription in self.global_map_subscriptions.values():
+                self.destroy_subscription(subscription)
+            self.global_map_subscriptions.clear()
+
+    def required_input_keys(self):
+        map_kind='local_map' if self.alignment is None else 'map'
+        keys=[(kind,rid) for rid in (0,1) for kind in (map_kind,'pose')]
+        if self.p['require_sessions']:keys += [('session',rid) for rid in (0,1)]
+        return keys
+
     def invalidate(self,reason):
         # Archive previous-session saves instead of leaving stale final names.
         archived=self.out/'archive'/f'generation_{self.generation:03d}'
@@ -170,7 +189,9 @@ class MultiAgentMapping(Node):
         self.pose_history={i:deque(maxlen=400) for i in (0,1)}
         self.paths={kind:{i:deque(maxlen=10000) for i in (0,1)} for kind in ('aligned','raw')}
         self.last_local.clear();self.startup_origins.clear();self.receipt.clear();self.merged=None;self.aligned_map=None;self.map_dirty=True
+        self.local_input_stats={rid:Counter() for rid in (0,1)}
         self.state='WAIT_INPUT';self.reason=reason;self.ready_pub.publish(Bool(data=False))
+        self.set_global_map_subscriptions(False)
         self.set_local_map_subscriptions(True)
         # Replace latched map contents with empty state so RViz does not retain
         # an apparently valid merged map from a previous odometry session.
@@ -188,9 +209,11 @@ class MultiAgentMapping(Node):
         self.sessions[rid]=session_id;self.receipt['session',rid]=time.monotonic()
 
     def global_map(self,msg,rid):
+        if self.alignment is None:return
         if msg.header.frame_id!=f'r{rid}/odom':self.reason=f'invalid r{rid} map frame';return
         ns=stamp_ns(msg.header.stamp)
-        if rid in self.maps and ns<self.maps[rid].stamp_ns:self.invalidate(f'r{rid} map clock reset')
+        if rid in self.maps and ns<self.maps[rid].stamp_ns:
+            self.invalidate(f'r{rid} map clock reset');return
         if rid in self.maps and ns==self.maps[rid].stamp_ns:return
         try:self.maps[rid]=snapshot_of(msg)
         except (ValueError,TypeError) as exc:self.reason=str(exc);return
@@ -215,15 +238,18 @@ class MultiAgentMapping(Node):
         self.raw[rid]=msg;self.paths['raw'][rid].append(msg)
 
     def local_map(self,msg,rid):
-        if self.alignment is not None or msg.header.frame_id!=f'r{rid}/odom':return
+        counts=self.local_input_stats[rid];counts['received']+=1
+        if self.alignment is not None:counts['after_lock']+=1;return
+        if msg.header.frame_id!=f'r{rid}/odom':counts['invalid_frame']+=1;return
         ns=stamp_ns(msg.header.stamp)
-        if ns<=self.last_local.get(rid,-1):return
-        if not self.pose_history[rid]:return
+        if ns<=self.last_local.get(rid,-1):counts['duplicate_or_old_stamp']+=1;return
+        if not self.pose_history[rid]:counts['no_pose_history']+=1;return
         pose=min(self.pose_history[rid],key=lambda p:abs(stamp_ns(p.header.stamp)-ns))
-        if abs(stamp_ns(pose.header.stamp)-ns)>self.p['pose_stamp_tolerance_sec']*1e9:return
+        if abs(stamp_ns(pose.header.stamp)-ns)>self.p['pose_stamp_tolerance_sec']*1e9:
+            counts['pose_stamp_mismatch']+=1;return
         self.last_local[rid]=ns
         try:snapshot=snapshot_of(msg)
-        except (ValueError,TypeError):return
+        except (ValueError,TypeError):counts['invalid_grid']+=1;return
         window=self.windows[rid]
         if rid not in self.startup_origins:self.startup_origins[rid]=pose_of(pose)
         if rid in self.startup_origins:
@@ -232,8 +258,10 @@ class MultiAgentMapping(Node):
                 abs(normalize_angle(current[2]-initial[2]))>math.radians(self.p['stationary_yaw_deg'])):
                 self.windows={i:[] for i in (0,1)};self.pending={i:deque(maxlen=3) for i in (0,1)}
                 self.startup_origins.clear();self.consensus.reset()
-                self.generation+=1;self.reason=f'r{rid} moved during startup';return
+                self.generation+=1;self.reason=f'r{rid} moved during startup'
+                counts['startup_motion_resets']+=1;return
         window.append((snapshot,pose))
+        counts['accepted']+=1;self.receipt['local_map',rid]=time.monotonic()
         if len(window)>self.p['window_max_frames']:
             self.windows[rid]=[];self.reason='window_max_frames too small for input rate';return
         if (len(window)>=self.p['window_min_frames'] and
@@ -242,8 +270,7 @@ class MultiAgentMapping(Node):
 
     def fresh(self):
         now=time.monotonic();timeout=self.p['input_timeout_sec']
-        keys=[(kind,rid) for rid in (0,1) for kind in ('map','pose')]
-        if self.p['require_sessions']:keys += [('session',rid) for rid in (0,1)]
+        keys=self.required_input_keys()
         return all(key in self.receipt and now-self.receipt[key]<=timeout for key in keys)
 
     def process_windows(self,w0,w1):
@@ -260,8 +287,9 @@ class MultiAgentMapping(Node):
     def lock(self,transform):
         self.alignment=tuple(map(float,transform));self.state='LOCKED';self.reason='startup alignment verified and frozen'
         self.set_local_map_subscriptions(False)
+        self.set_global_map_subscriptions(True)
         self.windows={i:[] for i in (0,1)};self.pending={i:deque(maxlen=3) for i in (0,1)}
-        self.map_dirty=True;self.ready_pub.publish(Bool(data=True))
+        self.map_dirty=True;self.ready_pub.publish(Bool(data=self.fresh()))
         t=self.transform_message(self.get_clock().now().to_msg());self.transform_pub.publish(t)
         atomic_write(self.out/'alignment/r1_to_r0_transform.json',json.dumps(dict(
             parent='r0/odom',child='r1/odom',x_m=transform[0],y_m=transform[1],yaw_rad=transform[2],
@@ -360,13 +388,13 @@ class MultiAgentMapping(Node):
             if self.merged is not None and time.monotonic()-self.last_checkpoint>=self.p['checkpoint_sec']:
                 self.save_outputs('checkpoint');self.last_checkpoint=time.monotonic()
         now=time.monotonic()
-        required=[(kind,rid) for rid in (0,1) for kind in ('map','pose')]
-        if self.p['require_sessions']:required += [('session',rid) for rid in (0,1)]
+        required=self.required_input_keys()
         ages={f'r{rid}/{kind}':now-self.receipt[kind,rid] if (kind,rid) in self.receipt else None
               for kind,rid in required}
         missing=[key for key,age in ages.items() if age is None or age>self.p['input_timeout_sec']]
         fresh=not missing
         state=self.state if fresh else 'STALE' if self.alignment else 'WAIT_INPUT'
+        if self.alignment is not None and any(rid not in self.maps for rid in (0,1)):state='WAIT_GLOBAL_MAP'
         if state=='WAIT_INPUT' and fresh:state='COLLECTING'
         reason=self.reason if not missing else 'waiting for fresh input: '+', '.join(missing)
         self.last_report['central_tick_runtime_ms']=(time.perf_counter()-tick_started)*1000
@@ -376,6 +404,9 @@ class MultiAgentMapping(Node):
             consistent_windows=len(self.consensus.evidence),required_windows=self.consensus.count,
             input_receipt_ages_sec=ages,missing_inputs=missing,
             local_map_subscriptions_active=bool(self.local_map_subscriptions),
+            global_map_subscriptions_active=bool(self.global_map_subscriptions),
+            local_input_stats=self.local_input_stats,window_min_frames=self.p['window_min_frames'],window_sec=self.p['window_sec'],
+            pending_windows={r:len(w) for r,w in self.pending.items()},
             window_frames={r:len(w) for r,w in self.windows.items()},metrics=self.last_report)
         msg=DiagnosticArray();msg.header.stamp=self.get_clock().now().to_msg()
         msg.status=[diagnostic('multi_agent/startup_alignment',status,DiagnosticStatus.OK if self.alignment and fresh else DiagnosticStatus.WARN,reason)]

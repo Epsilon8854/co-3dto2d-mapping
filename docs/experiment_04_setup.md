@@ -101,9 +101,25 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
   --role robot --robot-id 0 --domain-id 72 --status-only
 ```
 
-- 정합 확정 후 중앙의 local map 구독을 해제합니다. session 변경·clock reset·정합 reset 시 자동 복구합니다. 각 single mapper의 local map 발행·로컬 녹화는 유지됩니다. 다른 원격 RViz/녹화기가 local map을 구독하면 해당 전송은 계속됩니다.
-- Global map과 pose/session은 계속 수신합니다. 지도는 현재 전체 grid를 주기적으로 전송하며 증분 전송·별도 저주기 bridge는 아직 적용하지 않았습니다. raw odometry는 비교 경로용입니다.
+- 초기에는 중앙이 local map만 구독하고 global map은 구독하지 않습니다. 정합 확정 후 local map 구독을 해제하고 global map 구독을 시작합니다. 첫 global map 수신까지 `WAIT_GLOBAL_MAP`과 `ready=false`를 표시합니다. session 변경·clock reset·정합 reset 시 초기 구독 단계로 복구합니다.
+- 각 single mapper의 local/global map 발행·로컬 녹화는 유지됩니다. 다른 원격 RViz/녹화기가 map을 구독하면 해당 전송은 계속되므로 단계 분리의 효과가 줄어듭니다.
+- pose/session은 두 단계에서 계속 수신합니다. 지도는 현재 전체 grid를 주기적으로 전송하며 증분 전송·별도 저주기 bridge는 아직 적용하지 않았습니다. raw odometry는 비교 경로용입니다.
 - `alignment_status`의 `input_receipt_ages_sec`는 중앙 콜백의 수신 공백(PC clock 차이 제외), `central_tick_runtime_ms`는 지도 합성·경로 발행·checkpoint를 포함한 중앙 주기 처리시간입니다. 이 지표만으로 실제 무선 지연이나 원격 센서 처리 지연을 단정하지 않습니다.
+- `local_input_stats`에는 map 수신 수, 채택 수, 중복 stamp·pose 없음·pose 시각 오차 초과 등 제외 사유를 기록합니다. 터미널의 `현재 창 rN=.../15 maps`는 현재 누적 창의 채택된 **map 메시지 수**입니다. 창마다 최소 15개와 source timestamp 범위 3초를 모두 만족해야 합니다. 같은 stamp의 반복 발행은 새 관측으로 세지 않습니다. 완성 창은 `pending_windows`로 넘어가고 현재 창 count는 0부터 다시 시작합니다. 센서가 정지한 여러 관측이며, 서로 독립된 시점·위치의 정답 측정을 의미하지 않습니다.
+
+### Free-space 충돌 기준 비교
+
+- `registration.max_free_conflict_ratio`는 정합 후 비교 가능한 샘플에서 occupied ↔ free가 모순되는 비율의 상한입니다. 지도 전체 cell의 불일치율이나 정합 실패 확률이 아닙니다. unknown 영역은 분모에서 제외됩니다.
+- 기본 `alignment.yaml`은 0.14입니다. 별도 `alignment_free_conflict_018.yaml`은 다른 설정을 유지하고 0.18로 완화한 비교용 프로필입니다. 실행 중인 설정은 바뀌지 않습니다.
+- 0.18은 최근 후보 15.2%·16.5%의 해당 gate를 통과시킬 수 있지만, overlap/RMSE/후보 gap/3회 XY·yaw 일관성 기준을 모두 통과해야 확정됩니다. 올바른 정합임을 보장하지 않습니다.
+- 단계별 통신 분리를 적용한 동일 코드에서 0.14와 0.18을 비교합니다. 실측 XY/yaw 또는 벽·코너 overlay로 오정합 증가 여부를 함께 확인합니다.
+
+```bash
+# r0 fusion 실행 시에만 지정. r1 robot-only 실행에는 영향 없음.
+bash scripts/run_experiment_04_multi_agent_mapping.sh \
+  --role all --robot-id 0 --start-driver --domain-id 72 \
+  --alignment-config config/experiments/experiment_04_multi_agent_mapping/alignment_free_conflict_018.yaml
+```
 
 | Topic | 내용 |
 | --- | --- |
