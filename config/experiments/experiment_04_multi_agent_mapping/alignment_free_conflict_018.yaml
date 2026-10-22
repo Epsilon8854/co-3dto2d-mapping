@@ -1,4 +1,4 @@
-# Optional comparison profile: only the free-space conflict limit changes (14% -> 18%).
+# Compatibility profile: the same 18% limit as the Experiment 4 default.
 /**:
   ros__parameters:
     mode: auto_validated_locked

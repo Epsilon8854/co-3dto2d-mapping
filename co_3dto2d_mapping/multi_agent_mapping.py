@@ -94,9 +94,9 @@ class MultiAgentMapping(Node):
             if not math.isfinite(self.p[name]) or self.p[name]<=0:raise ValueError('invalid '+name)
         if self.p['window_min_frames']<2 or self.p['window_max_frames']<self.p['window_min_frames']:
             raise ValueError('invalid window frame limits')
-        reg={}
+        reg={};registration_defaults=RegistrationConfig(max_free_conflict_ratio=.18)
         for field in fields(RegistrationConfig):
-            name='registration.'+field.name;self.declare_parameter(name,getattr(RegistrationConfig(),field.name))
+            name='registration.'+field.name;self.declare_parameter(name,getattr(registration_defaults,field.name))
             reg[field.name]=self.get_parameter(name).value
         self.reg=RegistrationConfig(**reg).validated()
         search={}

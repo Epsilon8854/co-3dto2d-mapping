@@ -110,16 +110,39 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 ### Free-space 충돌 기준 비교
 
 - `registration.max_free_conflict_ratio`는 정합 후 비교 가능한 샘플에서 occupied ↔ free가 모순되는 비율의 상한입니다. 지도 전체 cell의 불일치율이나 정합 실패 확률이 아닙니다. unknown 영역은 분모에서 제외됩니다.
-- 기본 `alignment.yaml`은 0.14입니다. 별도 `alignment_free_conflict_018.yaml`은 다른 설정을 유지하고 0.18로 완화한 비교용 프로필입니다. 실행 중인 설정은 바뀌지 않습니다.
+- 기본 `alignment.yaml`은 **0.18**입니다. YAML을 생략한 Experiment 4 중앙 노드·startup helper의 기본도 0.18입니다. 공통 single/기존 정합 모듈의 기본값은 변경하지 않습니다. 기존 실행 snapshot과 실행 중인 설정은 바뀌지 않습니다.
+- 이전 0.14 조건은 `alignment_free_conflict_014.yaml`에 보존합니다. `alignment_free_conflict_018.yaml`은 기존 명령 호환을 위해 유지하며 현재 기본과 같은 설정입니다.
 - 0.18은 최근 후보 15.2%·16.5%의 해당 gate를 통과시킬 수 있지만, overlap/RMSE/후보 gap/3회 XY·yaw 일관성 기준을 모두 통과해야 확정됩니다. 올바른 정합임을 보장하지 않습니다.
 - 단계별 통신 분리를 적용한 동일 코드에서 0.14와 0.18을 비교합니다. 실측 XY/yaw 또는 벽·코너 overlay로 오정합 증가 여부를 함께 확인합니다.
 
 ```bash
-# r0 fusion 실행 시에만 지정. r1 robot-only 실행에는 영향 없음.
+# 현재 기본 18%: 추가 옵션 없이 기존 실행 명령 사용.
+# 이전 14%와 비교할 때만 아래 config를 지정합니다.
 bash scripts/run_experiment_04_multi_agent_mapping.sh \
   --role all --robot-id 0 --start-driver --domain-id 72 \
-  --alignment-config config/experiments/experiment_04_multi_agent_mapping/alignment_free_conflict_018.yaml
+  --alignment-config config/experiments/experiment_04_multi_agent_mapping/alignment_free_conflict_014.yaml
 ```
+
+### 참고 브랜치와 초기 정합·시각화 비교
+
+- 읽기 전용 비교 대상: `fix/direct-occupancy-icp-no-gates`의 `36ad9ba`. 참고 브랜치를 checkout/수정/push하지 않았습니다.
+- 실제 실행 파일은 CMake 설치 규칙까지 따라 확인했습니다. public `two_live_mapping.launch.py`는 compatibility wrapper, public `record_republisher.py`는 `record_republisher_world.py`입니다.
+
+| 항목 | 참고 브랜치의 기본 direct 모드 | 실험 4 |
+| --- | --- | --- |
+| 입력 | 최신 global occupancy pair | 정지 시점의 local map 누적 창 |
+| 정합 연산 | raster search + trimmed ICP | 같은 raster/ICP 기반, 전체 yaw 검색·다중 후보 검증 |
+| yaw coarse 검색 | 초기 가설 주변 ±12°, 2° 간격(13개) | −180°~180°, 5° 간격(72개) |
+| 확정 조건 | 유한한 결과이면 발행; overlap/RMSE/free conflict/consensus gate 생략 | 품질·대안 후보 차이·기하 조건 + 관측 창 3회 일관성 |
+| 정합 반복 | 새 pair마다 direct 검색(처리 timer 1초); world republisher는 기본적으로 첫 변환을 고정 | 초기 확정 후 검색 중단; session/reset 시 재시도 |
+| pose 시각화 | 별도 record republisher에서 최신 pose를 200ms마다 재발행, source stamp를 현재 시각으로 변경; TF Axes 사용 | 수신 pose callback에서 변환·발행, 원 stamp 유지; aligned odometry Axes 사용 |
+| 주행 중 부하 | 정합 노드와 record republisher가 별도 프로세스; republisher 자체의 지도 부하는 여전히 존재 | 지도 합성·전체 경로 생성·checkpoint가 pose callback과 한 ROS 실행 스레드를 공유 |
+
+- 참고 브랜치가 빠르게 결과를 내도록 구성된 이유는 좁은 탐색 범위와 판정 생략입니다. 완전히 다른 고속 정합 기법을 사용한다고 볼 수 없습니다. 같은 입력·장비에서 계산시간을 재측정한 비교는 아닙니다.
+- 참고 브랜치가 갱신한 timestamp는 최신 센서 관측을 뜻하지 않습니다. 기존 방식의 동작과 현재 방식의 지연을 비교할 때 pose 값 변화, 원 관측 시각, 수신 시각을 함께 확인해야 합니다.
+- 초기 정합 속도와 주행 중 axes 지연은 별개입니다. 실험 4는 확정 후 검색하지 않으므로 초기 검색을 빠르게 바꾸는 것만으로 주행 중 pose 지연이 해결되지는 않습니다.
+- 권장 우선순위: (1) 최신 코드의 단계별 지도 구독 적용 (2) source stamp를 유지하는 별도 pose/TF 중계 프로세스와 latest-only queue (3) 지도 합성·경로 생성·저장 작업의 분리 및 시각화 경로 간소화 (4) global map 전송 주기를 local 추정과 별도로 낮추기 (5) 첫 전체 yaw 검색 후 후속 검증은 이전 후보 주변 우선 검색+대안 검증·전체 검색 fallback.
+- 입력이 약 5~6Hz라면 중계 발행률만 높여도 새 motion 관측이 늘어나지 않습니다. 우선 불필요한 대기·누적 backlog를 줄이는 것이 목적입니다.
 
 | Topic | 내용 |
 | --- | --- |
