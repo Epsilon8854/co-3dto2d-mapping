@@ -35,7 +35,7 @@ def main():
     # Keep full-circle yaw coverage; use smaller point budget/window duration
     # only in this integration probe. Production YAML is tested separately.
     params=(yaml.safe_load(args.production_config.read_text()) if args.production_config else {'/**':{'ros__parameters':dict(
-        startup_accumulation_sec=.5,verification_interval_sec=.4,
+        startup_accumulation_sec=.5,verification_interval_sec=.4,confirmation_windows=3,
         **{'registration.search_max_points':180,'registration.coarse_translation_range_m':1.,'registration.min_correspondences':50})}})
     config=args.output/'probe_config.yaml';config.write_text(yaml.safe_dump(params))
     command=['ros2','launch','co_3dto2d_mapping','experiment_04_multi_agent.launch.py','role:=fusion',
@@ -129,7 +129,9 @@ def main():
         assert saved['frame']=='r0/odom' and np.any(saved['data']==100)
         assert (args.output/'maps/merged_global_map.yaml').is_file()
         cases=list((args.output/'alignment_cases').glob('*/result.json'))
-        assert len(cases)>=3,'did not verify three advancing cumulative snapshots'
+        required=params['/**']['ros__parameters'].get('confirmation_windows',1)
+        accepted=[json.loads(path.read_text()) for path in cases]
+        assert sum(case.get('accepted',False) for case in accepted)>=required,'insufficient successful startup checks'
         # Freeze publishing while resetting the source session: ready must be
         # invalidated; no stale merged map may look like a successful new map.
         sessions[1]='synthetic1_restart'
@@ -143,7 +145,7 @@ def main():
         summary=dict(validation='synthetic ROS integration, not a physical multi-agent accuracy result',
             truth=truth,estimated=found,translation_error_m=math.hypot(found[0]-truth[0],found[1]-truth[1]),
             yaw_error_deg=math.degrees(abs(normalize_angle(found[2]-truth[2]))),
-            confirmation_cases=len(cases),map_save=True,session_reset=True,local_only_extension=True,
+            confirmation_cases=len(cases),required_confirmations=required,map_save=True,session_reset=True,local_only_extension=True,
             reliable_pose_compatible=state['reliable_pose_count']>0,
             pose_latency_median_ms=round(statistics.median(latencies)*1000,3) if latencies else None,
             pose_latency_p95_ms=round(float(np.percentile(latencies,95))*1000,3) if latencies else None,

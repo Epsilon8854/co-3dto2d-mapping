@@ -35,7 +35,7 @@ class MultiAgentMapping(Node):
         super().__init__('multi_agent_mapping')
         defaults=dict(output_directory='outputs/experiment_04_multi_agent_mapping/runs/direct',
             mode='auto_validated_locked',manual_x_m=0.,manual_y_m=0.,manual_yaw_deg=0.,
-            startup_accumulation_sec=3.,verification_interval_sec=1.,confirmation_windows=3,
+            startup_accumulation_sec=3.,verification_interval_sec=1.,confirmation_windows=1,
             consensus_translation_m=.10,consensus_yaw_deg=.5,stationary_translation_m=.15,stationary_yaw_deg=2.,
             input_timeout_sec=5.,submap_radius_m=12.,registration_resolution_m=.10,output_resolution_m=.05,
             max_grid_cells=16000000,merged_period_sec=.5,checkpoint_sec=10.,require_sessions=True,
@@ -47,7 +47,7 @@ class MultiAgentMapping(Node):
         for key in ('startup_accumulation_sec','verification_interval_sec','input_timeout_sec','submap_radius_m',
                     'registration_resolution_m','output_resolution_m','merged_period_sec','checkpoint_sec','path_publish_period_sec'):
             if not math.isfinite(self.p[key]) or self.p[key]<=0:raise ValueError('invalid '+key)
-        if self.p['local_queue_size']<1 or self.p['confirmation_windows']<2:raise ValueError('invalid queue/confirmation count')
+        if self.p['local_queue_size']<1 or self.p['confirmation_windows']<1:raise ValueError('invalid queue/confirmation count')
         rd=RegistrationConfig(max_free_conflict_ratio=.18);reg={}
         for field in fields(rd):
             name='registration.'+field.name;self.declare_parameter(name,getattr(rd,field.name));reg[field.name]=self.get_parameter(name).value

@@ -71,6 +71,21 @@ def test_conflicting_consensus_does_not_lock():
     assert len(c.evidence)==1
 
 
+def test_single_snapshot_confirms_first_finite_transform():
+    c=SnapshotConsensus(1,.1,1.)
+    assert c.add((float('nan'),0.,0.),(10,20)) is None
+    assert not c.evidence
+    assert c.add((.4,-.3,.2),(10,20))==pytest.approx((.4,-.3,.2))
+
+
+def test_experiment04_profiles_use_one_confirmation():
+    root=Path(__file__).resolve().parents[1]/'config/experiments/experiment_04_multi_agent_mapping'
+    for path in root.glob('alignment*.yaml'):
+        params=yaml.safe_load(path.read_text())['/**']['ros__parameters']
+        assert params['confirmation_windows']==1
+        assert params['registration.max_free_conflict_ratio'] in (.14,.18)
+
+
 def test_exact_map_round_trip_and_navigation_origin(tmp_path):
     source=scene();save_map(tmp_path,'merged_global_map',source,{'r0':[(0.,0.),(1.,1.)]})
     with np.load(tmp_path/'merged_global_map_data.npz') as loaded:

@@ -71,7 +71,7 @@ class StatusConsole:
         self.executor.add_node(self.node)
         self.label='fusion' if args.role=='fusion' else f'r{args.robot_id}'
         params=yaml.safe_load(args.alignment_config.read_text())['/**']['ros__parameters']
-        self.required_windows=params.get('confirmation_windows',3)
+        self.required_windows=params.get('confirmation_windows',1)
         self.latest=None;self.received=0.;self.last_print=0.;self.signature=None;self.sessions={}
         self.relay_status={}
         qos=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)

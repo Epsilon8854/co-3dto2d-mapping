@@ -78,7 +78,7 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 ```
 
 - 초기에는 두 센서를 고정하고 공통 벽·코너를 관측합니다. 같은 방향일 필요는 없습니다.
-- 각 agent의 global map이 최소 3초 범위로 갱신된 뒤, 서로 다른 timestamp의 누적 snapshot 3회로 변환 안정성을 확인합니다. 같은 누적 지도의 반복 검증이며 독립 관측 3회를 의미하지 않습니다. 실제 대기시간은 map 생성·검색 시간에 따라 늘어납니다. 대칭 공간·overlap 부족은 거절될 수 있습니다.
+- 각 agent의 global map이 최소 3초 범위로 갱신된 뒤, 기본 `confirmation_windows: 1`로 정합합니다. 전체 yaw 검색과 모든 품질 기준을 통과한 첫 후보를 바로 확정합니다. 거절된 검색은 다시 시도하므로 검색을 딱 한 번만 수행한다는 의미는 아닙니다. 시간에 따른 변환 일관성 재검사는 생략합니다. 실제 대기시간은 map 생성·검색 시간에 따라 늘어납니다. 대칭 공간·overlap 부족은 거절될 수 있습니다.
 - RViz fixed frame은 `r0/odom`입니다. `alignment_ready=true`와 벽·코너 정합을 확인한 뒤 주행을 시작합니다.
 - r0/r1 실행 터미널에 session ID와 `WAIT_INPUT`(입력 대기), `COLLECTING`(정지 관측 수집), `SEARCHING`(정합 검색), `VERIFYING`(반복 검증), `LOCKED`(완료), `STALE`(입력 지연)를 표시합니다. 상태 변경 시 즉시, 유지 중에는 5초마다 출력합니다. 중앙 상태가 5초 이상 끊기면 별도 수신 공백 경고를 출력합니다.
 - 자세한 driver/ICP 로그는 기존 로그 파일에 보관합니다. 터미널은 진단 topic과 session만 구독하며 raw cloud/IMU/map을 추가 구독하지 않습니다.
@@ -116,7 +116,7 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 - `registration.max_free_conflict_ratio`는 정합 후 비교 가능한 샘플에서 occupied ↔ free가 모순되는 비율의 상한입니다. 지도 전체 cell의 불일치율이나 정합 실패 확률이 아닙니다. unknown 영역은 분모에서 제외됩니다.
 - 기본 `alignment.yaml`은 **0.18**입니다. YAML을 생략한 Experiment 4 중앙 노드·startup helper의 기본도 0.18입니다. 공통 single/기존 정합 모듈의 기본값은 변경하지 않습니다. 기존 실행 snapshot과 실행 중인 설정은 바뀌지 않습니다.
 - 이전 0.14 조건은 `alignment_free_conflict_014.yaml`에 보존합니다. `alignment_free_conflict_018.yaml`은 기존 명령 호환을 위해 유지하며 현재 기본과 같은 설정입니다.
-- 0.18은 최근 후보 15.2%·16.5%의 해당 gate를 통과시킬 수 있지만, overlap/RMSE/후보 gap/3회 XY·yaw 일관성 기준을 모두 통과해야 확정됩니다. 올바른 정합임을 보장하지 않습니다.
+- 0.18은 최근 후보 15.2%·16.5%의 해당 gate를 통과시킬 수 있지만, overlap/RMSE/후보 gap/기하 조건을 모두 통과해야 확정됩니다. 기본은 1회 확인이며 올바른 정합임을 보장하지 않습니다. `confirmation_windows`를 3으로 지정하면 이전처럼 누적 snapshot 간 XY·yaw 일관성을 재검사합니다.
 - 단계별 통신 분리를 적용한 동일 코드에서 0.14와 0.18을 비교합니다. 실측 XY/yaw 또는 벽·코너 overlay로 오정합 증가 여부를 함께 확인합니다.
 
 ```bash
@@ -137,7 +137,7 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 | 입력 | 최신 global occupancy pair | 정지 상태에서 누적한 global snapshot |
 | 정합 연산 | raster search + trimmed ICP | 같은 raster/ICP 기반, 전체 yaw 검색·다중 후보 검증 |
 | yaw coarse 검색 | 초기 가설 주변 ±12°, 2° 간격(13개) | −180°~180°, 5° 간격(72개) |
-| 확정 조건 | 유한한 결과이면 발행; overlap/RMSE/free conflict/consensus gate 생략 | 품질·대안 후보 차이·기하 조건 + 관측 창 3회 일관성 |
+| 확정 조건 | 유한한 결과이면 발행; overlap/RMSE/free conflict/consensus gate 생략 | 품질·대안 후보 차이·기하 조건 통과 시 확정; 기본 1회, 반복 검증 선택 가능 |
 | 정합 반복 | 새 pair마다 direct 검색(처리 timer 1초); world republisher는 기본적으로 첫 변환을 고정 | 초기 확정 후 검색 중단; session/reset 시 재시도 |
 | pose 시각화 | 별도 record republisher에서 최신 pose를 200ms마다 재발행, source stamp를 현재 시각으로 변경; TF Axes 사용 | 수신 pose callback에서 변환·발행, 원 stamp 유지; aligned odometry Axes 사용 |
 | 주행 중 부하 | 정합 노드와 record republisher가 별도 프로세스; republisher 자체의 지도 부하는 여전히 존재 | pose/TF 전용 프로세스와 지도/검색/경로/저장 worker 분리 |
@@ -190,9 +190,31 @@ bash scripts/replay_experiment_04_multi_agent_mapping.sh \
 
 ## 6. 검증 범위
 
+- 2026-10-22 후속 변경: 기본 검증 횟수를 3→1로 줄였습니다. 이 설정으로 합성 ROS 입력에서 1회 full-circle 검색 후 확정, local-only 확장, 저장, session 초기화와 Reliable 구독 호환을 확인했습니다. 아래 실제 두 PC의 31초 결과는 변경 전 3회 조건입니다. 이미 실행 중인 노드와 저장된 config snapshot은 자동 변경되지 않습니다.
 - 단위 테스트와 합성 ROS 입력에서 yaw/XY 정합·local-only 지도 확장·map 저장·session reset을 확인했습니다.
 - production config 합성 검증의 검색 시간은 최초 2093 ms / 중간 후보 재사용 33 ms / 최종 2118 ms였습니다. source publish→aligned pose 수신 지연 중앙값 2.87 ms, p95 6.74 ms였습니다. 실제 두 센서의 정합 오차나 무선 지연을 의미하지 않습니다.
 - 2026-10-22 실제 두 MID-360 확인: r1 재시작으로 이전 누적 지도를 초기화한 뒤 약 31초 후 3회 검증을 통과했습니다. 고정 변환은 x=0.156 m, y=-0.329 m, yaw=2.03°였으며, global 구독 OFF / local 구독 ON과 병합 지도 checkpoint 저장을 확인했습니다. 최종 후보의 free conflict는 17.43%로 기본 18% 이내였습니다. 실측 정답에 대한 오차는 아닙니다.
 - 같은 25초 관측에서 r0 aligned pose는 약 6.33 Hz, r1 aligned pose는 약 1.02 Hz였습니다. 동일 stamp를 두 topic에서 받은 관측자의 수신시각 차이 p95는 r0 2.28 ms / r1 1.16 ms였습니다. 원격 raw odometry는 약 6.37 Hz로 보였지만 corrected pose는 드물게 수신됐습니다. 각 구독자의 Best Effort 수신 손실과 스케줄링이 달라 관측 수가 같지는 않습니다. r1 producer 부하와 무선 전달 손실은 r1 PC의 로컬 계측을 통해 구분해야 합니다. 중계 분리만으로 axes 갱신 지연이 완전히 해결됐다고 판단하지 않습니다.
 - 실제 두 센서의 다양한 방향 차이, clock/네트워크 조건, 초기 정합 정확도·주행 중 처리율은 추가 실증에서 확인해야 합니다.
 - 센서 없이 재검사하려면 별도 domain에서 `scripts/validate_experiment_04_startup.py`를 실행할 수 있습니다. 생성 결과는 `outputs/`에만 저장합니다.
+
+## 7. r1 내부 처리율과 r0 수신율 구분
+
+- `monitor_experiment_04_pipeline.py`는 raw odometry → fixed/gravity 보정 odometry → mapper/PHT 보정 odometry의 수신율·공백·header 시각을 기록합니다. raw point cloud는 구독하지 않습니다.
+- `local` 역할은 반드시 해당 센서가 연결된 PC에서 실행합니다. local/global grid는 Python 역직렬화 없이 byte 수·수신율만 관측하고, 작은 `/multi_agent/rN/pipeline_metrics` 진단 메시지를 1 Hz로 발행합니다. 지도 구독 자체의 계측 부하는 존재합니다.
+- `receiver` 역할은 r0에서 실행하며 원격 지도 구독을 추가하지 않습니다. r1 pose·aligned pose와 작은 진단 메시지를 JSON으로 저장합니다. 계측 프로세스는 정해진 시간 후 종료됩니다.
+- 두 PC의 겹치는 관측 구간을 비교합니다. r1 로컬도 느리면 내부 파이프라인을, 로컬은 빠르고 r0 수신만 느리면 전달/QoS/수신 부하를 먼저 점검합니다. 모두 구독자 관측치이므로 실제 publisher 카운터나 순수 무선 지연과 동일하지 않습니다. header-age 비교에는 PC clock sync가 필요합니다.
+
+```bash
+# r0 PC: 먼저 실행
+source /opt/ros/humble/setup.bash
+ROS_DOMAIN_ID=72 ROS_LOCALHOST_ONLY=0 python3 scripts/monitor_experiment_04_pipeline.py \
+  --role receiver --robot-id 1 --duration 60 \
+  --output outputs/experiment_04_multi_agent_mapping/diagnostics/r1_received_on_r0.json
+
+# r1 PC: 최신 코드 git pull 후 별도 터미널에서 실행. mapper 재시작은 불필요.
+source /opt/ros/humble/setup.bash
+ROS_DOMAIN_ID=72 ROS_LOCALHOST_ONLY=0 python3 scripts/monitor_experiment_04_pipeline.py \
+  --role local --robot-id 1 --duration 40 \
+  --output outputs/experiment_04_multi_agent_mapping/diagnostics/r1_local.json
+```
