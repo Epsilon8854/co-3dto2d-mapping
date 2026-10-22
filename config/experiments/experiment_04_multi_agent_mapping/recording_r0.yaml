@@ -1,0 +1,35 @@
+# Central capture on r0: mapper input + fixed-trajectory references + small diagnostics.
+# Do not add all remote maps/debug clouds to the default profile.
+robots: [r0, r1]
+per_robot:
+  mapping_required:
+    - {topic: '/{robot}/mapping/plane_height_filtered', type: sensor_msgs/msg/PointCloud2, depth: 20}
+  optional_raw:
+    - {topic: '/{robot}/livox/lidar', type: sensor_msgs/msg/PointCloud2, depth: 20}
+    - {topic: '/{robot}/livox/imu', type: sensor_msgs/msg/Imu, depth: 400}
+  pose_required:
+    - {topic: '/{robot}/mapping/floor_based_odometry', type: nav_msgs/msg/Odometry}
+    - {topic: '/{robot}/mapping/occupancy_mapper_odometry', type: nav_msgs/msg/Odometry}
+  reference:
+    - {topic: '/{robot}/odom', type: nav_msgs/msg/Odometry}
+    - {topic: '/multi_agent/{robot}/aligned_odometry', type: nav_msgs/msg/Odometry}
+    - {topic: '/multi_agent/{robot}/session', type: diagnostic_msgs/msg/DiagnosticArray, latched: true}
+    - {topic: '/{robot}/mapping/pipeline_diagnostics', type: diagnostic_msgs/msg/DiagnosticArray, latched: true}
+  optional_maps:
+    - {topic: '/{robot}/mapping/local_occupancy', type: nav_msgs/msg/OccupancyGrid}
+    - {topic: '/{robot}/mapping/global_occupancy', type: nav_msgs/msg/OccupancyGrid}
+shared:
+  mapping_required:
+    - {topic: /tf_static, type: tf2_msgs/msg/TFMessage, latched: true, reliable: true, depth: 100}
+  alignment_required:
+    - {topic: /multi_agent/r1_to_r0_transform, type: geometry_msgs/msg/TransformStamped, latched: true}
+    - {topic: /multi_agent/alignment_ready, type: std_msgs/msg/Bool, latched: true}
+  reference:
+    - {topic: /tf, type: tf2_msgs/msg/TFMessage, depth: 400}
+    - {topic: /parameter_events, type: rcl_interfaces/msg/ParameterEvent, depth: 1000}
+    - {topic: /multi_agent/alignment_status, type: diagnostic_msgs/msg/DiagnosticArray, latched: true}
+    - {topic: /multi_agent/pose_relay_status, type: diagnostic_msgs/msg/DiagnosticArray, latched: true}
+    - {topic: /multi_agent/merged_global_occupancy, type: nav_msgs/msg/OccupancyGrid, latched: true}
+sensor_static_frames:
+  - [r0/base_link, r0/livox_frame]
+  - [r1/base_link, r1/livox_frame]

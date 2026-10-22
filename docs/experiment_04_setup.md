@@ -160,6 +160,16 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 
 ## 5. 녹화·재생·저장
 
+- r0 한 곳에서 두 agent를 저장하는 권장 명령과 토픽 목록: [r0 통합 녹화](experiment_04_r0_recording.md).
+- 기본은 mapper 입력 filtered cloud + pose/TF/정합 결과이며, raw LiDAR/IMU는 `--include-raw`로 추가합니다. **기본 filtered-only bag에는 아래 raw replay 스크립트를 그대로 사용할 수 없습니다.**
+
+```bash
+# r0 한 곳에서 실행. 두 agent의 기존 매핑 실행과 별도 터미널 사용.
+bash scripts/record_experiment_04_r0.sh --name hallway_dynamic
+```
+
+- 아래 두 PC 개별 녹화/병합은 기존 raw 재생 경로를 위한 선택 방법입니다. 기존 `--scope central`은 raw 센서 입력을 저장하지 않습니다.
+
 ```bash
 # 각 PC의 별도 터미널: robot-id와 run-id를 해당 PC에 맞게 지정
 bash scripts/record_experiment_04_multi_agent_mapping.sh \
