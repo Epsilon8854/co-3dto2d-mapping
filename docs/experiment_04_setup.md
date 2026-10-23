@@ -12,12 +12,12 @@
 git clone --branch features/jeongeon/optimization --single-branch \
   https://github.com/Epsilon8854/co-3dto2d-mapping.git
 cd co-3dto2d-mapping
-bash scripts/setup_experiment_04_environment.sh
+bash scripts/tools/setup_environment.sh
 ```
 
 - 다른 mapping/Livox workspace를 source하지 않은 새 터미널에서 설치합니다.
-- 이미 의존성이 설치되어 있으면 `bash scripts/setup_experiment_04_environment.sh --skip-install`로 빌드만 수행할 수 있습니다.
-- 양쪽 노트북은 `git rev-parse HEAD`가 같아야 합니다. `config/experiments/experiment_04_multi_agent_mapping/robot0.yaml`, `robot1.yaml`, `alignment.yaml`이 실험 설정입니다.
+- 이미 의존성이 설치되어 있으면 `bash scripts/tools/setup_environment.sh --skip-install`로 빌드만 수행할 수 있습니다.
+- 양쪽 노트북은 `git rev-parse HEAD`가 같아야 합니다. 운영 설정은 `config/single_agent.yaml`, `config/multi_agent.yaml`, `config/sensors/rN.yaml`입니다. `config/experiment/`는 과거 실험 재현용입니다.
 
 ## 2. Livox SDK와 driver
 
@@ -63,21 +63,21 @@ export ROS_LOCALHOST_ONLY=0
 
 ## 4. 실시간 실행
 
-- r0는 `bash scripts/run_experiment_04_r0.sh`, r1은 `bash scripts/run_experiment_04_r1.sh`로 실행합니다. **실시간 robot/all은 driver 자동 시작이 기본**이며 Ctrl+C 시 소유 driver도 함께 종료합니다. 각 PC의 driver config/workspace는 기존 `--driver-config`, `--livox-workspace`로 지정할 수 있습니다.
+- r0는 `bash scripts/run_multi_agent.sh --role coordinator --robot-id 0`, r1은 `bash scripts/run_multi_agent.sh --role agent --robot-id 1`로 실행합니다. **실시간 robot/all은 driver 자동 시작이 기본**이며 Ctrl+C 시 소유 driver도 함께 종료합니다. 각 PC의 driver config/workspace는 기존 `--driver-config`, `--livox-workspace`로 지정할 수 있습니다.
 - `--start-driver`는 기존 명령과 호환됩니다. driver를 별도로 관리하는 경우에만 `--no-start-driver`를 명시합니다. fusion-only·record·replay·status-only에서는 driver를 자동 시작하지 않습니다.
 - r0 중앙 실행 시 **실시간 초기 정합 모니터**도 자동으로 열립니다. 두 검색 입력 occupancy와 후보 overlay·occupied/free 충돌을 검색 완료마다 갱신합니다. 창이 필요 없으면 `--no-alignment-viewer`를 지정합니다. [화면·좌표·수동 연결 방법](experiment_04_alignment_viewer.md)을 참고하십시오.
 
 ```bash
 # r0 PC: r0 driver + single pipeline + fusion + RViz
 cd ~/co-3dto2d-mapping
-bash scripts/run_experiment_04_multi_agent_mapping.sh \
+bash scripts/run_multi_agent.sh \
   --role all --robot-id 0 --start-driver --domain-id 72 \
   --livox-workspace "$HOME/ws_livox" \
   --driver-config /absolute/path/to/r0_MID360_config.json
 
 # r1 PC: r1 driver + single pipeline
 cd ~/co-3dto2d-mapping
-bash scripts/run_experiment_04_multi_agent_mapping.sh \
+bash scripts/run_multi_agent.sh \
   --role robot --robot-id 1 --start-driver --domain-id 72 \
   --livox-workspace "$HOME/ws_livox" \
   --driver-config /absolute/path/to/r1_MID360_config.json
@@ -85,11 +85,11 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 
 - 초기에는 두 센서를 고정하고 공통 벽·코너를 관측합니다. 같은 방향일 필요는 없습니다.
 - 각 agent의 global map이 최소 3초 범위로 갱신된 뒤, 기본 `confirmation_windows: 1`로 정합합니다. 전체 yaw 검색과 모든 품질 기준을 통과한 첫 후보를 바로 확정합니다. 거절된 검색은 다시 시도하므로 검색을 딱 한 번만 수행한다는 의미는 아닙니다. 시간에 따른 변환 일관성 재검사는 생략합니다. 실제 대기시간은 map 생성·검색 시간에 따라 늘어납니다. 대칭 공간·overlap 부족은 거절될 수 있습니다.
-- RViz fixed frame은 **`map`**입니다. 최초 r0 mapping pose의 XY/yaw로 원점을 고정합니다. **양쪽 PC를 함께 업데이트·빌드**해야 하며, mapper 입력·TF·회사 연동 규약은 [고정 world frame 인터페이스](experiment_04_world_frame.md)를 참고합니다. 주기적 정합·기존 관측 재투영은 보류 상태로 초기 정합 정책을 유지합니다.
+- RViz fixed frame은 **`map`**입니다. 최초 r0 mapping pose의 XY/yaw로 원점을 고정합니다. **양쪽 PC를 함께 업데이트·빌드**해야 하며, mapper 입력·TF·회사 연동 규약은 [고정 world frame 인터페이스](experiment_04_world_frame.md)를 참고합니다. 주기적 정합·기존 관측 재투영은 선택 기능이며, 운영 기본값 `central.periodic.enabled: false`는 초기 정합 정책을 유지합니다.
 - r0/r1 실행 터미널에 session ID와 `WAIT_INPUT`(입력 대기), `COLLECTING`(정지 관측 수집), `SEARCHING`(정합 검색), `VERIFYING`(반복 검증), `LOCKED`(완료), `STALE`(입력 지연)를 표시합니다. 상태 변경 시 즉시, 유지 중에는 5초마다 출력합니다. 중앙 상태가 5초 이상 끊기면 별도 수신 공백 경고를 출력합니다.
 - 자세한 driver/ICP 로그는 기존 로그 파일에 보관합니다. 터미널은 진단 topic과 session만 구독하며 raw cloud/IMU/map을 추가 구독하지 않습니다.
 - ICP는 raw cloud, deskew off, queue 1을 유지합니다. rear/height filter는 mapping 입력에 적용합니다. 고정 높이·IMU gravity 및 PHT full_se2/history 5가 각 single pipeline에 적용됩니다.
-- 센서 장착 높이·base 높이·extrinsic은 robot YAML의 `fixed_base_link_height_above_floor_m`, `lidar_mount_height_above_floor_m`, `experiment_sensor_tf_*`에서 변경합니다. 초기값은 높이 각각 0.30 m, extrinsic 0입니다.
+- 센서 장착 높이·base 높이·extrinsic은 `config/single_agent.yaml`의 `fixed_base_link_height_above_floor_m`, `lidar_mount_height_above_floor_m` 및 `config/sensors/rN.yaml`의 `sensor_tf`에서 변경합니다. 초기값은 높이 각각 0.30 m, extrinsic 0입니다.
 
 ```bash
 ros2 topic echo /multi_agent/alignment_ready --qos-durability transient_local
@@ -104,7 +104,7 @@ ros2 service call /multi_agent/reset_alignment std_srvs/srv/Trigger '{}'
 - 기존 mapping을 중단하지 않고 별도 터미널에서 상태만 확인할 수도 있습니다. 이 명령의 Ctrl+C는 표시기만 종료합니다. r1 PC에서는 `--robot-id 1`을 사용합니다.
 
 ```bash
-bash scripts/run_experiment_04_multi_agent_mapping.sh \
+bash scripts/run_multi_agent.sh \
   --role robot --robot-id 0 --domain-id 72 --status-only
 ```
 
@@ -130,9 +130,9 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 ```bash
 # 현재 기본 18%: 추가 옵션 없이 기존 실행 명령 사용.
 # 이전 14%와 비교할 때만 아래 config를 지정합니다.
-bash scripts/run_experiment_04_multi_agent_mapping.sh \
+bash scripts/run_multi_agent.sh \
   --role all --robot-id 0 --start-driver --domain-id 72 \
-  --alignment-config config/experiments/experiment_04_multi_agent_mapping/alignment_free_conflict_014.yaml
+  --alignment-config config/experiment/experiment_04_multi_agent_mapping/alignment_free_conflict_014.yaml
 ```
 
 ### 참고 브랜치와 초기 정합·시각화 비교
@@ -176,19 +176,19 @@ bash scripts/run_experiment_04_multi_agent_mapping.sh \
 
 ```bash
 # r0 한 곳에서 실행. 두 agent의 기존 매핑 실행과 별도 터미널 사용.
-bash scripts/record_experiment_04_r0.sh --name hallway_dynamic
+bash scripts/tools/record_bag.sh --name hallway_dynamic
 ```
 
 - 아래 두 PC 개별 녹화/병합은 기존 raw 재생 경로를 위한 선택 방법입니다. 기존 `--scope central`은 raw 센서 입력을 저장하지 않습니다.
 
 ```bash
 # 각 PC의 별도 터미널: robot-id와 run-id를 해당 PC에 맞게 지정
-bash scripts/record_experiment_04_multi_agent_mapping.sh \
+bash scripts/experiment/04_multi_agent_mapping/record_experiment_04_multi_agent_mapping.sh \
   --scope robot --robot-id 0 --run-id airoom_r0 --domain-id 72
-bash scripts/record_experiment_04_multi_agent_mapping.sh \
+bash scripts/experiment/04_multi_agent_mapping/record_experiment_04_multi_agent_mapping.sh \
   --scope robot --robot-id 1 --run-id airoom_r1 --domain-id 72
 # 중앙 PC의 별도 터미널: map/pose/정합 결과
-bash scripts/record_experiment_04_multi_agent_mapping.sh \
+bash scripts/experiment/04_multi_agent_mapping/record_experiment_04_multi_agent_mapping.sh \
   --scope central --run-id airoom_central --domain-id 72
 ```
 
@@ -196,10 +196,10 @@ bash scripts/record_experiment_04_multi_agent_mapping.sh \
 - bag 병합은 원 기록 시각·header stamp를 유지합니다. 하나의 bag을 복제해 두 센서 실험으로 사용하지 않습니다.
 
 ```bash
-python3 scripts/prepare_experiment_04_combined_bag.py \
+python3 scripts/experiment/04_multi_agent_mapping/prepare_experiment_04_combined_bag.py \
   --bag0 /absolute/path/to/r0/bag --bag1 /absolute/path/to/r1/bag \
   --output outputs/experiment_04_multi_agent_mapping/captures/airoom_combined
-bash scripts/replay_experiment_04_multi_agent_mapping.sh \
+bash scripts/experiment/04_multi_agent_mapping/replay_experiment_04_multi_agent_mapping.sh \
   --bag outputs/experiment_04_multi_agent_mapping/captures/airoom_combined \
   --domain-id 73 --loop
 ```
@@ -217,7 +217,7 @@ bash scripts/replay_experiment_04_multi_agent_mapping.sh \
 - 2026-10-22 실제 두 MID-360 확인: r1 재시작으로 이전 누적 지도를 초기화한 뒤 약 31초 후 3회 검증을 통과했습니다. 고정 변환은 x=0.156 m, y=-0.329 m, yaw=2.03°였으며, global 구독 OFF / local 구독 ON과 병합 지도 checkpoint 저장을 확인했습니다. 최종 후보의 free conflict는 17.43%로 기본 18% 이내였습니다. 실측 정답에 대한 오차는 아닙니다.
 - 같은 25초 관측에서 r0 aligned pose는 약 6.33 Hz, r1 aligned pose는 약 1.02 Hz였습니다. 동일 stamp를 두 topic에서 받은 관측자의 수신시각 차이 p95는 r0 2.28 ms / r1 1.16 ms였습니다. 원격 raw odometry는 약 6.37 Hz로 보였지만 corrected pose는 드물게 수신됐습니다. 각 구독자의 Best Effort 수신 손실과 스케줄링이 달라 관측 수가 같지는 않습니다. r1 producer 부하와 무선 전달 손실은 r1 PC의 로컬 계측을 통해 구분해야 합니다. 중계 분리만으로 axes 갱신 지연이 완전히 해결됐다고 판단하지 않습니다.
 - 실제 두 센서의 다양한 방향 차이, clock/네트워크 조건, 초기 정합 정확도·주행 중 처리율은 추가 실증에서 확인해야 합니다.
-- 센서 없이 재검사하려면 별도 domain에서 `scripts/validate_experiment_04_startup.py`를 실행할 수 있습니다. 생성 결과는 `outputs/`에만 저장합니다.
+- 센서 없이 재검사하려면 별도 domain에서 `scripts/experiment/04_multi_agent_mapping/validate_experiment_04_startup.py`를 실행할 수 있습니다. 생성 결과는 `outputs/`에만 저장합니다.
 
 ## 7. r1 내부 처리율과 r0 수신율 구분
 
@@ -250,8 +250,8 @@ bash scripts/replay_experiment_04_multi_agent_mapping.sh \
 
 ```bash
 # r0 PC: 먼저 실행
-bash scripts/monitor_experiment_04_pipeline.sh --role receiver
+bash scripts/tools/monitor_pipeline.sh --role receiver
 
 # r1 PC: 최신 코드 git pull 후 별도 터미널에서 실행. mapper 재시작은 불필요.
-bash scripts/monitor_experiment_04_pipeline.sh
+bash scripts/tools/monitor_pipeline.sh
 ```

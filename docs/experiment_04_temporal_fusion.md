@@ -25,7 +25,7 @@ flowchart TD
 ## 설정
 
 기존 실행 명령의 `--alignment-config`가 지정하는 YAML에서 관리한다. 기본은
-`config/experiments/experiment_04_multi_agent_mapping/alignment.yaml`이다.
+`config/experiment/experiment_04_multi_agent_mapping/alignment.yaml`이다.
 14%/18% 정합 gate 비교 YAML에도 같은 기본값을 반영했다. 변경 후 중앙을 재시작한다.
 
 ```yaml

@@ -13,7 +13,6 @@
     }
     if (odom->pose.covariance[0] > 1000.0) {
       if (pipeline_metrics_enabled_) ++pipeline_metrics_.skipped_tracking;
-      resetIcpState("odometry tracking failure");
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
           "Skipping occupancy update because odometry reports tracking failure.");
@@ -184,26 +183,13 @@
     for (const Vec3 &point : local_occupied_points) {
       occupancy_patch_points.push_back({point.x, point.y});
     }
-    std::vector<Point2> icp_scan_points = co_3dto2d_mapping::icp::voxelDownsample(
-        occupancy_patch_points, icp_voxel_size_m_,
-        static_cast<std::size_t>(icp_max_source_points_));
-
     const Pose2 raw_planar_pose{raw_t.x, raw_t.y, yawFromQuaternion(raw_q)};
     const Pose2 corrected_planar_pose = [&]() {
       co_3dto2d_mapping::metrics::Scope pose_metrics(
         pipeline_metrics_enabled_ ? &pipeline_metrics_.pose_refinement : nullptr);
-      const auto local_submap_result = refinePoseWithLocalSubmapRegistration(
-        raw_planar_pose, occupancy_patch_points, cloud->header.stamp);
       return enable_local_pht_submap_pose_graph_
-        ? refinePoseWithLocalPhtSubmapPoseGraph(
-            raw_planar_pose, occupancy_patch_points, cloud->header.stamp)
-        : (enable_local_line_pose_graph_
-        ? refinePoseWithLocalLinePoseGraph(raw_planar_pose, occupancy_patch_points, cloud->header.stamp)
-        : (enable_local_pose_graph_
-            ? refinePoseWithLocalPoseGraph(raw_planar_pose, occupancy_patch_points, cloud->header.stamp)
-            : (enable_local_submap_registration_
-            ? local_submap_result.pose
-            : refinePoseWithLocalWindowIcp(raw_planar_pose, icp_scan_points, cloud->header.stamp))));
+        ? refinePoseWithLocalPhtSubmapPoseGraph(raw_planar_pose, occupancy_patch_points, cloud->header.stamp)
+        : raw_planar_pose;
     }();
     const double yaw_correction = co_3dto2d_mapping::icp::normalizeAngle(
         corrected_planar_pose.yaw - raw_planar_pose.yaw);
@@ -296,11 +282,6 @@
           global_hits, global_free_ray_hits, cloud->header.stamp, aligned_t);
       latest_local_grid_ready_ = true;
     }
-    {
-      co_3dto2d_mapping::metrics::Scope visualization_metrics(
-        pipeline_metrics_enabled_ ? &pipeline_metrics_.local_visualization : nullptr);
-      flushLocalLinePoseGraphVisualization(latest_local_grid_, corrected_q, corrected_t);
-    }
 
     {
       co_3dto2d_mapping::metrics::Scope global_metrics(
@@ -311,7 +292,7 @@
     }
 
     RCLCPP_INFO_THROTTLE(
-        get_logger(), *get_clock(), icp_log_period_ms_,
+        get_logger(), *get_clock(), mapping_log_period_ms_,
         "Map projection applied: raw=(%.3f, %.3f, %.2fdeg) "
         "corrected=(%.3f, %.3f, %.2fdeg) hits=%zu free_rays=%zu "
         "local_origin=(%.3f, %.3f) global_frame=%s",

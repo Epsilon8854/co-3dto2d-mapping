@@ -1,334 +1,54 @@
 cmake_minimum_required(VERSION 3.5)
 project(co_3dto2d_mapping)
-
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
-find_package(builtin_interfaces REQUIRED)
-find_package(diagnostic_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(message_filters REQUIRED)
-find_package(nav_msgs REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rclpy REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(tf2 REQUIRED)
-find_package(tf2_ros REQUIRED)
 find_package(OpenCV REQUIRED COMPONENTS core imgproc)
-
+set(ROS_DEPENDENCIES builtin_interfaces diagnostic_msgs geometry_msgs message_filters nav_msgs rclcpp rclpy sensor_msgs std_msgs tf2 tf2_ros)
+foreach(dependency IN LISTS ROS_DEPENDENCIES)
+  find_package(${dependency} REQUIRED)
+endforeach()
 ament_python_install_package(${PROJECT_NAME})
-
 add_executable(occupancy_mapper src/occupancy_mapper.cpp)
 target_compile_features(occupancy_mapper PUBLIC cxx_std_17)
-target_include_directories(occupancy_mapper PRIVATE include)
-target_include_directories(occupancy_mapper PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_include_directories(occupancy_mapper PRIVATE include ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(occupancy_mapper ${OpenCV_LIBS})
-ament_target_dependencies(
-  occupancy_mapper
-  builtin_interfaces
-  diagnostic_msgs
-  geometry_msgs
-  message_filters
-  nav_msgs
-  rclcpp
-  sensor_msgs
-  tf2
-  tf2_ros
-)
-
-install(
-  TARGETS occupancy_mapper
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-install(
-  DIRECTORY include/
-  DESTINATION include
-)
-
-install(
-  DIRECTORY launch config rviz
-  DESTINATION share/${PROJECT_NAME}
-)
-
-# Preserve the original two-live implementation under an internal name, then
-# expose the shared-floor/place-recognition wrapper through the public launch.
-install(
-  FILES launch/two_live_mapping.launch.py
-  DESTINATION share/${PROJECT_NAME}/launch
-  RENAME two_live_mapping_base.launch.py
-)
-install(
-  FILES launch/two_live_plane_height_mapping.launch.py
-  DESTINATION share/${PROJECT_NAME}/launch
-  RENAME two_live_mapping.launch.py
-)
-
-install(
-  PROGRAMS
-    co_3dto2d_mapping/multi_agent_mapping.py
-    co_3dto2d_mapping/multi_agent_pose_relay.py
-    co_3dto2d_mapping/multi_agent_session.py
-    co_3dto2d_mapping/pointcloud_rear_sector_filter.py
-    co_3dto2d_mapping/pointcloud_frame_republisher.py
-    co_3dto2d_mapping/imu_frame_republisher.py
-    co_3dto2d_mapping/inter_robot_place_alignment.py
-    co_3dto2d_mapping/occupancy_png_exporter.py
-    co_3dto2d_mapping/rerun_mapping_node.py
-    scripts/run_livox_robot.sh
-    scripts/livox_driver_guard.py
-    scripts/run_two_mid360_2d_mapping.sh
-    scripts/run_two_live_combined_bag.sh
-    scripts/run_two_mid360_2d_mapping_bag.sh
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-# One installed node now publishes both the shared plane-height cloud and the
-# raw-or-floor-fused mapping odometry. The Python modules remain importable.
-install(
-  PROGRAMS co_3dto2d_mapping/gravity_plane_height_cloud.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME gravity_plane_pose_fusion.py
-)
-
-# Retain the cropped-cloud aligner as a legacy fallback/baseline. Public live
-# and combined-bag paths select inter_robot_place_alignment.py instead.
-install(
-  PROGRAMS co_3dto2d_mapping/cropped_xyz_initial_icp_alignment.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME initial_xy_icp_alignment.py
-)
-
-# Preserve the temporal selector under its implementation name. The public
-# record republisher additionally publishes both robots directly in the common
-# world frame and latches the accepted fixed alignment.
-install(
-  PROGRAMS co_3dto2d_mapping/record_republisher_ground_fused.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-install(
-  PROGRAMS co_3dto2d_mapping/record_republisher_world.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME record_republisher.py
-)
+ament_target_dependencies(occupancy_mapper ${ROS_DEPENDENCIES})
+install(TARGETS occupancy_mapper DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY launch config rviz DESTINATION share/${PROJECT_NAME})
+install(PROGRAMS co_3dto2d_mapping/single_agent/gravity_height_filter.py DESTINATION lib/${PROJECT_NAME} RENAME gravity_height_filter.py)
+install(PROGRAMS co_3dto2d_mapping/single_agent/map_saver.py DESTINATION lib/${PROJECT_NAME} RENAME single_agent_map_saver.py)
+install(PROGRAMS co_3dto2d_mapping/single_agent/imu_frame_republisher.py DESTINATION lib/${PROJECT_NAME} RENAME imu_frame_republisher.py)
+install(PROGRAMS co_3dto2d_mapping/single_agent/rear_sector_filter.py DESTINATION lib/${PROJECT_NAME} RENAME pointcloud_rear_sector_filter.py)
+install(PROGRAMS co_3dto2d_mapping/multi_agent/mapping.py DESTINATION lib/${PROJECT_NAME} RENAME multi_agent_mapping.py)
+install(PROGRAMS co_3dto2d_mapping/multi_agent/pose_relay.py DESTINATION lib/${PROJECT_NAME} RENAME multi_agent_pose_relay.py)
+install(PROGRAMS co_3dto2d_mapping/multi_agent/session.py DESTINATION lib/${PROJECT_NAME} RENAME multi_agent_session.py)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
-
-  ament_add_gtest(
-    test_occupancy_grid_utils
-    test/test_occupancy_grid_utils.cpp
-  )
-  target_compile_features(test_occupancy_grid_utils PUBLIC cxx_std_17)
-  target_include_directories(test_occupancy_grid_utils PRIVATE include)
-
-  ament_add_gtest(
-    test_occupancy_point_filter
-    test/test_occupancy_point_filter.cpp
-  )
-  target_compile_features(test_occupancy_point_filter PUBLIC cxx_std_17)
-  target_include_directories(test_occupancy_point_filter PRIVATE include)
-
-  ament_add_gtest(
-    test_temporal_occupancy
-    test/test_temporal_occupancy.cpp
-  )
-  target_compile_features(test_temporal_occupancy PUBLIC cxx_std_17)
-  target_include_directories(test_temporal_occupancy PRIVATE include)
-
-  ament_add_gtest(
-    test_planar_icp
-    test/test_planar_icp.cpp
-  )
-  target_compile_features(test_planar_icp PUBLIC cxx_std_17)
-  target_include_directories(test_planar_icp PRIVATE include)
-
-  ament_add_gtest(
-    test_local_submap_registration
-    test/test_local_submap_registration.cpp
-  )
-  target_compile_features(test_local_submap_registration PUBLIC cxx_std_17)
-  target_include_directories(test_local_submap_registration PRIVATE include)
-
-  ament_add_gtest(
-    test_local_pose_graph
-    test/test_local_pose_graph.cpp
-  )
+  ament_add_gtest(test_local_pose_graph test/test_local_pose_graph.cpp)
   target_compile_features(test_local_pose_graph PUBLIC cxx_std_17)
-  target_include_directories(test_local_pose_graph PRIVATE include)
-
-  ament_add_gtest(
-    test_occupancy_line_registration
-    test/test_occupancy_line_registration.cpp
-  )
+  target_include_directories(test_local_pose_graph PRIVATE include ${OpenCV_INCLUDE_DIRS})
+  ament_add_gtest(test_occupancy_grid_utils test/test_occupancy_grid_utils.cpp)
+  target_compile_features(test_occupancy_grid_utils PUBLIC cxx_std_17)
+  target_include_directories(test_occupancy_grid_utils PRIVATE include ${OpenCV_INCLUDE_DIRS})
+  ament_add_gtest(test_occupancy_line_registration test/test_occupancy_line_registration.cpp)
   target_compile_features(test_occupancy_line_registration PUBLIC cxx_std_17)
-  target_include_directories(test_occupancy_line_registration PRIVATE include)
-  target_include_directories(test_occupancy_line_registration PRIVATE ${OpenCV_INCLUDE_DIRS})
+  target_include_directories(test_occupancy_line_registration PRIVATE include ${OpenCV_INCLUDE_DIRS})
   target_link_libraries(test_occupancy_line_registration ${OpenCV_LIBS})
-
-  ament_add_pytest_test(
-    test_alignment_utils
-    test/test_alignment_utils.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_planar_transform_utils
-    test/test_planar_transform_utils.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_occupancy_place_recognition
-    test/test_occupancy_place_recognition.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_alignment_consensus
-    test/test_alignment_consensus.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_single_floor_plane
-    test/test_single_floor_plane.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_world_frame_fusion_wiring
-    test/test_world_frame_fusion_wiring.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-
-  ament_add_pytest_test(
-    test_pointcloud_registration
-    test/test_pointcloud_registration.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_heading_constraint
-    test/test_heading_constraint.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_gravity_plane_utils
-    test/test_gravity_plane_utils.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_plane_height_filter
-    test/test_plane_height_filter.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_ground_pose_pipeline
-    test/test_ground_pose_pipeline.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-
-  ament_add_pytest_test(
-    test_two_live_startup_gating
-    test/test_two_live_startup_gating.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-
-  ament_add_pytest_test(
-    test_record_republisher
-    test/test_record_republisher.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_temporal_fusion
-    test/test_temporal_fusion.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_record_republisher_temporal
-    test/test_record_republisher_temporal.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_launch_isolation
-    test/test_launch_isolation.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-
-  ament_add_pytest_test(
-    test_two_live_bag_runner
-    test/test_two_live_bag_runner.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-
-  ament_add_pytest_test(
-    test_two_live_combined_bag_runner
-    test/test_two_live_combined_bag_runner.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-
-  ament_add_pytest_test(
-    test_two_mid360_bag_runner
-    test/test_two_mid360_bag_runner.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-
-  ament_add_pytest_test(
-    test_s3ev1_runner
-    test/test_s3ev1_runner.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-
-  ament_add_pytest_test(
-    test_visualization_utils
-    test/test_visualization_utils.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
-  ament_add_pytest_test(
-    test_workspace_layout
-    test/test_workspace_layout.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-  )
-  ament_add_pytest_test(
-    test_dynamic_filter_config
-    test/test_dynamic_filter_config.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-  ament_add_pytest_test(
-    test_experiment_timing_monitor
-    test/test_experiment_timing_monitor.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
-  ament_add_pytest_test(
-    test_experiment_04_core
-    test/test_experiment_04_core.py
-    PYTHON_EXECUTABLE /usr/bin/python3
-    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
-  )
+  ament_add_gtest(test_occupancy_point_filter test/test_occupancy_point_filter.cpp)
+  target_compile_features(test_occupancy_point_filter PUBLIC cxx_std_17)
+  target_include_directories(test_occupancy_point_filter PRIVATE include ${OpenCV_INCLUDE_DIRS})
+  ament_add_gtest(test_planar_icp test/test_planar_icp.cpp)
+  target_compile_features(test_planar_icp PUBLIC cxx_std_17)
+  target_include_directories(test_planar_icp PRIVATE include ${OpenCV_INCLUDE_DIRS})
+  ament_add_gtest(test_temporal_occupancy test/test_temporal_occupancy.cpp)
+  target_compile_features(test_temporal_occupancy PUBLIC cxx_std_17)
+  target_include_directories(test_temporal_occupancy PRIVATE include ${OpenCV_INCLUDE_DIRS})
+  ament_add_pytest_test(test_experiment_04_core test/test_experiment_04_core.py PYTHON_EXECUTABLE /usr/bin/python3 APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+  ament_add_pytest_test(test_experiment_04_monitor test/test_experiment_04_monitor.py PYTHON_EXECUTABLE /usr/bin/python3 APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+  ament_add_pytest_test(test_occupancy_png test/test_occupancy_png.py PYTHON_EXECUTABLE /usr/bin/python3 APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+  ament_add_pytest_test(test_planar_transform_utils test/test_planar_transform_utils.py PYTHON_EXECUTABLE /usr/bin/python3 APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
 endif()
-
 ament_package()

@@ -1,0 +1,15 @@
+sensor_tf:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+rear_filter:
+  enabled: true
+  angle_deg: 120.0
+  axis: -x
+  min_xy_range_m: 0.0
+livox:
+  workspace: ''
+  config_file: ''

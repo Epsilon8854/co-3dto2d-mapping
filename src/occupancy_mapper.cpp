@@ -7,7 +7,7 @@
 int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<ToyOccupancyMapper>());
+  rclcpp::spin(std::make_shared<OccupancyMapper>());
   rclcpp::shutdown();
   return 0;
 }

@@ -2,17 +2,17 @@
 
 ## 실행
 
-- r0의 `run_experiment_04_r0.sh` 또는 기존 `--role all`/`--role fusion` 실행 시 브라우저 모니터가 자동으로 열린다. r1 robot-only 실행에서는 열지 않는다. replay의 중앙 실행에도 적용한다.
+- r0의 `scripts/run_multi_agent.sh --role coordinator --robot-id 0` 또는 기존 `--role all`/`--role fusion` 실행 시 브라우저 모니터가 자동으로 열린다. r1 robot-only 실행에서는 열지 않는다. replay의 중앙 실행에도 적용한다.
 - 실행기가 모니터 프로세스를 소유하며 Ctrl+C 정상 종료 시 함께 정리한다. 모니터 창을 닫거나 서버가 종료되어도 driver·mapper를 종료시키지 않는다.
 - GUI가 필요 없으면 `--no-alignment-viewer`를 추가한다. `--no-rviz`와 독립된 옵션이다.
 - Python 실행기와 웹 페이지 변경이므로 이 변경만 적용할 때 colcon 재빌드는 필요 없다. 실행 중인 기존 실행기는 자동 실행 기능을 소급 적용하지 않는다.
 
 ```bash
 # r0: driver + mapping + fusion + RViz + 정합 모니터
-bash scripts/run_experiment_04_r0.sh
+bash scripts/run_multi_agent.sh --role coordinator --robot-id 0
 
 # 실행 중인 중앙에 모니터만 붙이기. 실제 fusion 출력 cycle 경로를 지정한다.
-bash scripts/view_experiment_04_startup_alignment.sh \
+bash scripts/tools/view_alignment.sh \
   --run-directory outputs/experiment_04_multi_agent_mapping/runs/<실행명>/cycle_001
 ```
 

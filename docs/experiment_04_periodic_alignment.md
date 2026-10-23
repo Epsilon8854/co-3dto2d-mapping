@@ -36,8 +36,8 @@ global_pose_r1 = A C P_1
 
 ```bash
 cd ~/co-3dto2d-mapping
-bash scripts/run_experiment_04_r0.sh \
-  --alignment-config "$PWD/config/experiments/experiment_04_multi_agent_mapping/alignment_periodic.yaml"
+bash scripts/run_multi_agent.sh --role coordinator --robot-id 0 \
+  --alignment-config "$PWD/config/experiment/experiment_04_multi_agent_mapping/alignment_periodic.yaml"
 ```
 
 - r1 uses its existing launcher. No new remote raw-cloud subscriptions are introduced.
@@ -62,11 +62,11 @@ Use the capture directory containing `bag/`. Always choose a new output director
 
 ```bash
 source /opt/ros/humble/setup.bash
-python3 scripts/analyze_experiment_04_capture.py CAPTURE \
+python3 scripts/experiment/04_multi_agent_mapping/analyze_experiment_04_capture.py CAPTURE \
   --output outputs/experiment_04_multi_agent_mapping/analysis/NAME/baseline --probe
-python3 scripts/analyze_experiment_04_capture.py CAPTURE \
+python3 scripts/experiment/04_multi_agent_mapping/analyze_experiment_04_capture.py CAPTURE \
   --output outputs/experiment_04_multi_agent_mapping/analysis/NAME/periodic --periodic --probe
-python3 scripts/analyze_experiment_04_capture.py CAPTURE \
+python3 scripts/experiment/04_multi_agent_mapping/analyze_experiment_04_capture.py CAPTURE \
   --output outputs/experiment_04_multi_agent_mapping/analysis/NAME/free15 --free-count 15
 ```
 
@@ -80,7 +80,7 @@ python3 scripts/analyze_experiment_04_capture.py CAPTURE \
 
 ```bash
 source /opt/ros/humble/setup.bash
-python3 scripts/replay_experiment_04_mapping_inputs.py CAPTURE \
+python3 scripts/experiment/04_multi_agent_mapping/replay_experiment_04_mapping_inputs.py CAPTURE \
   --output outputs/experiment_04_multi_agent_mapping/analysis/NAME/ros_periodic \
   --periodic --rate 0.5
 ```
@@ -94,7 +94,7 @@ python3 scripts/replay_experiment_04_mapping_inputs.py CAPTURE \
 ## Dynamic evidence diagnostics
 
 ```bash
-python3 scripts/diagnose_experiment_04_dynamic.py CAPTURE --baseline BASELINE_OUTPUT
+python3 scripts/experiment/04_multi_agent_mapping/diagnose_experiment_04_dynamic.py CAPTURE --baseline BASELINE_OUTPUT
 ```
 
 - `retained_cell_diagnostics.npz` stores per-cell free/occupied observations, range-blocked evidence, streak resets, maximum and final free streak for cells still occupied in the baseline.

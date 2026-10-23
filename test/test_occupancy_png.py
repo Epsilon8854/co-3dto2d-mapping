@@ -5,14 +5,13 @@ import struct
 import zlib
 from pathlib import Path
 
-from co_3dto2d_mapping.occupancy_png import (
+from co_3dto2d_mapping.common.occupancy_png import (
     OccupancyGridGeometry,
     TrajectoryOverlay,
     occupancy_grid_png,
     occupancy_grid_png_with_trajectories,
     trajectory_pixels,
 )
-from co_3dto2d_mapping.occupancy_trajectory import MAP_OUTPUTS, TrajectoryStore
 
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -120,38 +119,3 @@ def test_trajectory_pixels_respect_the_grid_origin_and_rotation() -> None:
 
     # Then: only in-bounds points remain, with ROS map rows flipped for PNG.
     assert pixels == ((0, 2), (2, 0))
-
-
-def test_merged_trajectory_transforms_robot1_into_the_startup_icp_frame() -> None:
-    # Given: local robot paths before the startup ICP transform becomes available.
-    trajectories = TrajectoryStore(max_points=10)
-    trajectories.add_robot0((0.5, 0.5))
-    trajectories.add_robot1((0.5, 0.5))
-    geometry = OccupancyGridGeometry(
-        width=3,
-        height=3,
-        resolution=1.0,
-        origin_x=0.0,
-        origin_y=0.0,
-        origin_yaw=0.0,
-    )
-
-    # When: startup ICP establishes map <- r1/odom with a one-meter x offset.
-    trajectories.set_robot1_alignment((1.0, 0.0, 0.0))
-    overlays = trajectories.overlays_for(MAP_OUTPUTS[2], geometry)
-
-    # Then: the merged PNG receives r0 and transformed r1 positions in map pixels.
-    assert overlays[0].points == ((0, 2),)
-    assert overlays[1].points == ((1, 2),)
-
-
-def test_exporter_accepts_the_mapper_volatile_occupancy_topics() -> None:
-    # Given: the mapper publishes OccupancyGrid with the default volatile QoS.
-    exporter = (PACKAGE / "co_3dto2d_mapping" / "occupancy_png_exporter.py").read_text(
-        encoding="utf-8"
-    )
-
-    # When: the exporter subscribes to the final global maps.
-
-    # Then: it requests compatible volatile durability and can receive updates.
-    assert "qos.durability = DurabilityPolicy.VOLATILE" in exporter

@@ -48,7 +48,7 @@
 ```bash
 # r0의 별도 터미널. ROS 환경은 자동 source한다. 빌드는 필요 없다.
 cd ~/co-3dto2d-mapping
-bash scripts/record_experiment_04_r0.sh --name hallway_dynamic
+bash scripts/tools/record_bag.sh --name hallway_dynamic
 ```
 
 - 기본 ROS domain: 72. 다른 domain은 `--domain-id`로 지정한다.
@@ -69,13 +69,13 @@ bash scripts/record_experiment_04_r0.sh --name hallway_dynamic
 
 ```bash
 # ICP부터 다시 계산하거나 height/rear 필터를 바꿀 계획이 있을 때
-bash scripts/record_experiment_04_r0.sh --name hallway_raw --include-raw
+bash scripts/tools/record_bag.sh --name hallway_raw --include-raw
 
 # 각 agent의 당시 local/global grid까지 별도로 비교할 때
-bash scripts/record_experiment_04_r0.sh --name hallway_maps --with-agent-maps
+bash scripts/tools/record_bag.sh --name hallway_maps --with-agent-maps
 
 # 토픽 목록만 확인. 녹화·ROS discovery를 시작하지 않음
-bash scripts/record_experiment_04_r0.sh --dry-run
+bash scripts/tools/record_bag.sh --dry-run
 ```
 
 - `--include-raw`: `/rN/livox/lidar`, `/rN/livox/imu` 4개 추가. 기본 24개 → 28개.

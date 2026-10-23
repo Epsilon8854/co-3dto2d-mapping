@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-spec=importlib.util.spec_from_file_location('exp04_monitor',Path(__file__).resolve().parents[1]/'scripts/monitor_experiment_04_pipeline.py')
+spec=importlib.util.spec_from_file_location('exp04_monitor',Path(__file__).resolve().parents[1]/'scripts/tools/monitor_pipeline.py')
 monitor=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(monitor)
 

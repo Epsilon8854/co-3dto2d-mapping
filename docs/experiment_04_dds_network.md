@@ -9,8 +9,8 @@
 
 ## 적용 정책
 
-- `config/experiments/experiment_04_multi_agent_mapping/dds_transport.yaml`을 공통 정책으로 사용한다.
-- `scripts/experiment_04_dds.py`가 ROS 초기화 전에 현재 PC의 IPv4 기본 경로 NIC를 선택한다. r0의 현재 선택은 Wi-Fi `wlp128s20f3/192.168.50.143`이다. IP를 Git config에 하드코딩하지 않는다.
+- `config/experiment/experiment_04_multi_agent_mapping/dds_transport.yaml`을 공통 정책으로 사용한다.
+- `scripts/lib/dds.py`가 ROS 초기화 전에 현재 PC의 IPv4 기본 경로 NIC를 선택한다. r0의 현재 선택은 Wi-Fi `wlp128s20f3/192.168.50.143`이다. IP를 Git config에 하드코딩하지 않는다.
 - Fast DDS UDP whitelist에는 선택한 IP만 넣는다. `useBuiltinTransports=false`로 무제한 기본 UDP transport의 추가 생성을 막고, **명시적 SHM transport는 유지**한다. Livox SDK의 센서 Ethernet 설정은 바꾸지 않는다.
 - `RMW_FASTRTPS_PUBLICATION_MODE=ASYNCHRONOUS`를 기본으로 설정해 애플리케이션 발행과 네트워크 송신을 분리한다. 기존 명시적 publication mode는 유지한다. 비동기화만으로 모든 backpressure나 손실을 없애지는 못한다.
 - UDP `non_blocking_send=false`를 유지한다. 포화 시 패킷을 조용히 버리는 모드로 문제를 숨기지 않는다. ROS Reliable/Best Effort 정책도 변경하지 않는다.
@@ -41,11 +41,11 @@ export EXPERIMENT_04_DDS_INTERFACE=wlp128s20f3
 
 ```bash
 # NIC/IP·생성 XML·요청 버퍼 확인. ROS 노드를 시작하지 않는다.
-python3 scripts/experiment_04_dds.py --describe
+python3 scripts/lib/dds.py --describe
 
 # 같은 DDS 설정으로 CLI 또는 GUI 실행.
-bash scripts/with_experiment_04_dds.sh ros2 topic list --no-daemon
-bash scripts/with_experiment_04_dds.sh rqt
+bash scripts/tools/with_dds.sh ros2 topic list --no-daemon
+bash scripts/tools/with_dds.sh rqt
 ```
 
 - rqt에서 상대 agent의 raw cloud를 체크하면 원격 전송이 다시 시작된다. whitelist는 토픽 접근 제어가 아니다. 평소에는 pose·진단·병합 지도만 구독한다.

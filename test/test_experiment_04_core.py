@@ -6,12 +6,12 @@ import numpy as np
 import pytest
 import yaml
 
-from co_3dto2d_mapping.multi_agent_core import Snapshot,compose_grids,StationaryConsensus,save_map,transform_xy
-from co_3dto2d_mapping.multi_agent_core import SnapshotConsensus,OccupancyAccumulator,IncrementalFusion
-from co_3dto2d_mapping.occupancy_submap import GridGeometry,extract_local_patch
-from co_3dto2d_mapping.multi_agent_alignment import register_startup,StartupConfig
-from co_3dto2d_mapping.se2_map_registration import RegistrationConfig
-from co_3dto2d_mapping.planar_transform_utils import invert_planar,normalize_angle
+from co_3dto2d_mapping.multi_agent.core import Snapshot,compose_grids,StationaryConsensus,save_map,transform_xy
+from co_3dto2d_mapping.multi_agent.core import SnapshotConsensus,OccupancyAccumulator,IncrementalFusion
+from co_3dto2d_mapping.common.occupancy_submap import GridGeometry,extract_local_patch
+from co_3dto2d_mapping.multi_agent.alignment import register_startup,StartupConfig
+from co_3dto2d_mapping.common.se2_map_registration import RegistrationConfig
+from co_3dto2d_mapping.common.planar_transform_utils import invert_planar,normalize_angle
 
 
 def scene(symmetric=False):
@@ -79,7 +79,7 @@ def test_single_snapshot_confirms_first_finite_transform():
 
 
 def test_experiment04_profiles_use_one_confirmation():
-    root=Path(__file__).resolve().parents[1]/'config/experiments/experiment_04_multi_agent_mapping'
+    root=Path(__file__).resolve().parents[1]/'config/experiment/experiment_04_multi_agent_mapping'
     for path in root.glob('alignment*.yaml'):
         params=yaml.safe_load(path.read_text())['/**']['ros__parameters']
         assert params['confirmation_windows']==1

@@ -103,10 +103,10 @@ flowchart TD
 | `include/co_3dto2d_mapping/occupancy_mapper/local_pht_submap_pose_graph.inc` | PHT 처리 범위와 계측 scope |
 | `include/co_3dto2d_mapping/mapper_pipeline_metrics.hpp` | 고정 메모리 표본·입력 카운터·RAII wall timer |
 | `include/co_3dto2d_mapping/occupancy_mapper/pipeline_metrics.inc` | 내부 카운터/시간/발행률/구독자 수 진단 |
-| `config/experiments/experiment_04_multi_agent_mapping/robot1.yaml` | metrics ON / 1000ms, 지도 200ms, sync queue 100 |
-| `co_3dto2d_mapping/multi_agent_mapping.py` / `set_subscriptions()` | r0는 lock 후 local 구독; 현재 local 구독의 QoS depth 10 / Reliable |
-| `co_3dto2d_mapping/multi_agent_pose_relay.py` | r0 pose/TF 별도 프로세스, 원 stamp 보존 |
-| `scripts/monitor_experiment_04_pipeline.sh` / `.py` | source 진단과 구독자 관측을 함께 JSON으로 저장 |
+| `config/experiment/experiment_04_multi_agent_mapping/robot1.yaml` | metrics ON / 1000ms, 지도 200ms, sync queue 100 |
+| `co_3dto2d_mapping/multi_agent/mapping.py` / `set_subscriptions()` | r0는 lock 후 local 구독; 현재 local 구독의 QoS depth 10 / Reliable |
+| `co_3dto2d_mapping/multi_agent/pose_relay.py` | r0 pose/TF 별도 프로세스, 원 stamp 보존 |
+| `scripts/tools/monitor_pipeline.sh` / `.py` | source 진단과 구독자 관측을 함께 JSON으로 저장 |
 | `docs/experiment_04_setup.md` §7 | 지표 정의와 실행 명령 |
 
 - 내부 입력 count는 **기존 mapper 구독까지 전달된 메시지 수**다. sensor 발행 총수나 정확한 DDS drop 수는 아니다.
@@ -170,12 +170,12 @@ source /opt/ros/humble/setup.bash
 colcon build --packages-select co_3dto2d_mapping --symlink-install
 
 # 기존 명령으로 r1 매핑을 시작한 뒤 별도 터미널에서 수행
-bash scripts/monitor_experiment_04_pipeline.sh --duration 60
+bash scripts/tools/monitor_pipeline.sh --duration 60
 ```
 
 ```bash
 # r0의 별도 터미널: r1 계측과 겹치도록 실행
-bash scripts/monitor_experiment_04_pipeline.sh --role receiver --duration 90
+bash scripts/tools/monitor_pipeline.sh --role receiver --duration 90
 ```
 
 - `outputs/experiment_04_multi_agent_mapping/diagnostics/실행시각/`에 JSON을 저장한다. 내부 진단 토픽은 `/r1/mapping/pipeline_diagnostics`다.

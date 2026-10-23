@@ -126,7 +126,6 @@
       global_frame_id_ = msg->header.frame_id;
       global_frame_from_odom_ = true;
     }
-    resetIcpState("initial alignment received");
     RCLCPP_INFO_ONCE(
         get_logger(),
         "Received initial XY alignment on %s: x=%.3f y=%.3f yaw=%.3fdeg",

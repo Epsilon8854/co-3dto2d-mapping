@@ -10,7 +10,7 @@
     pipeline_metrics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "mapping/pipeline_diagnostics", rclcpp::QoS(1).reliable().transient_local());
     pipeline_metrics_timer_ = create_wall_timer(
-      std::chrono::milliseconds(period), std::bind(&ToyOccupancyMapper::publishPipelineMetrics, this));
+      std::chrono::milliseconds(period), std::bind(&OccupancyMapper::publishPipelineMetrics, this));
     RCLCPP_INFO(get_logger(), "Mapper pipeline diagnostics enabled: %s (%d ms requested)",
       pipeline_metrics_pub_->get_topic_name(), period);
   }
