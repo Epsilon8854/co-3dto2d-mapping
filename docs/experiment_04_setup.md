@@ -65,6 +65,7 @@ export ROS_LOCALHOST_ONLY=0
 
 - r0는 `bash scripts/run_experiment_04_r0.sh`, r1은 `bash scripts/run_experiment_04_r1.sh`로 실행합니다. **실시간 robot/all은 driver 자동 시작이 기본**이며 Ctrl+C 시 소유 driver도 함께 종료합니다. 각 PC의 driver config/workspace는 기존 `--driver-config`, `--livox-workspace`로 지정할 수 있습니다.
 - `--start-driver`는 기존 명령과 호환됩니다. driver를 별도로 관리하는 경우에만 `--no-start-driver`를 명시합니다. fusion-only·record·replay·status-only에서는 driver를 자동 시작하지 않습니다.
+- r0 중앙 실행 시 **실시간 초기 정합 모니터**도 자동으로 열립니다. 두 검색 입력 occupancy와 후보 overlay·occupied/free 충돌을 검색 완료마다 갱신합니다. 창이 필요 없으면 `--no-alignment-viewer`를 지정합니다. [화면·좌표·수동 연결 방법](experiment_04_alignment_viewer.md)을 참고하십시오.
 
 ```bash
 # r0 PC: r0 driver + single pipeline + fusion + RViz

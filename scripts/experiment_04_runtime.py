@@ -47,6 +47,7 @@ def args_parser():
     p.add_argument('--domain-id',type=int,default=int(os.environ.get('ROS_DOMAIN_ID','72')))
     p.add_argument('--run-id',default=datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f'))
     p.add_argument('--no-rviz',action='store_true')
+    p.add_argument('--no-alignment-viewer',action='store_true',help='do not start the local live startup-alignment monitor')
     p.add_argument('--status-only',action='store_true',help='show live session/alignment status without starting or stopping mapping nodes')
     p.add_argument('--dry-run',action='store_true',help='show resolved roles/configs only')
     return p
@@ -200,7 +201,7 @@ def cleanup():
     for proc,kind in children:
         if kind=='fusion':stop_process(proc,timeout=90)
     for proc,kind in children:
-        if kind=='rviz':stop_process(proc)
+        if kind in ('rviz','alignment-viewer'):stop_process(proc)
     children.clear()
 
 
@@ -318,7 +319,7 @@ def main():
     (run/'working_tree.patch').write_bytes(subprocess.check_output(['git','diff','--binary'],cwd=ROOT))
     # Preserve changed and untracked relevant source too; diff alone omits new modules.
     source_hashes={}
-    for folder in ('co_3dto2d_mapping','launch','config','scripts','include','src','rviz'):
+    for folder in ('co_3dto2d_mapping','launch','config','scripts','include','src','rviz','web'):
         for path in (ROOT/folder).rglob('*'):
             if not path.is_file() or '__pycache__' in path.parts:continue
             data=path.read_bytes();relative=path.relative_to(ROOT)
@@ -347,6 +348,10 @@ def main():
             if args.action=='replay' or args.role in ('fusion','all'):
                 start(launch('fusion',0,configs['robot0.yaml'],configs['alignment.yaml'],configs['lidar_odometry.yaml'],output,
                     sim=args.action=='replay'),output/'fusion.log','fusion')
+                if not args.no_alignment_viewer:
+                    start(['python3',ROOT/'scripts/experiment_04_alignment_viewer.py','--run-directory',output,
+                           '--owner-pid',str(os.getpid())],
+                          output/'alignment_viewer.log','alignment-viewer')
             if not args.no_rviz and (args.action=='replay' or args.role in ('fusion','all')):
                 start(['rviz2','-d',ROOT/'rviz/experiment_04_multi_agent_mapping.rviz','--ros-args',
                        '-p','use_sim_time:='+str(args.action=='replay').lower()],output/'rviz.log','rviz')
@@ -374,7 +379,7 @@ def main():
                 while not stop_requested:
                     monitor.poll()
                     for proc,kind in children:
-                        if kind!='rviz' and proc.poll() is not None:raise RuntimeError(kind+' exited; see logs')
+                        if kind not in ('rviz','alignment-viewer') and proc.poll() is not None:raise RuntimeError(kind+' exited; see logs')
                     time.sleep(.2)
     finally:
         # Console teardown must not skip owned process cleanup if ROS shutdown
