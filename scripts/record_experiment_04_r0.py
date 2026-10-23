@@ -15,6 +15,7 @@ import sqlite3
 import subprocess
 import time
 import yaml
+from experiment_04_dds import prepare_environment, snapshot_environment
 
 ROOT=Path(__file__).resolve().parents[1]
 CONFIG=ROOT/'config/experiments/experiment_04_multi_agent_mapping'
@@ -165,6 +166,7 @@ def main():
     if args.dry_run:
         print(yaml.safe_dump(dict(domain_id=args.domain_id,topics=items),sort_keys=False));return
     os.environ['ROS_DOMAIN_ID']=str(args.domain_id);os.environ['ROS_LOCALHOST_ONLY']='0'
+    dds_transport=prepare_environment()
     import rclpy
     from rclpy.signals import SignalHandlerOptions
     from rclpy.qos import QoSProfile,ReliabilityPolicy,DurabilityPolicy
@@ -177,6 +179,7 @@ def main():
         args.name+'_'+datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f'))
     capture.mkdir(parents=True,exist_ok=False);(capture/'configs').mkdir();(capture/'logs').mkdir()
     shutil.copy2(args.profile,capture/'configs/recording_profile.yaml')
+    snapshot_environment(capture/'configs',dds_transport)
     for source in sorted(CONFIG.glob('*.yaml'))+[ROOT/'config/lidar_odometry.yaml']:
         shutil.copy2(source,capture/'configs'/('repository_'+source.name))
     qos_path=capture/'configs/record_qos.yaml'
@@ -187,6 +190,7 @@ def main():
         purpose='multi-agent temporal dynamic-object clearing and merged-map evaluation',
         started_at=now(),host=platform.node(),domain_id=args.domain_id,branch=git('branch','--show-current'),commit=git('rev-parse','HEAD'),
         ros_distribution=os.environ.get('ROS_DISTRO',''),rmw_implementation=get_rmw_implementation_identifier(),
+        dds_transport=dds_transport,
         arguments={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
         topics=items,raw_inputs_included=args.include_raw,bag_uri='bag',profile_sha256=hashlib.sha256(args.profile.read_bytes()).hexdigest(),
         timestamp_policy='recording receipt time on r0; original message headers preserved; live /clock is not recorded',

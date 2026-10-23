@@ -13,6 +13,7 @@ from pathlib import Path
 import socket
 import time
 import uuid
+from experiment_04_dds import prepare_environment
 
 
 class StreamStats:
@@ -50,6 +51,7 @@ def main():
     p.add_argument('--output',type=Path,required=True)
     args=p.parse_args()
     if not math.isfinite(args.duration) or args.duration<=0:p.error('duration must be positive')
+    dds_transport=prepare_environment()
     import rclpy
     from diagnostic_msgs.msg import DiagnosticArray,DiagnosticStatus,KeyValue
     from nav_msgs.msg import Odometry,OccupancyGrid
@@ -98,6 +100,7 @@ def main():
     def report():
         now=time.monotonic()
         result=dict(role=args.role,robot_id=rid,hostname=socket.gethostname(),monitor_id=identity,
+            dds_transport=dds_transport,
             elapsed_sec=now-start,report_ros_stamp_ns=node.get_clock().now().nanoseconds,
             topics={topic:value.summary(now) for topic,value in stats.items()},
             mapper_diagnostics=mapper_latest,

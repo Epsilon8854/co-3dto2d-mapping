@@ -17,6 +17,7 @@ import time
 
 import yaml
 from livox_driver_guard import conflicting_drivers
+from experiment_04_dds import prepare_environment, snapshot_environment
 
 ROOT=Path(__file__).resolve().parents[1]
 CONFIG=ROOT/'config/experiments/experiment_04_multi_agent_mapping'
@@ -261,6 +262,7 @@ def main():
         print(json.dumps(dict(action=args.action,role=args.role,robot_id=args.robot_id,domain=args.domain_id,
             alignment_config=str(args.alignment_config),topics=topics(args) if args.action=='record' else []),indent=2));return
     os.environ['ROS_DOMAIN_ID']=str(args.domain_id);os.environ.setdefault('ROS_LOCALHOST_ONLY','0')
+    dds_transport=prepare_environment()
     if args.status_only:
         for sig in (signal.SIGINT,signal.SIGTERM):signal.signal(sig,shutdown_signal)
         monitor=StatusConsole(args)
@@ -291,6 +293,7 @@ def main():
     meta=dict(action=args.action,robot_id=args.robot_id,domain_id=args.domain_id,
         host=platform.node(),ros_distribution=os.environ.get('ROS_DISTRO',''),
         rmw_implementation=os.environ.get('RMW_IMPLEMENTATION','default'),
+        dds_transport=dds_transport,
         recorded_topics=topics(args) if args.action=='record' else [],
         timestamp_policy='original source headers preserved; replay uses one clock',
         started_at=datetime.now(ZoneInfo('Asia/Seoul')).isoformat(),arguments={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
@@ -298,6 +301,7 @@ def main():
         branch=subprocess.check_output(['git','branch','--show-current'],cwd=ROOT,text=True).strip(),
         commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip())
     (run/'run.yaml').write_text(yaml.safe_dump(meta,sort_keys=False))
+    snapshot_environment(run/'configs',dds_transport)
     driver_config=args.driver_config or (Path(os.environ['LIVOX_CONFIG']) if os.environ.get('LIVOX_CONFIG') else None)
     if driver_config is not None and driver_config.is_file():
         (run/'configs/driver_config.json').write_bytes(driver_config.read_bytes())

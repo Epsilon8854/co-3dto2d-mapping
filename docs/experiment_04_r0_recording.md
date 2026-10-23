@@ -6,6 +6,7 @@
 - 같은 bag의 **동일한 관측·경로·agent 변환**으로 off/on을 비교해 pose/정합 차이와 동적 필터 효과를 분리한다. 이후 live 시스템의 갱신율·지연도 확인한다.
 - 현재 높이·후방 필터를 유지한다면 **mapper 입력 filtered cloud + odometry + TF**로 충분하다. raw LiDAR/IMU는 기본에서 제외한다.
 - 기본 토픽은 **24개**다. `recording_r0.yaml`에서 이름·필수 여부·기록 QoS를 관리한다. 고정 world 도입 이후 `map_anchor`, `map_status`를 추가했다.
+- 녹화기도 실험4 공통 DDS NIC/SHM 정책을 적용하고 `configs/dds_profile.xml`과 `capture.yaml`의 `dds_transport`에 실제 설정을 저장한다. [네트워크 정책](experiment_04_dds_network.md)을 참고한다.
 - r1에서 보완한 코드가 이 저장소와 다를 경우 실제 토픽명을 확인한다. 이 문서의 이름은 현재 checkout의 launch·config에서 확인한 공개 토픽 기준이다.
 
 | 기본 저장 토픽 | 용도 |

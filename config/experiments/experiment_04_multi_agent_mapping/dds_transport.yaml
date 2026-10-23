@@ -1,0 +1,5 @@
+# Per-PC addresses are detected at launch; never commit one laptop's IP here.
+interface: auto
+udp_socket_buffer_bytes: 4194304
+shared_memory_segment_bytes: 16777216
+publication_mode: ASYNCHRONOUS

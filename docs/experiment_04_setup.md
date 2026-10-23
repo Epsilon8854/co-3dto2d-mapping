@@ -48,6 +48,7 @@ bash build.sh humble
 
 ## 3. 두 PC 네트워크·시간
 
+- 실험4 실행·녹화·monitor는 이제 기본 경로 NIC 하나로 DDS를 제한하고 로컬 SHM을 유지합니다. 기본 publication은 비동기이며 실제 XML·NIC·버퍼를 metadata에 저장합니다. **양쪽 ROS 프로세스 재시작이 필요**합니다. NIC 수동 지정·CLI wrapper·기존 XML 충돌 처리는 [DDS 네트워크 설정](experiment_04_dds_network.md)을 참고하십시오.
 - 두 PC가 DDS 통신 가능한 같은 네트워크에 있어야 합니다. 동일한 `ROS_DOMAIN_ID=72`, `ROS_LOCALHOST_ONLY=0`을 사용합니다.
 - 센서 Ethernet IP/라우팅, 방화벽·multicast 허용은 각 PC 네트워크에 맞게 설정합니다. 스크립트는 OS 네트워크 설정을 변경하지 않습니다.
 - 취득 전 NTP/chrony 등으로 PC clock을 맞추고, 실제 LiDAR/IMU header stamp가 같은 시간 기준인지 확인합니다. clock 오프셋이 있으면 원 bag의 기록 시각을 임의 이동해 해결하지 않습니다.
