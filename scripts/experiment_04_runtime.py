@@ -31,7 +31,11 @@ def args_parser():
     p.add_argument('--role',choices=['robot','fusion','all'],default='robot',help='all = this robot + fusion')
     p.add_argument('--robot-id',type=int,choices=[0,1],default=0)
     p.add_argument('--scope',choices=['robot','central','combined'],default='robot',help='recording scope')
-    p.add_argument('--start-driver',action='store_true',help='start one local Livox driver (live only)')
+    driver=p.add_mutually_exclusive_group()
+    driver.add_argument('--start-driver',dest='start_driver',action='store_true',default=None,
+                        help='start one owned local Livox driver (default for live robot/all roles)')
+    driver.add_argument('--no-start-driver',dest='start_driver',action='store_false',default=None,
+                        help='use an independently managed driver; this launcher will not stop it')
     p.add_argument('--driver-config',type=Path)
     p.add_argument('--livox-workspace',type=Path,help='built Livox workspace; otherwise auto-detect')
     p.add_argument('--robot-config',type=Path)
@@ -253,6 +257,8 @@ def topics(args):
 
 def main():
     args=args_parser().parse_args()
+    if args.start_driver is None:
+        args.start_driver=args.action=='run' and args.role in ('robot','all') and not args.status_only
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*',args.run_id):raise ValueError('invalid run id')
     if not 0<=args.domain_id<=232:raise ValueError('invalid ROS_DOMAIN_ID')
     if not args.rate>0:raise ValueError('rate must be positive')
@@ -260,7 +266,8 @@ def main():
     if args.action=='replay' and (args.bag is None or not (args.bag/'metadata.yaml').is_file()):raise ValueError('--bag must contain metadata.yaml')
     if args.dry_run:
         print(json.dumps(dict(action=args.action,role=args.role,robot_id=args.robot_id,domain=args.domain_id,
-            alignment_config=str(args.alignment_config),topics=topics(args) if args.action=='record' else []),indent=2));return
+            start_driver=args.start_driver,alignment_config=str(args.alignment_config),
+            topics=topics(args) if args.action=='record' else []),indent=2));return
     os.environ['ROS_DOMAIN_ID']=str(args.domain_id);os.environ.setdefault('ROS_LOCALHOST_ONLY','0')
     dds_transport=prepare_environment()
     if args.status_only:
@@ -280,6 +287,9 @@ def main():
         elif subprocess.run(['ros2','pkg','prefix','livox_ros_driver2'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
             raise ValueError('Livox workspace not found; pass --livox-workspace or set LIVOX_SETUP')
     console('START',f'Experiment 4 {args.action} role={args.role} robot=r{args.robot_id} domain={args.domain_id}; 시작 전 topic 확인')
+    if args.action=='run' and args.role in ('robot','all'):
+        console('DRIVER','managed: 자동 시작·종료 / owned by this launcher' if args.start_driver else
+                'external: 별도 driver 필요; 이 실행기는 외부 driver를 시작·종료하지 않음')
     graph_preflight(args)
     category='captures' if args.action=='record' else 'runs'
     run=ROOT/'outputs/experiment_04_multi_agent_mapping'/category/args.run_id
