@@ -1,6 +1,6 @@
 # 정리된 워크스페이스와 실행 경로
 
-- README 개편은 논의 후 진행합니다. 현재 운영 명령은 이 문서를 기준으로 합니다.
+- 운영 개요·workflow·토픽은 [README](../README.md), 실행 옵션과 실험 재현 경로는 이 문서를 참고합니다.
 - `co_3dto2d_mapping/`: 설치되는 ROS Python 패키지. `common/` 공통 수학·저장, `single_agent/` 중력·높이 필터, `multi_agent/` 정합·지도 병합·pose 중계.
 - `include/`, `src/`: 현재 occupancy mapper와 PHT 보정 C++ 구현.
 - `launch/`: single/multi 공용 pipeline. `internal/`은 raw RTAB-Map ICP 설정 연결.
