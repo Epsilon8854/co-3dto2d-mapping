@@ -192,7 +192,7 @@ def main():
     if args.pipeline=='multi':node.create_subscription(Bool,'/multi_agent/alignment_ready',lambda msg:alignment.update(ready=msg.data),
         QoSProfile(depth=1,reliability=ReliabilityPolicy.BEST_EFFORT,durability=DurabilityPolicy.TRANSIENT_LOCAL))
     capture=(args.output_root or ROOT/'outputs'/f'{args.pipeline}_agent')/'captures'/(
-        args.name+'_'+datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f'))
+        args.name+'_'+datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S'))
     capture.mkdir(parents=True,exist_ok=False);(capture/'configs').mkdir();(capture/'logs').mkdir()
     shutil.copy2(args.profile,capture/'configs/recording_profile.yaml')
     snapshot_environment(capture/'configs',dds_transport)

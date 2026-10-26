@@ -49,6 +49,7 @@ bash scripts/run_multi_agent.sh --role agent --robot-id 1
 - driver는 기본 자동 시작·종료하며 같은 센서 중복 실행을 거절합니다. 이미 별도 실행 중이면 `--no-start-driver`를 지정합니다.
 - 기본 domain은 72입니다. `--domain-id`, `--robot-config`, `--sensor-config`, `--odometry-config`, `--alignment-config`, `--output-root`로 실행 조건을 구분합니다.
 - `--dry-run`은 센서/ROS 프로세스를 시작하지 않고 선택한 pipeline·역할·설정 경로를 출력합니다.
+- 자동 실행 ID는 한국 시각 `YYYYMMDD_HHMMSS` 형식입니다. 녹화 폴더도 `NAME_YYYYMMDD_HHMMSS`를 사용합니다.
 - single 결과: `outputs/single_agent/runs/ID/`; multi 결과: `outputs/multi_agent/runs/ID/`. Ctrl+C로 소유한 자식 프로세스만 종료합니다.
 - 별도 RViz/rqt/CLI는 같은 DDS 환경을 사용합니다: `bash scripts/tools/with_dds.sh rqt`.
 

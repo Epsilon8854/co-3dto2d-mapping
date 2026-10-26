@@ -54,7 +54,7 @@ def args_parser():
     p.add_argument('--loop',action='store_true',help='restart every single + fusion node per pass')
     p.add_argument('--rate',type=float,default=1.)
     p.add_argument('--domain-id',type=int,default=int(os.environ.get('ROS_DOMAIN_ID','72')))
-    p.add_argument('--run-id',default=datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f'))
+    p.add_argument('--run-id',default=datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S'))
     p.add_argument('--no-rviz',action='store_true')
     p.add_argument('--no-alignment-viewer',action='store_true',help='do not start the local live startup-alignment monitor')
     p.add_argument('--status-only',action='store_true',help='show live session/alignment status without starting or stopping mapping nodes')
