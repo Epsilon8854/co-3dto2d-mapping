@@ -13,6 +13,11 @@
 
 ### 설치
 
+- **사전 준비:** ROS 2 Humble 설치
+- **센서 준비:** Livox SDK/driver 빌드 · 센서 IP·host IP 설정 → [설치 안내](docs/experiment_04_setup.md)
+- **설치 터미널:** 다른 mapping workspace를 source하지 않은 새 터미널
+- **신규 설치:** 저장소 clone → 환경 설정·빌드
+
 ```bash
 git clone --branch features/jeongeon/optimization --single-branch \
   https://github.com/Epsilon8854/co-3dto2d-mapping.git
@@ -20,11 +25,9 @@ cd co-3dto2d-mapping
 bash scripts/tools/setup_environment.sh
 ```
 
-- **사전 준비:** ROS 2 Humble 설치
-- **센서 준비:** Livox SDK/driver 빌드·센서 IP·host IP 설정 → [설치 안내](docs/experiment_04_setup.md)
 - **기존 PC 업데이트:** `git pull --ff-only` → `bash scripts/tools/setup_environment.sh --skip-install`
-- **설치·빌드 터미널:** 다른 mapping workspace를 source하지 않은 새 터미널
 - **명령 실행 위치:** 저장소 루트
+- **상세 안내:** [설치·네트워크·실행·녹화 절차](docs/experiment_04_setup.md)
 
 ### ▶ Single-agent: 로컬 driver + mapping + RViz
 
@@ -156,17 +159,17 @@ flowchart LR
 
 | 파라미터 | 기본값 | 의미 / 변경 효과 |
 |---|---|---|
-| `lidar_mount_height_above_floor_m` | `0.30m` | 높이 필터용 장착 높이. 바닥 기준 환산값이 달라짐 |
-| `fixed_base_link_height_above_floor_m` | `0.30m` | 보정 pose의 고정 z. 센서 높이와 별도로 설정 |
+| `lidar_mount_height_above_floor_m` | `0.30m` | 높이 필터용 장착 높이<br>변경 시 바닥 기준 환산값 변경 |
+| `fixed_base_link_height_above_floor_m` | `0.30m` | 보정 pose의 고정 z<br>센서 높이와 별도 설정 |
 | `height_filter_enabled` | `true` | 높이 필터 ON/OFF |
-| `height_filter_min_m`<br>`height_filter_max_m` | `0.30` / `1.20m` | 바닥 기준 보존 구간. min 증가 시 낮은 장애물도 제외 |
-| `pose_correction_enabled` | `true` | 고정 z·gravity 자세 보정 ON/OFF. 높이 필터는 별도 |
+| `height_filter_min_m`<br>`height_filter_max_m` | `0.30` / `1.20m` | 바닥 기준 보존 구간<br>min 증가 시 낮은 장애물도 제외 |
+| `pose_correction_enabled` | `true` | 고정 z·gravity 자세 보정 ON/OFF<br>높이 필터와 독립 |
 | `gravity_filter_gain` | `0.25` | 증가하면 자세 변화에 빠르게 반응, 작으면 더 평활화 |
 | `imu_timeout_sec`<br>`gravity_hold_timeout_sec` | `0.30` / `0.75s` | IMU 유효 시각차 / 마지막 gravity 유지 시간 |
 | `rear_filter.enabled` | `true` | 후방 필터 ON/OFF · sensor YAML |
 | `rear_filter.angle_deg`<br>`rear_filter.axis` | `120°` / `-x` | 센서 좌표계에서 제거할 전체 부채꼴 각도 / 중심 방향 |
 | `sensor_tf.x/y/z` / `roll/pitch/yaw` | 모두 `0` | `base_link`에 대한 센서 장착 위치(m)·회전(rad) |
-| **`robot_body_exclusion_box_size_m`** | **`1.6m`** | `base_link` 중심 XY 정사각형의 **전체 한 변**. ±0.8m 내부 점 제외. `0`이면 OFF |
+| **`robot_body_exclusion_box_size_m`** | **`1.6m`** | `base_link` 중심 XY 정사각형의 **전체 한 변**<br>±0.8m 내부 점 제외 · `0`이면 OFF |
 
 - **몸체 제외 크기:** 실제 로봇 몸체·여유를 고려한 수동 설정
 - **크기 증가 영향:** 가까운 실제 장애물도 지도에서 제외될 가능성
@@ -181,12 +184,12 @@ flowchart LR
 | `local_map_size_m` | `20m` | local 정사각 격자의 한 변 |
 | `range_min_m`<br>`range_max_m` | `0.8` / `12m` | occupied 끝점에 사용할 XY 거리 구간 |
 | `raycast_min_range_m`<br>`raycast_max_range_m` | `0.8` / `12m` | free-space ray 처리 거리 제한 |
-| `publish_period_ms` | `200ms` | local/global 지도 발행 주기. 처리·입력 속도와는 별개 |
+| `publish_period_ms` | `200ms` | local/global 지도 발행 주기<br>처리·입력 속도와 별개 |
 | `local_pht_submap_pose_graph_enabled` | `true` | PHT 기반 pose 보정 활성화 |
 | `local_pht_submap_pose_graph_mode` | `full_se2` | `visualization_only`: 보정 OFF / `single_line`: yaw·법선 방향 이동 / `full_se2`: 비평행 선분으로 XY/yaw 보정 |
-| `local_pht_submap_history_keyframes` | `5` | target에 누적할 과거 keyframe 수. 프레임마다 무조건 추가되는 값은 아님 |
+| `local_pht_submap_history_keyframes` | `5` | target에 누적할 과거 keyframe 수<br>프레임마다 무조건 추가되는 값은 아님 |
 | `local_pht_submap_keyframe_translation_m`<br>`local_pht_submap_keyframe_yaw_deg` | `0.5m` / `5°` | 새 keyframe을 추가할 이동·회전 기준 |
-| `local_line_pht_min_length_m` | `0.70m` | 최소 선분 길이. 증가하면 짧은 선분 제외 |
+| `local_line_pht_min_length_m` | `0.70m` | 최소 선분 길이<br>증가 시 짧은 선분 제외 |
 | `local_line_pht_max_gap_m` | `0.10m` | Hough 후보 추출에서 연결을 허용할 gap |
 | `local_line_pht_max_contiguous_gap_m` | `0.15m` | 추출 후 선분 내부에 허용할 연속 관측 공백 |
 | `local_line_pht_min_occupied_support_ratio` | `0.70` | 선분을 뒷받침하는 occupied 비율. 증가하면 더 엄격 |
