@@ -21,7 +21,7 @@ import sys
 import time
 
 import yaml
-from co_3dto2d_mapping.common.configuration import load_parameters,robot_parameters
+from co_3dto2d_mapping.common.configuration import load_parameters,robot_parameters,multi_agent_role
 from scripts.lib.driver_guard import conflicting_drivers
 from scripts.lib.dds import prepare_environment, snapshot_environment
 
@@ -35,7 +35,7 @@ def args_parser():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('action',choices=['run','replay','record'])
     p.add_argument('--pipeline',choices=['single','multi'],default='multi')
-    p.add_argument('--role',choices=['agent','coordinator','fusion','robot','all'],default='coordinator',help='agent = local pipeline; coordinator = local pipeline + central fusion')
+    p.add_argument('--role',choices=['auto','agent','coordinator','fusion','robot','all'],default='auto',help='default auto: robot-id 0 = coordinator, 1 = agent; explicit roles support split processes')
     p.add_argument('--robot-id',type=int,choices=[0,1],default=0)
     p.add_argument('--scope',choices=['robot','central','combined'],default='robot',help='recording scope')
     driver=p.add_mutually_exclusive_group()
@@ -278,8 +278,7 @@ def topics(args):
 
 def main():
     args=args_parser().parse_args()
-    args.role={'agent':'robot','coordinator':'all'}.get(args.role,args.role)
-    if args.pipeline=='single':args.role='robot'
+    args.role='robot' if args.pipeline=='single' else multi_agent_role(args.robot_id,args.role)
     if args.start_driver is None:
         args.start_driver=args.action=='run' and args.role in ('robot','all') and not args.status_only
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*',args.run_id):raise ValueError('invalid run id')
@@ -294,7 +293,7 @@ def main():
     if not args.livox_workspace and livox.get('workspace'):args.livox_workspace=(sensor_source.parent/livox['workspace']).resolve()
     if args.status_only and args.pipeline!='multi':raise ValueError('--status-only is a multi-agent session monitor')
     if args.dry_run:
-        print(json.dumps(dict(action=args.action,pipeline=args.pipeline,role=args.role,robot_id=args.robot_id,domain=args.domain_id,
+        print(json.dumps(dict(action=args.action,pipeline=args.pipeline,role={'all':'coordinator','robot':'agent'}.get(args.role,args.role),robot_id=args.robot_id,domain=args.domain_id,
             start_driver=args.start_driver,robot_config=str(args.robot_config or CONFIG/'single_agent.yaml'),sensor_config=str(sensor_source),alignment_config=str(args.alignment_config),
             topics=topics(args) if args.action=='record' else []),indent=2));return
     os.environ['ROS_DOMAIN_ID']=str(args.domain_id);os.environ.setdefault('ROS_LOCALHOST_ONLY','0')
@@ -315,7 +314,8 @@ def main():
         if found is not None:os.environ['LIVOX_SETUP']=str(found.resolve())
         elif subprocess.run(['ros2','pkg','prefix','livox_ros_driver2'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
             raise ValueError('Livox workspace not found; pass --livox-workspace or set LIVOX_SETUP')
-    console('START',f'{args.pipeline}-agent {args.action} role={args.role} robot=r{args.robot_id} domain={args.domain_id}; 시작 전 topic 확인')
+    display_role={'all':'coordinator','robot':'agent'}.get(args.role,args.role)
+    console('START',f'{args.pipeline}-agent {args.action} role={display_role} robot=r{args.robot_id} domain={args.domain_id}; 시작 전 topic 확인')
     if args.action=='run' and args.role in ('robot','all'):
         console('DRIVER','managed: 자동 시작·종료 / owned by this launcher' if args.start_driver else
                 'external: 별도 driver 필요; 이 실행기는 외부 driver를 시작·종료하지 않음')

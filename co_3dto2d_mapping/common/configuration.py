@@ -3,6 +3,20 @@ from pathlib import Path
 import yaml
 
 
+def multi_agent_role(robot_id, role='auto'):
+    """Resolve public role aliases and choose the central host from robot_id."""
+    if robot_id not in (0, 1):
+        raise ValueError('robot_id must be 0 or 1')
+    role = {'agent': 'robot', 'coordinator': 'all'}.get(role, role)
+    if role == 'auto':
+        role = 'all' if robot_id == 0 else 'robot'
+    if role not in ('robot', 'fusion', 'all'):
+        raise ValueError('invalid multi-agent role')
+    if robot_id != 0 and role in ('fusion', 'all'):
+        raise ValueError('coordinator/fusion role requires robot-id 0')
+    return role
+
+
 def load_parameters(path):
     value=yaml.safe_load(Path(path).read_text())
     return dict(value.get('central',value.get('/**',{}).get('ros__parameters',{})))

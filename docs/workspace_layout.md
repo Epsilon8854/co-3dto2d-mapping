@@ -39,12 +39,13 @@ bash scripts/tools/setup_environment.sh
 bash scripts/run_single_agent.sh --robot-id 0
 
 # multi-agent, 중앙 PC: r0 driver + mapping + 병합 + RViz + 정합 모니터
-bash scripts/run_multi_agent.sh --role coordinator --robot-id 0
+bash scripts/run_multi_agent.sh --robot-id 0
 
 # 다른 PC: r1 driver + mapping
-bash scripts/run_multi_agent.sh --role agent --robot-id 1
+bash scripts/run_multi_agent.sh --robot-id 1
 ```
 
+- Multi 역할은 ID로 자동 선택합니다: `--robot-id 0`은 coordinator, `--robot-id 1`은 agent. r0 분리 실행용 `--role robot`/`--role fusion`은 유지합니다.
 - Livox 경로가 자동 탐지되지 않으면 `--livox-workspace /absolute/workspace`와 `--driver-config /absolute/MID360_config.json`을 지정합니다.
 - driver는 기본 자동 시작·종료하며 같은 센서 중복 실행을 거절합니다. 이미 별도 실행 중이면 `--no-start-driver`를 지정합니다.
 - 기본 domain은 72입니다. `--domain-id`, `--robot-config`, `--sensor-config`, `--odometry-config`, `--alignment-config`, `--output-root`로 실행 조건을 구분합니다.

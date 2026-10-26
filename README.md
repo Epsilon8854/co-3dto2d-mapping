@@ -35,17 +35,19 @@ bash scripts/run_single_agent.sh --robot-id 0
 ### ▶ Multi-agent: r0 PC — 로컬 driver + mapping + 중앙 병합 + RViz
 
 ```bash
-bash scripts/run_multi_agent.sh --role coordinator --robot-id 0
+bash scripts/run_multi_agent.sh --robot-id 0
 ```
 
 ### ▶ Multi-agent: r1 PC — 로컬 driver + mapping
 
 ```bash
-bash scripts/run_multi_agent.sh --role agent --robot-id 1
+bash scripts/run_multi_agent.sh --robot-id 1
 ```
 
 - **두 PC 공통 조건:** 동일 코드 revision·ROS domain **72**·DDS 통신 가능 네트워크·clock 동기화
 - **Agent ID:** r0/r1은 논리 ID, 물리 노트북과 독립
+- **Multi 역할 자동 선택:** `--robot-id 0` = coordinator, `--robot-id 1` = agent · `--role` 생략
+- **분리 실행 옵션:** r0에서 명시적 `--role robot` 또는 `--role fusion` 사용 가능, r1의 중앙 역할 지정 차단
 - **Multi 초기 정합:**
   - 권장 배치: 두 센서의 전방을 같은 방향으로 정렬, 초기 yaw 차이 최소화
   - 관측 조건: 공통 벽·코너 확보, `LOCKED`까지 정지
@@ -199,7 +201,7 @@ flowchart LR
 ## 4. 동적 객체 흔적 제거
 
 - **방식:** 기존 occupied 셀의 반복 free 관측 → 동적 객체 흔적 제거
-- **현재 기본:** single 내부 필터 **OFF**, multi 중앙 필터 **ON**
+- **현재 기본:** single 내부 필터 **ON**, multi 각 agent 내부·중앙 필터 모두 **ON**
 - **중앙 입력:** 양쪽 agent의 local 관측 통합
 
 ```mermaid
@@ -212,7 +214,7 @@ flowchart LR
 
 | Single: `single_agent.yaml` | Multi: `multi_agent.yaml`의 `central` | 기본값 / 효과 |
 |---|---|---|
-| `dynamic_filter_enabled` | `merged_dynamic_filter_enabled` | `false` / `true` |
+| `dynamic_filter_enabled` | `merged_dynamic_filter_enabled` | `true` / `true` |
 | `dynamic_free_clear_count` | `merged_dynamic_free_clear_count` | `30` · 증가하면 삭제가 보수적이며 흔적이 오래 유지 |
 | `dynamic_evidence_timeout_sec` | `merged_dynamic_evidence_timeout_sec` | `5s` · 관측 공백 후 연속 free 횟수 초기화 |
 | `dynamic_clear_max_range_m` | `merged_dynamic_clear_max_range_m` | `6m` · 기존 occupied 삭제를 허용할 관측 거리 |
