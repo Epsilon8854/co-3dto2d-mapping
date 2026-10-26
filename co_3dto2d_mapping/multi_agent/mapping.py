@@ -56,7 +56,7 @@ class MultiAgentMapping(Node):
                     'registration_resolution_m','output_resolution_m','merged_period_sec','checkpoint_sec','path_publish_period_sec'):
             if not math.isfinite(self.p[key]) or self.p[key]<=0:raise ValueError('invalid '+key)
         if self.p['local_queue_size']<1 or self.p['confirmation_windows']<1:raise ValueError('invalid queue/confirmation count')
-        rd=RegistrationConfig(max_free_conflict_ratio=.18);reg={}
+        rd=RegistrationConfig(max_free_conflict_ratio=.20);reg={}
         for field in fields(rd):
             name='registration.'+field.name;self.declare_parameter(name,getattr(rd,field.name));reg[field.name]=self.get_parameter(name).value
         self.reg=RegistrationConfig(**reg).validated();search={}

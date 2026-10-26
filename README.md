@@ -295,7 +295,7 @@ flowchart TD
 | `registration.coarse_translation_range_m` | `2.5m` | 초기 XY 검색 범위 |
 | `registration.min_symmetric_overlap` | `0.30` | 최소 양방향 중첩 비율. 증가하면 엄격 |
 | `registration.max_symmetric_rmse_m` | `0.25m` | 정합 RMSE 상한. 감소하면 엄격 |
-| `registration.max_free_conflict_ratio` | `0.18` | 비교 가능한 occupied/free 모순 비율 상한. 성공 확률을 뜻하지 않음 |
+| `registration.max_free_conflict_ratio` | `0.20` | 비교 가능한 occupied/free 모순 비율 상한. 성공 확률을 뜻하지 않음 |
 | `submap_radius_m` | `12m` | 초기 정합용 입력 patch 반경 |
 | `output_resolution_m`<br>`merged_period_sec` | `0.05m` / `0.5s` | 병합 격자 해상도 / 처리 스케줄 기준 간격 |
 | `local_queue_size` | `100` | 중앙 local map 대기열. 연산 자체를 빠르게 하지는 않음 |

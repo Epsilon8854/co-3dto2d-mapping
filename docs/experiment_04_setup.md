@@ -109,7 +109,7 @@ bash scripts/run_multi_agent.sh \
 ```
 
 - 초기에는 중앙이 각 agent의 **누적 global map**을 구독합니다. map별 pose timestamp를 0.4초 이내로 짝짓는 조건과 local map 15개 조건을 제거했습니다. 고정된 초기 anchor를 사용해 지도 좌표를 변환합니다. pose/session은 정지 여부·재시작 감지를 위해 계속 확인합니다.
-- 최초 360° 검색 → 중간 검증에서 이전 후보군 우선 탐색 → 최종 360° 재검사 순서입니다. 후보군이 불충분하거나 품질 검사를 통과하지 못하면 전체 검색으로 돌아갑니다. 지도 경계 점 수가 크게 변해도 전체 검색합니다. default free-space conflict는 18%, 후보 간 점수 차이·기하·XY/yaw 일관성 검사는 유지합니다.
+- 최초 360° 검색 → 중간 검증에서 이전 후보군 우선 탐색 → 최종 360° 재검사 순서입니다. 후보군이 불충분하거나 품질 검사를 통과하지 못하면 전체 검색으로 돌아갑니다. 지도 경계 점 수가 크게 변해도 전체 검색합니다. default free-space conflict는 20%, 후보 간 점수 차이·기하·XY/yaw 일관성 검사는 유지합니다.
 - 변환 확정 후 초기 global snapshot으로 두 지도 layer를 채우고 **global 구독 OFF / local 구독 ON**으로 전환합니다. 이후 `rN/mapping_odom` 기준 local grid에 고정 agent 변환과 최초 r0→map anchor를 적용합니다. pose를 다시 곱하지 않습니다. raw `rN/odom`과 mapper의 보정 좌표계를 분리합니다.
 - 중앙 merged map은 기본적으로 **새 local 관측의 시간 증거**로 갱신합니다. free 30회 확인 후 occupied→free, occupied 재관측 시 free 증거 초기화, 관측 공백 5초 초과 시 카운터만 초기화합니다. 같은 0.1초 구간의 두 agent free는 셀당 한 번만 세며 해당 구간 occupied가 우선합니다. unknown은 기존 지도·증거를 지우지 않습니다. 설정·시각 처리·평가 범위는 [중앙 동적 흔적 제거](experiment_04_temporal_fusion.md)를 참고합니다.
 - local map이 누락되면 해당 관측이 없는 영역을 복구하지 못할 수 있습니다. 내부 local queue 초과 시 해당 agent의 global snapshot을 한 번 받아 아직 live 관측하지 않은 셀만 보완합니다. 이 snapshot은 free 카운터를 늘리지 않으며 live 갱신된 셀을 덮어쓰지 않습니다. DDS 이전 단계의 모든 누락을 자동 검출하거나 누락된 free 증거를 복원하는 기능은 아닙니다.
@@ -122,13 +122,13 @@ bash scripts/run_multi_agent.sh \
 ### Free-space 충돌 기준 비교
 
 - `registration.max_free_conflict_ratio`는 정합 후 비교 가능한 샘플에서 occupied ↔ free가 모순되는 비율의 상한입니다. 지도 전체 cell의 불일치율이나 정합 실패 확률이 아닙니다. unknown 영역은 분모에서 제외됩니다.
-- 기본 `alignment.yaml`은 **0.18**입니다. YAML을 생략한 Experiment 4 중앙 노드·startup helper의 기본도 0.18입니다. 공통 single/기존 정합 모듈의 기본값은 변경하지 않습니다. 기존 실행 snapshot과 실행 중인 설정은 바뀌지 않습니다.
-- 이전 0.14 조건은 `alignment_free_conflict_014.yaml`에 보존합니다. `alignment_free_conflict_018.yaml`은 기존 명령 호환을 위해 유지하며 현재 기본과 같은 설정입니다.
-- 0.18은 최근 후보 15.2%·16.5%의 해당 gate를 통과시킬 수 있지만, overlap/RMSE/후보 gap/기하 조건을 모두 통과해야 확정됩니다. 기본은 1회 확인이며 올바른 정합임을 보장하지 않습니다. `confirmation_windows`를 3으로 지정하면 이전처럼 누적 snapshot 간 XY·yaw 일관성을 재검사합니다.
-- 단계별 통신 분리를 적용한 동일 코드에서 0.14와 0.18을 비교합니다. 실측 XY/yaw 또는 벽·코너 overlay로 오정합 증가 여부를 함께 확인합니다.
+- 운영 `config/multi_agent.yaml`의 `central.registration.max_free_conflict_ratio`는 **0.20**입니다. 중앙 노드·startup helper의 기본도 0.20입니다. 기존 실험 profile·실행 snapshot은 유지하며, 실행 중인 중앙 노드는 재시작해야 적용됩니다.
+- 과거 0.14·0.18 비교 조건은 `config/experiment/experiment_04_multi_agent_mapping/`의 YAML에 보존합니다. 운영 기본 0.20과 구분합니다.
+- 0.20은 해당 불일치 gate만 완화합니다. overlap/RMSE/후보 gap/기하 조건은 계속 적용합니다. 기본 확인은 1회이며, `confirmation_windows: 3`으로 누적 snapshot 간 XY·yaw 일관성 검증을 추가할 수 있습니다.
+- 조건 비교 시 실측 XY/yaw 또는 벽·코너 overlay로 오정합 증가 여부도 확인합니다.
 
 ```bash
-# 현재 기본 18%: 추가 옵션 없이 기존 실행 명령 사용.
+# 현재 운영 기본 20%: 추가 옵션 없이 기본 실행 명령 사용.
 # 이전 14%와 비교할 때만 아래 config를 지정합니다.
 bash scripts/run_multi_agent.sh \
   --role all --robot-id 0 --start-driver --domain-id 72 \

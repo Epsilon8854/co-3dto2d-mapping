@@ -65,7 +65,7 @@ def _observability(target, source, transform, config):
 
 
 def register_startup(target,source,config=None,startup=None,candidate_priors=None):
-    config = (config or RegistrationConfig(max_free_conflict_ratio=.18)).validated()
+    config = (config or RegistrationConfig(max_free_conflict_ratio=.20)).validated()
     startup = (startup or StartupConfig()).validated()
     started = time.perf_counter()
     def result(reason, candidates=None, **extra):
