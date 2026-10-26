@@ -1,11 +1,13 @@
 # MID-360 Single / Multi-agent 2D Mapping
 
-- **목적:** LiDAR·IMU로 로봇 pose와 2D occupancy map을 생성하고, 두 agent의 지도를 공통 `map` 좌표계로 병합합니다.
-- **현재 브랜치:** `features/jeongeon/optimization` · Ubuntu 22.04 / ROS 2 Humble 기준.
-- **기본 동작:** raw ICP → 고정 z·IMU gravity 보정 → PHT 기반 XY/yaw 보정 → occupancy 생성.
-- **높이 기준:** 바닥 plane을 탐지하지 않고 설정한 센서 장착 높이를 사용합니다. 평탄한 동일 층·고정 장착을 전제로 합니다.
+- **목적:** LiDAR·IMU 기반 pose·2D occupancy map 생성, 공통 `map` 좌표계에서 두 agent 지도 병합
+- **현재 브랜치:** `features/jeongeon/optimization`
+- **기준 환경:** Ubuntu 22.04 / ROS 2 Humble
+- **기본 동작:** raw ICP → 고정 z·IMU gravity 보정 → PHT 기반 XY/yaw 보정 → occupancy 생성
+- **높이 기준:** 설정한 센서 장착 높이 사용, 바닥 plane 탐지 미사용
+- **운영 전제:** 평탄한 동일 층·센서 고정 장착
 
-**바로가기:** [실행](#1-설치실행) · [Single](#2-single-agent-mapping) · [설정](#3-주요-파라미터) · [동적 필터](#4-동적-객체-흔적-제거) · [Multi](#5-multi-agent-mapping) · [Frame](#6-frame과-회사-시스템-연동) · [저장](#7-지도-저장과-origin) · [녹화·재생](#8-rosbag-녹화재생)
+- **바로가기:** [실행](#1-설치실행) · [Single](#2-single-agent-mapping) · [설정](#3-주요-파라미터) · [동적 필터](#4-동적-객체-흔적-제거) · [Multi](#5-multi-agent-mapping) · [Frame](#6-frame과-회사-시스템-연동) · [저장](#7-지도-저장과-origin) · [녹화·재생](#8-rosbag-녹화재생)
 
 ## 1. 설치·실행
 
@@ -18,9 +20,11 @@ cd co-3dto2d-mapping
 bash scripts/tools/setup_environment.sh
 ```
 
-- ROS 2 Humble은 먼저 설치합니다. Livox SDK/driver 빌드와 센서 IP·host IP 설정은 [설치 안내](docs/experiment_04_setup.md)를 참고합니다.
-- 이미 설치된 PC는 `git pull --ff-only` 후 `bash scripts/tools/setup_environment.sh --skip-install`로 재빌드합니다.
-- 설치·빌드는 다른 mapping workspace가 source되지 않은 새 터미널에서 수행합니다. 아래 실행 명령은 저장소 루트 기준입니다.
+- **사전 준비:** ROS 2 Humble 설치
+- **센서 준비:** Livox SDK/driver 빌드·센서 IP·host IP 설정 → [설치 안내](docs/experiment_04_setup.md)
+- **기존 PC 업데이트:** `git pull --ff-only` → `bash scripts/tools/setup_environment.sh --skip-install`
+- **설치·빌드 터미널:** 다른 mapping workspace를 source하지 않은 새 터미널
+- **명령 실행 위치:** 저장소 루트
 
 ### ▶ Single-agent: 로컬 driver + mapping + RViz
 
@@ -40,10 +44,16 @@ bash scripts/run_multi_agent.sh --role coordinator --robot-id 0
 bash scripts/run_multi_agent.sh --role agent --robot-id 1
 ```
 
-- 두 PC는 같은 코드 revision, ROS domain **72**, DDS 통신 가능한 네트워크, 동기화된 clock을 사용합니다. 논리 ID r0/r1은 물리 노트북에 고정되지 않습니다.
-- **Multi 시작 시:** 가능한 두 센서의 전방을 같은 방향으로 맞추고 초기 yaw 차이를 작게 유지하면 정합 안정성에 유리합니다. 공통 벽·코너를 관측하며 `LOCKED`까지 정지합니다. 다른 방향의 초기 정합도 지원합니다.
-- r0에서 초기 정합 브라우저 모니터가 자동으로 열립니다. RViz와 별도 화면입니다. 터미널에도 입력 대기·수집·검색·정합 완료 상태가 표시됩니다.
-- driver는 기본 자동 시작·종료합니다. 같은 물리 센서의 중복 driver를 거절하며, Ctrl+C는 해당 실행기가 소유한 프로세스를 정리합니다.
+- **두 PC 공통 조건:** 동일 코드 revision·ROS domain **72**·DDS 통신 가능 네트워크·clock 동기화
+- **Agent ID:** r0/r1은 논리 ID, 물리 노트북과 독립
+- **Multi 초기 정합:**
+  - 권장 배치: 두 센서의 전방을 같은 방향으로 정렬, 초기 yaw 차이 최소화
+  - 관측 조건: 공통 벽·코너 확보, `LOCKED`까지 정지
+  - 지원 범위: 서로 다른 방향의 초기 정합도 지원
+- **시각화:** r0에서 RViz·초기 정합 브라우저 모니터 자동 실행
+- **터미널 상태:** 입력 대기 → 관측 수집 → 검색 → 정합 완료
+- **Driver 관리:** 자동 시작·종료, 동일 물리 센서의 중복 실행 차단
+- **Ctrl+C:** 해당 실행기 소유 프로세스 정리
 
 | 실행 옵션 | 용도 |
 |---|---|
@@ -77,16 +87,27 @@ flowchart LR
     P --> O[Mapping odometry]
 ```
 
-- **ICP:** raw cloud로 이동을 추정합니다. 후방·높이 필터는 ICP 입력에 적용하지 않습니다. 기본 deskew OFF, 구독 queue 1입니다.
-- **Gravity 보정:** IMU에서 up 방향을 구해 roll/pitch를 정렬하고 z를 설정값에 고정합니다. XY/yaw는 ICP 결과를 전달합니다.
-- **Height filter:** gravity 방향의 높이에 센서 장착 높이를 더해 바닥 기준으로 환산합니다. 기본 `0.30~1.20m`를 보존합니다. pose 보정 ON/OFF와 별도로 동작합니다.
-- **PHT:** Probabilistic Hough Transform으로 2D 점유 관측에서 선분을 추출합니다. 보정된 과거 keyframe을 기본 5개 누적해 현재 선분과 매칭하고, raw odometry prior와 함께 local pose graph로 XY/yaw를 보정합니다. 기본 모드는 `full_se2`입니다.
-- **Occupancy:** 보정 pose로 local/global 격자를 생성합니다. 장애물 끝점은 occupied, 유효 ray가 통과한 셀은 free로 관측합니다. 특징·overlap이 부족하면 보정 효과가 제한될 수 있습니다.
+- **ICP:** raw cloud 기반 이동 추정
+  - 입력: 후방·높이 필터 미적용 raw cloud
+  - 기본 설정: deskew OFF, 구독 queue 1
+- **Gravity 보정:** IMU up 방향으로 roll/pitch 정렬, z를 설정값에 고정
+  - XY/yaw: ICP 결과 전달
+- **Height filter:** gravity 방향 높이 + 센서 장착 높이 → 바닥 기준 높이 환산
+  - 기본 보존 구간: `0.30~1.20m`
+  - 동작 조건: pose 보정 ON/OFF와 독립
+- **PHT — Probabilistic Hough Transform:** 2D 점유 관측의 선분 추출·매칭
+  - Target: 보정된 과거 keyframe 기본 5개 누적
+  - 보정: 현재 선분 매칭 제약 + raw odometry prior → local pose graph의 XY/yaw 최적화
+  - 기본 모드: `full_se2`
+- **Occupancy:** 보정 pose 기반 local/global 격자 생성
+  - 장애물 끝점: occupied
+  - 유효 ray 통과 셀: free
+  - 보정 제약: 특징·overlap 부족 시 효과 제한
 
 ### 주요 토픽
 
-- `N`은 `0` 또는 `1`입니다. 타입은 `패키지/msg/타입` 형식입니다.
-- 아래 `mapping 기준`은 **single에서 `rN/odom`**, **multi에서 `rN/mapping_odom`**입니다.
+- **표기:** `N` = `0` 또는 `1`, 메시지 타입 = `패키지/msg/타입`
+- **Mapping 기준 frame:** single = `rN/odom`, multi = `rN/mapping_odom`
 
 | 토픽 | 메시지 타입 | 내용 / header frame |
 |---|---|---|
@@ -106,8 +127,10 @@ flowchart LR
 | `/rN/mapping/debug/local_submap_corrected_odometry_path` | `nav_msgs/msg/Path` | PHT 보정 궤적 · mapping 기준 |
 | `/rN/mapping/pipeline_diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | mapper 수신·처리·지연 계측 |
 
-- `floor_based_odometry`, `plane_height_filtered`는 기존 인터페이스 이름을 유지한 것입니다. 현재 운영 경로는 **LiDAR 바닥 plane을 추정하지 않습니다.**
-- `/plane_height_filtered`에는 몸체 제외·거리 제한이 아직 적용되지 않습니다. 지도와 정렬된 최종 점군을 비교하려면 `/slice_kept_points`를 확인합니다.
+- **기존 토픽명 유지:** `floor_based_odometry`, `plane_height_filtered`
+- **현재 처리 방식:** 고정 높이·IMU gravity 사용, LiDAR 바닥 plane 추정 미사용
+- **`/plane_height_filtered`:** 후방·높이 필터 결과, 몸체 제외·거리 제한 적용 전
+- **`/slice_kept_points`:** 몸체·거리 제한 적용 후 mapping pose로 투영한 최종 점군
 
 ## 3. 주요 파라미터
 
@@ -122,8 +145,10 @@ flowchart LR
 | [`config/dds.yaml`](config/dds.yaml) | DDS NIC·버퍼·전송 정책 |
 | [`config/recording.yaml`](config/recording.yaml) | 녹화 토픽·QoS |
 
-- 아래 기본값은 현재 운영 YAML 기준입니다. 공통 mapping 설정은 `/**/ros__parameters` 아래에 둡니다.
-- 센서 TF·rear 설정은 sensor YAML에 둡니다. 변경한 설정은 노드를 재시작해 적용하고, multi 연동 변경은 양쪽 PC에서 업데이트합니다.
+- **기본값 기준:** 현재 운영 YAML
+- **공통 mapping 설정 위치:** `/**/ros__parameters`
+- **센서 TF·rear 설정 위치:** sensor YAML
+- **변경 적용:** 노드 재시작, multi 연동 변경 시 양쪽 PC 업데이트
 
 ### 높이·자세·후방·몸체 제외
 
@@ -141,8 +166,10 @@ flowchart LR
 | `sensor_tf.x/y/z` / `roll/pitch/yaw` | 모두 `0` | `base_link`에 대한 센서 장착 위치(m)·회전(rad) |
 | **`robot_body_exclusion_box_size_m`** | **`1.6m`** | `base_link` 중심 XY 정사각형의 **전체 한 변**. ±0.8m 내부 점 제외. `0`이면 OFF |
 
-- 몸체 제외 크기는 로봇 치수에서 자동 계산하지 않습니다. 실제 몸체와 여유에 맞춰 설정하며, 과도하게 키우면 가까운 장애물도 지도에서 빠집니다.
-- 센서 높이 0.30m·보존 높이 0.30~1.20m는 gravity 방향으로 센서 기준 약 **0~0.90m**에 해당합니다. 장착 TF가 0이 아닌 경우 좌표 변환도 함께 고려합니다.
+- **몸체 제외 크기:** 실제 로봇 몸체·여유를 고려한 수동 설정
+- **크기 증가 영향:** 가까운 실제 장애물도 지도에서 제외될 가능성
+- **높이 예시:** 센서 0.30m·바닥 기준 0.30~1.20m → gravity 방향의 센서 기준 약 **0~0.90m**
+- **장착 TF가 0이 아닌 경우:** 센서→몸체 좌표 변환 함께 고려
 
 ### 지도·선분 매칭
 
@@ -165,13 +192,15 @@ flowchart LR
 | `local_pht_submap_min_overlap_m` | `0.50m` | 매칭 선분의 최소 중첩 길이 |
 | `local_pht_submap_weight` | `0.20` | raw odometry prior에 대한 선분 제약 가중치 |
 
-- Hough vote threshold는 현재 C++ 추출 설정값이며 **운영 YAML에 노출한 파라미터가 아닙니다.**
-- `config/lidar_odometry.yaml`의 `deskewing: false`를 기본으로 사용합니다. ICP의 queue 1은 공용 launch에서 지정합니다.
+- **Hough vote threshold:** C++ 추출 설정값, 운영 YAML 미노출
+- **Deskew 기본값:** `config/lidar_odometry.yaml`의 `deskewing: false`
+- **ICP queue 기본값:** 공용 launch에서 `1` 지정
 
 ## 4. 동적 객체 흔적 제거
 
-- **방식:** 객체를 분류·추적하는 대신, 이전 occupied 셀에서 반복 확인한 free 관측으로 흔적을 지웁니다.
-- **현재 기본:** single 내부 필터 **OFF**, multi 중앙 필터 **ON**. 중앙은 양쪽 agent의 local 관측을 함께 사용합니다.
+- **방식:** 기존 occupied 셀의 반복 free 관측 → 동적 객체 흔적 제거
+- **현재 기본:** single 내부 필터 **OFF**, multi 중앙 필터 **ON**
+- **중앙 입력:** 양쪽 agent의 local 관측 통합
 
 ```mermaid
 flowchart LR
@@ -189,10 +218,14 @@ flowchart LR
 | `dynamic_clear_max_range_m` | `merged_dynamic_clear_max_range_m` | `6m` · 기존 occupied 삭제를 허용할 관측 거리 |
 | 해당 없음 | `merged_dynamic_observation_bin_sec` | `0.1s` · 같은 셀·시간 bin에서 두 agent를 합쳐 free 최대 1회 인정 |
 
-- Unknown·미관측은 free 증거가 아닙니다. Timeout으로 occupied 셀이 자동 삭제되지 않습니다.
-- 중앙은 원 관측 timestamp를 사용하며 중복·과거 관측을 검사합니다. 같은 bin에서 occupied와 free가 섞이면 occupied가 우선합니다.
-- `30회`가 고정된 삭제 시간을 뜻하지 않습니다. 실제 유효 관측률·가림·occupied 재관측에 따라 달라집니다.
-- 정적 장애물이 얇아지면 clear count 증가·clear 거리 축소를 검토합니다. 단순히 더 먼 hit가 보인다고 모든 중간 셀이 유효 free로 누적된 것은 아닙니다.
+- **Unknown·미관측:** free 증거로 미사용
+- **Timeout:** free 연속 횟수만 초기화, 기존 occupied 유지
+- **시간 처리:** 원 관측 timestamp 사용, 중복·과거 관측 검사
+- **동일 bin의 occupied/free 충돌:** occupied 우선
+- **삭제 소요시간:** 유효 관측률·가림·occupied 재관측에 따라 변동
+- **`30회`:** 시간 기준이 아닌 유효 free 관측 횟수
+- **정적 장애물 보존 조절:** clear count 증가·clear 거리 축소 검토
+- **잔류 흔적 확인:** 중간 셀별 유효 free 관측 누적 여부 확인, 먼 hit 존재만으로 삭제 판단 불가
 
 ## 5. Multi-agent mapping
 
@@ -215,11 +248,21 @@ flowchart TD
     W --> P[별도 pose·TF 중계<br/>각 agent Global pose]
 ```
 
-- **초기:** 정지 상태의 누적 global map으로 r1→r0 변환을 구합니다. 전체 yaw를 검색하되 overlap·오차·occupied/free 충돌과 후보 구분 조건을 통과해야 확정합니다.
-- **주행:** 초기 확정 뒤 global map 구독을 해제하고 local map·mapping pose·session을 받아 병합합니다. r1의 전송된 점유 좌표는 r1 기준이며 중앙에서 공통 좌표로 변환합니다.
-- **통신:** 중앙 병합·pose 중계는 원격 raw cloud/IMU를 입력으로 쓰지 않습니다. 같은 ROS domain에서 rqt·녹화기로 해당 토픽을 추가 구독하면 별도 전송 비용이 생깁니다.
-- **분리:** pose/TF 중계는 지도 정합·누적·경로·파일 저장과 별도 프로세스입니다.
-- **주기 정합:** 기본 OFF입니다. `central.periodic.enabled: true`이면 r1의 최근 누적 submap을 r0의 과거 누적 지도 영역과 비교하고, 채택 시 r1→r0 변환과 기존 관측 재투영을 갱신합니다. r0 pose나 고정 world anchor를 이 inter-agent 정합으로 보정하지 않습니다. [상세 동작](docs/experiment_04_periodic_alignment.md)
+- **초기 정합:**
+  - 입력: 정지 상태에서 누적한 두 global map
+  - 검색: 전체 yaw + XY 변환
+  - 확정 조건: overlap·오차·occupied/free 충돌·후보 구분 기준 통과
+- **주행 중 병합:**
+  - 초기 global map 구독 해제 → local map·mapping pose·session 수신
+  - r1 기준 점유 좌표 → 중앙에서 공통 `map` 좌표로 변환
+- **통신:** 중앙 병합·pose 중계의 원격 raw cloud/IMU 구독 없음
+  - rqt·녹화기의 원격 raw 토픽 추가 구독 시 별도 전송 비용 발생
+- **프로세스 분리:** pose/TF 중계 ↔ 지도 정합·누적·경로·파일 저장
+- **주기 정합:** 기본 OFF, `central.periodic.enabled: true`로 활성화
+  - 비교 대상: r1 최근 누적 submap ↔ r0 과거 누적 지도 영역
+  - 채택 결과: r1→r0 변환 갱신·기존 관측 재투영
+  - 기준 유지: r0 pose·고정 world anchor
+  - [상세 동작](docs/experiment_04_periodic_alignment.md)
 
 ### 주요 공개 토픽
 
@@ -238,10 +281,9 @@ flowchart TD
 | `/multi_agent/pose_relay_status` | `diagnostic_msgs/msg/DiagnosticArray` | 전역 pose 발행·TF 대기·지연 상태 |
 | `/multi_agent/rN/session` | `diagnostic_msgs/msg/DiagnosticArray` | agent 재시작·입력 reset 식별 |
 
-
 ### 초기 정합·병합 설정
 
-- 파일: `config/multi_agent.yaml`의 **`central` 아래**.
+- **설정 위치:** `config/multi_agent.yaml`의 `central`
 
 | 파라미터 | 기본값 | 의미 / 변경 효과 |
 |---|---|---|
@@ -279,24 +321,32 @@ flowchart TD
     M -->|anchor A + 정합 C| S1[r1/mapping_odom]
 ```
 
-- $A = {}^{map}T_{r0/mapping\_odom}$: 최초 r0 XY/yaw 기준의 고정 anchor. $C = {}^{r0/mapping\_odom}T_{r1/mapping\_odom}$: agent 간 정합 변환.
-- 전역 pose는 $P_{0,global}=A P_0$, $P_{1,global}=A C P_1$입니다. 기본 base z는 바닥 기준 0.30m이며 초기 XY/yaw를 0으로 잡는 것과 구분합니다.
-- Raw `odom→base_link`는 ICP가 발행합니다. 중앙은 같은 source timestamp에서 아래 TF를 계산합니다.
+- **고정 anchor:** $A = {}^{map}T_{r0/mapping\_odom}$, 최초 r0 XY/yaw 기준
+- **Agent 간 정합:** $C = {}^{r0/mapping\_odom}T_{r1/mapping\_odom}$
+- **전역 pose:** $P_{0,global}=A P_0$, $P_{1,global}=A C P_1$
+- **초기 기준:** XY/yaw = 0, base z = 바닥 기준 설정 높이 0.30m
+- **TF 소유자:** raw `odom→base_link`는 ICP, 보정 `map→odom`은 중앙 relay
+- **보정 계산:** 동일 source timestamp의 두 pose 사용
 
 $$
 T_{map\leftarrow odom}(t)=T_{map\leftarrow base,\ corrected}(t)\,T_{odom\leftarrow base,\ raw}(t)^{-1}
 $$
 
-- **회사 측 연동:** goal·global path·현재 global pose를 모두 `map` 기준으로 사용합니다. 보정 시 `map` 원점은 유지되고 로봇 pose·지도 관측 위치가 갱신됩니다.
-- 지도 변경 후 goal의 도달 가능성·경로·frontier 재선택은 주행/exploration 시스템에서 판단합니다. 이 저장소는 goal을 자동 변경하지 않습니다.
-- `map_status`의 `coordinate_epoch`가 바뀌면 기존 goal/path의 좌표 유효성을 다시 확인합니다. 중앙 재시작·r0 session reset 후에도 같은 절대 좌표가 유지된다고 가정하지 않습니다.
-- RViz Fixed Frame: **single은 `rN/odom`, multi는 `map`**. Multi의 전역 TF·pose는 초기 정합과 동일 시각 raw TF가 준비되어야 발행됩니다.
+- **회사 측 연동:** goal·global path·현재 global pose를 모두 `map` 기준으로 통일
+- **보정 시 변화:** `map` 원점 유지, 로봇 pose·지도 관측 위치 갱신
+- **주행/exploration 시스템 역할:** 지도 변경 후 goal 도달 가능성 검토·경로 재계획·frontier 재선택
+- **본 저장소 역할:** 지도·pose 제공, goal 자동 변경 없음
+- **좌표 유효성 재확인:** `map_status.coordinate_epoch` 변경 시 기존 goal/path 검토
+- **새 기준 가능 조건:** 중앙 재시작·r0 session reset
+- **RViz Fixed Frame:** single = `rN/odom`, multi = `map`
+- **Multi 전역 TF·pose 발행 조건:** 초기 정합 완료·동일 시각 raw TF 확보
 
 ## 7. 지도 저장과 Origin
 
 ### 저장 위치·형태
 
-- **Merged map은 중앙 r0 PC에 저장**합니다. 초기 정합이 완료되지 않으면 merged map 대신 agent별 미정합 지도가 저장됩니다.
+- **Merged map 저장 PC:** 중앙 r0
+- **초기 정합 미완료 시:** agent별 미정합 지도만 저장
 
 ```text
 outputs/
@@ -321,10 +371,16 @@ outputs/
         └── save_status.json             # world anchor·epoch·revision·저장 상태
 ```
 
-- 폴더명은 한국 시각 **`YYYYMMDD_HHMMSS`**입니다. `cycle_001`은 첫 처리 회차이며 주행한 바퀴 수가 아닙니다. 반복 재생은 `cycle_002` 이후로 구분합니다.
-- `--run-id 20261026_143025_airoom`으로 식별명, `--output-root outputs/experiment_NAME`으로 실험별 저장 위치를 지정할 수 있습니다.
-- PNG는 검토용, PGM+YAML은 map server용, NPZ는 원 격자·좌표·timestamp 분석용입니다. `outputs/`·bag·빌드 결과는 Git에 포함하지 않습니다.
-- **정상 Ctrl+C 종료 시 최종 지도를 저장**합니다. 중앙 지도는 기본 10초 간격으로 checkpoint도 저장하며, 탐사 완료 등 원하는 시점에 다음 서비스를 호출할 수 있습니다.
+- **실행 폴더명:** 한국 시각 `YYYYMMDD_HHMMSS`
+- **`cycle_001`:** 첫 처리 회차, 주행 바퀴 수와 무관
+- **반복 재생:** `cycle_002`, `cycle_003`, …으로 구분
+- **식별명 지정:** `--run-id 20261026_143025_airoom`
+- **실험별 저장 위치:** `--output-root outputs/experiment_NAME`
+- **파일 용도:** PNG = 검토, PGM+YAML = map server, NPZ = 원 격자·좌표·timestamp 분석
+- **Git 제외:** `outputs/`·bag·빌드 결과
+- **최종 저장:** 정상 Ctrl+C 종료 시
+- **중간 저장:** 중앙 지도 checkpoint 기본 10초 간격
+- **수동 저장:** 탐사 완료 등 원하는 시점에 아래 서비스 호출
 
 ```bash
 bash scripts/tools/with_dds.sh ros2 service call \
@@ -333,16 +389,20 @@ bash scripts/tools/with_dds.sh ros2 service call \
 
 ### map 원점과 YAML origin의 차이
 
-- **`map` 원점:** 세션 공통의 고정 좌표 기준.
-- **YAML `origin: [x, y, yaw]`:** 저장 격자의 좌하단이 `map`의 어디에 있는지 나타내는 값. `map` 원점 자체와 다르며, 음수여도 정상입니다.
-- `resolution`은 한 셀의 폭(m)입니다. 열 `c`·아래에서부터 행 `r`인 셀 중심은 다음과 같습니다. 이미지 파일의 위에서부터 행 번호는 반대로 변환해야 합니다.
+- **`map` 원점:** 세션 공통의 고정 좌표 기준
+- **YAML `origin: [x, y, yaw]`:** `map` 기준 저장 격자 좌하단의 위치·회전
+  - `map` 원점과 별개, 음수 좌표도 정상
+- **`resolution`:** 한 셀의 폭(m)
+- **셀 중심 계산:** 열 `c`·아래에서부터 행 `r` 기준, 아래 수식 적용
+- **이미지 행 번호:** 위에서부터 증가하므로 좌표 계산 시 상하 반전
 
 $$
 p_{map}=\begin{bmatrix}x_0\\y_0\end{bmatrix}+R(\theta_0)\,resolution\begin{bmatrix}c+0.5\\r+0.5\end{bmatrix}
 $$
 
-- Occupancy 값은 unknown=`-1`, free=`0`, occupied=`100`입니다. 회사 측 map server의 frame도 `map`으로 설정합니다.
-- 지도 확장으로 YAML의 `origin`이 달라져도 세션의 고정 `map` 좌표 기준이 이동한 것은 아닙니다.
+- **Occupancy 값:** unknown=`-1`, free=`0`, occupied=`100`
+- **회사 측 map server frame:** `map`
+- **지도 확장:** YAML `origin` 변경 가능, 세션의 고정 `map` 기준 유지
 
 ## 8. Rosbag 녹화·재생
 
@@ -362,9 +422,15 @@ bash scripts/tools/record_bag.sh --name airoom_raw --include-raw --with-agent-ma
 bash scripts/tools/record_bag.sh --pipeline single --robot-id 0 --name hallway --include-raw
 ```
 
-- 녹화는 mapping/driver를 시작·종료하지 않습니다. 각 agent의 mapping은 별도로 실행합니다.
-- 저장 위치는 `outputs/multi_agent/captures/NAME_YYYYMMDD_HHMMSS/bag/`입니다. Single은 `single_agent` 아래에 저장합니다. 설정·취득 metadata는 `bag/`의 상위 폴더에 저장됩니다.
-- **기본 bag에는 raw LiDAR/IMU가 없습니다.** Filtered cloud+기록 pose로 mapper를, local map까지 기록했다면 중앙 병합을 후처리할 수 있습니다. ICP부터 재계산하려면 `--include-raw`가 필요합니다.
+- **녹화 범위:** 토픽 저장만 수행, mapping/driver는 별도 실행·종료
+- **Multi bag 위치:** `outputs/multi_agent/captures/NAME_YYYYMMDD_HHMMSS/bag/`
+- **Single bag 위치:** `outputs/single_agent/captures/NAME_YYYYMMDD_HHMMSS/bag/`
+- **설정·취득 metadata:** `bag/` 상위 폴더
+- **기본 bag:** filtered cloud·기록 pose 포함, raw LiDAR/IMU 미포함
+- **재처리 범위:**
+  - Filtered cloud + 기록 pose → mapper 후처리
+  - Local map 추가 기록 → 중앙 병합 재현
+  - `--include-raw` 추가 → ICP·IMU·높이 필터부터 재계산
 
 ### 재생: raw LiDAR/IMU를 포함한 bag
 
@@ -377,9 +443,12 @@ bash scripts/tools/replay_bag.sh --pipeline multi \
   --bag /absolute/combined_capture/bag --loop
 ```
 
-- Multi raw 재생에는 두 agent의 raw 입력과 센서 TF가 필요합니다. `--rate 0.5`로 감속하고, `--loop`를 생략하면 한 번만 재생합니다.
-- 같은 domain의 실센서·다른 player를 종료하거나 `--domain-id`로 분리합니다. 재생은 단일 clock을 사용하며 회차마다 노드를 새로 시작해 상태를 초기화합니다.
-- 별도 RViz/rqt/CLI는 같은 DDS 환경으로 실행합니다: `bash scripts/tools/with_dds.sh rqt`.
+- **Multi raw 재생 입력:** 두 agent의 raw LiDAR·IMU·센서 TF
+- **재생 속도:** `--rate 0.5` → 절반 속도
+- **반복 여부:** `--loop` 지정 시 반복, 생략 시 1회
+- **재생 환경:** 같은 domain의 실센서·다른 player 종료 또는 `--domain-id`로 분리
+- **시간·상태:** 단일 clock 사용, 회차마다 노드 재시작·상태 초기화
+- **별도 RViz/rqt/CLI:** 동일 DDS 환경 사용 → `bash scripts/tools/with_dds.sh rqt`
 
 ## 9. 저장소 구조·상세 문서
 
