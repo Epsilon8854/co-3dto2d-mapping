@@ -4,7 +4,7 @@
     # Full XY square side length around base_link; 0 disables exclusion.
     robot_body_exclusion_box_size_m: 1.6
     corrected_odometry_topic: mapping/occupancy_mapper_odometry
-    dynamic_filter_enabled: false
+    dynamic_filter_enabled: true
     dynamic_free_clear_count: 30
     enable_raycast_free_space: true
     use_odom_header_frame: false
