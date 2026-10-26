@@ -2,7 +2,7 @@
 
 ## 1. 공유 범위와 준비
 
-- 브랜치: `features/jeongeon/optimization`. 기존 `features/jeongoen/optimization` 원격 브랜치는 보존합니다.
+- 사용 브랜치: **`features/jeongeon/optimization`**.
 - Ubuntu 22.04, ROS 2 Humble, Python 3.10을 기준으로 합니다. [ROS 공식 설치 안내](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html).
 - source/config/launch/RViz/실행·녹화·재생 스크립트를 공유합니다. `outputs/`, rosbag, 결과 PNG/HTML, build/install/log, 외부 SDK/driver 빌드는 포함하지 않습니다.
 - 설치 스크립트가 `package.xml`의 의존성을 rosdep으로 설치합니다. C++/Python OpenCV, NumPy/SciPy/YAML, RTAB-Map odometry, Madgwick, RViz, rosbag2 Python 및 SQLite storage를 포함합니다.
