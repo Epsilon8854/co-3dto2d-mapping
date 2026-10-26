@@ -1,6 +1,5 @@
-# Multi-agent mapping reuses single_agent.yaml and applies only these overrides.
-agent_overrides:
-  center_box_filter_half_extent_m: 0.8
+# Multi-agent mapping reuses single_agent.yaml; optional per-mode overrides.
+agent_overrides: {}
 central:
   world_frame: map
   pose_relay_pose_timeout_sec: 2.0

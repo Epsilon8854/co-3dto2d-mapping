@@ -23,6 +23,7 @@
 | `config/recording.yaml` | 녹화 topic과 QoS |
 
 - `fixed_base_link_height_above_floor_m`: 보정 odometry의 고정 z. `lidar_mount_height_above_floor_m`: 높이 필터의 바닥 기준 환산값. 기본 각각 0.30m.
+- `robot_body_exclusion_box_size_m`: base_link 중심 XY 정사각형의 전체 한 변 길이. single/multi 기본 1.6m(±0.8m), 0이면 비활성화. 실제 로봇 크기에서 자동 산출하지 않으며 몸체와 필요한 여유에 맞게 설정합니다.
 - 바닥 plane 추정은 운영 경로에서 제거했습니다. 기존 고정 높이+중력 방식의 계산은 유지합니다.
 - 기존 topic/TF 인터페이스는 유지합니다. 이름에 남아 있는 `floor_based_odometry`, `plane_height_filtered`도 호환성을 위해 유지합니다.
 - 초기 정합 이후 주기 정합은 기본 OFF입니다. 선택 사용 시 `central.periodic.enabled`와 연관 gate·재투영 예산을 설정합니다.

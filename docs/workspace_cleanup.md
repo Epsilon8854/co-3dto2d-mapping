@@ -26,3 +26,10 @@
 
 - 현재 명령·설정·기록 구조: [workspace_layout.md](workspace_layout.md).
 - 다른 PC에서도 pull 후 다시 build해야 합니다. 오래된 install 실행 파일이 남지 않도록 최초 정리 버전 적용 시 기존 build/install/log를 별도 보관한 후 빌드하십시오. `third_party/` Livox workspace는 별개입니다.
+
+## 2026-10-26 중심 제외 영역 정정
+
+- 참고 브랜치 `fix/direct-occupancy-icp-no-gates`의 YAML은 half extent 2.5m였지만 실제 live/single bag launch 기본값 0.8m가 이를 덮어썼습니다.
+- 10/23 정리에서 single 설정에 YAML의 2.5m가 남아 기존 launch의 1.6×1.6m보다 큰 5×5m 제외 영역이 적용됐습니다. 당시 mapper 비교는 multi-agent 설정으로 수행되어 이 single 실행 설정 차이를 검출하지 못했습니다.
+- 운영 설정을 기존 크기로 복구하고 이름을 `robot_body_exclusion_box_size_m`로 변경했습니다. 이제 전체 한 변 길이를 입력하며 single/multi 기본 1.6m입니다.
+- 과거 실험 구현·config·결과 snapshot은 이전 파라미터 의미를 유지합니다. 해당 이름 변경은 운영 mapper와 공용 설정에 적용됩니다.

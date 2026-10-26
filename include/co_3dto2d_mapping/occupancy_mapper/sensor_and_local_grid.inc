@@ -119,10 +119,11 @@
               (slice_z_in_cloud_frame_ ? z : local_point.z);
         const bool inside_slice = slice_z >= z_min_ && slice_z <= z_max_;
         const bool passes_z_slice = invert_z_slice_ ? !inside_slice : inside_slice;
+        // Full square side length, centered at local_frame_id (base_link).
         const bool inside_center_box =
-            center_box_filter_half_extent_m_ > 0.0 &&
-            std::abs(local_point.x) <= center_box_filter_half_extent_m_ &&
-            std::abs(local_point.y) <= center_box_filter_half_extent_m_;
+            robot_body_exclusion_box_size_m_ > 0.0 &&
+            std::abs(local_point.x) <= 0.5 * robot_body_exclusion_box_size_m_ &&
+            std::abs(local_point.y) <= 0.5 * robot_body_exclusion_box_size_m_;
 
         const auto point_use =
             co_3dto2d_mapping::occupancy::classifyPointForMapping(

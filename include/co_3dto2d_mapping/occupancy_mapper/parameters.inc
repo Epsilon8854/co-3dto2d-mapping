@@ -16,7 +16,7 @@
     declare_parameter<bool>("publish_slice_debug_points", true);
     declare_parameter<int>("slice_debug_points_max_points", 80000);
     declare_parameter<bool>("transform_cloud_to_local_frame", true);
-    declare_parameter<double>("center_box_filter_half_extent_m", 0.0);
+    declare_parameter<double>("robot_body_exclusion_box_size_m", 0.0);
     declare_parameter<double>("range_min_m", 0.0);
     declare_parameter<double>("range_max_m", 0.0);
     declare_parameter<bool>("enable_raycast_free_space", true);
@@ -88,8 +88,8 @@
         std::max<int64_t>(1, get_parameter("slice_debug_points_max_points").as_int()));
     transform_cloud_to_local_frame_ =
         get_parameter("transform_cloud_to_local_frame").as_bool();
-    center_box_filter_half_extent_m_ =
-        std::max(0.0, get_parameter("center_box_filter_half_extent_m").as_double());
+    robot_body_exclusion_box_size_m_ =
+        std::max(0.0, get_parameter("robot_body_exclusion_box_size_m").as_double());
     range_min_m_ = std::max(0.0, get_parameter("range_min_m").as_double());
     range_max_m_ = std::max(0.0, get_parameter("range_max_m").as_double());
     enable_raycast_free_space_ = get_parameter("enable_raycast_free_space").as_bool();

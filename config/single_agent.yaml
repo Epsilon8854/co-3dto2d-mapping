@@ -1,7 +1,8 @@
 # Shared mapping parameters. Robot-specific topics/frames are generated from robot_id.
 /**:
   ros__parameters:
-    center_box_filter_half_extent_m: 2.5
+    # Full XY square side length around base_link; 0 disables exclusion.
+    robot_body_exclusion_box_size_m: 1.6
     corrected_odometry_topic: mapping/occupancy_mapper_odometry
     dynamic_filter_enabled: false
     dynamic_free_clear_count: 30

@@ -14,7 +14,7 @@
   bool publish_slice_debug_points_ = true;
   int slice_debug_points_max_points_ = 80000;
   bool transform_cloud_to_local_frame_ = true;
-  double center_box_filter_half_extent_m_ = 0.0;
+  double robot_body_exclusion_box_size_m_ = 0.0;
   double range_min_m_ = 0.0;
   double range_max_m_ = 0.0;
   bool enable_raycast_free_space_ = true;
