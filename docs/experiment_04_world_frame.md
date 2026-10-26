@@ -23,7 +23,7 @@
 | `rN/mapping_odom` | 고정 높이/gravity/PHT 보정 지도·pose의 내부 기준<br>raw odom과 혼용하지 않음 |
 | `map → rN/mapping_odom` | 최초 world anchor + 초기 agent 정합<br>중앙 relay가 발행 |
 | `map → rN/odom` | mapping 보정 전역 pose와 같은 시각의 raw TF로 계산<br>중앙 relay가 단독 소유 |
-| `map → rN/mapping_base_link` | 기존 디버그 frame 호환용 전역 pose 별칭<br>실제 base_link와 같은 시각의 같은 pose |
+| `map → rN/mapping_base_link` | 전역 pose의 디버그 frame 별칭<br>실제 base_link와 같은 시각의 같은 pose |
 
 ```mermaid
 flowchart TD
@@ -56,12 +56,12 @@ flowchart TD
 | 토픽 | 타입 / 기준 |
 | --- | --- |
 | `/multi_agent/r0/global_pose`, `/multi_agent/r1/global_pose` | `geometry_msgs/PoseWithCovarianceStamped`, header.frame_id=`map` |
-| `/multi_agent/rN/aligned_odometry` | `nav_msgs/Odometry`, header.frame_id=`map`, child_frame_id=`rN/base_link`<br>기존 이름 유지 |
+| `/multi_agent/rN/aligned_odometry` | `nav_msgs/Odometry`, header.frame_id=`map`, child_frame_id=`rN/base_link` |
 | `/multi_agent/rN/aligned_path` | `nav_msgs/Path`, `map` |
 | `/multi_agent/merged_global_occupancy` | `nav_msgs/OccupancyGrid`, `map` |
 | `/multi_agent/r1/aligned_global_occupancy` | `map` 기준 r1 관측 누적 비교 지도 |
 | `/multi_agent/map_anchor` | latched TransformStamped, `map ← r0/mapping_odom` |
-| `/multi_agent/r1_to_r0_transform` | 기존 토픽명 유지<br>`r0/mapping_odom ← r1/mapping_odom` 초기 정합 |
+| `/multi_agent/r1_to_r0_transform` | `r0/mapping_odom ← r1/mapping_odom` 초기 정합 |
 | `/multi_agent/map_status` | latched DiagnosticArray: world_frame, coordinate_epoch, revision, ready 등 |
 
 - `/rN/mapping/floor_based_odometry`, `/rN/mapping/occupancy_mapper_odometry`, local/global occupancy, 투영 debug cloud는 이제 `rN/mapping_odom` 기준
@@ -125,10 +125,7 @@ source install/local_setup.bash
   - 회사 map server 자체의 frame 설정도 `map`으로 맞춰야 함
 - 탐사 완료 자동 이벤트 구독은 추가하지 않음
   - 회사 측 완료 callback에서 기존 `/multi_agent/save_map` 서비스를 호출 가능
-- 녹화 기본 profile에 map_anchor/map_status를 추가
-  - 기존 raw replay 실행기는 새 설정으로 raw부터 계산
-  - filtered cloud+pose는 mapper 후처리용
-  - local grid 포함 bag은 [중앙 입력 재생](experiment_04_periodic_alignment.md) 경로 사용 가능
+- 최종 지도·pose·경로·TF 녹화·재생: [사용 안내](experiment_04_r0_recording.md)
 - 이전 결과 bag을 단순 재생하면 `map` TF가 없을 수 있음
   - 그때는 당시 RViz 설정/기준 프레임(`r0/odom`)으로 확인하거나 raw 입력을 새 파이프라인으로 재처리 필요
   - 과거 메시지의 frame_id만 바꿔 새 인터페이스로 간주하지 않음

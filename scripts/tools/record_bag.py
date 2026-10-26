@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record single/multi-agent mapper inputs and poses with optional raw LiDAR/IMU."""
+"""Record final single/multi-agent maps, poses, paths and TF."""
 
 from pathlib import Path as _WorkspacePath
 import sys as _workspace_sys
@@ -140,7 +140,7 @@ def audit_bag(bag,items,frames):
     raw_requested=any(i['group']=='optional_raw' for i in items)
     static_present='/tf_static' in stats and '/tf_static' not in wrong and not absent_frames
     mapping_complete=not incomplete('mapping_required') and not incomplete('pose_required') and static_present and overlap
-    return dict(topics=stats,missing_topics=missing,type_mismatches=wrong,static_tf_edges=sorted(edges),
+    result = dict(topics=stats,missing_topics=missing,type_mismatches=wrong,static_tf_edges=sorted(edges),
         missing_sensor_static_paths=absent_frames,mapping_receipt_ranges_overlap=overlap,
         filtered_mapping_minimum_complete=mapping_complete,
         multi_agent_minimum_complete=mapping_complete and not incomplete('alignment_required') and alignment_was_ready,
@@ -152,11 +152,19 @@ def audit_bag(bag,items,frames):
         world_anchor_reference_available=stats.get('/multi_agent/map_anchor',{}).get('count',0)>0,
         merged_map_reference_available=stats.get('/multi_agent/merged_global_occupancy',{}).get('count',0)>0,
         note='Minimum presence/type/TF checks only. Receipt rate does not prove loss-free sensor delivery or clock synchronization.')
+    result['results_replay_minimum_complete'] = (
+        any(i['group']=='results_required' for i in items)
+        and not incomplete('results_required') and not incomplete('pose_required'))
+    if not any(i['group']=='mapping_required' for i in items):
+        result.update(filtered_mapping_minimum_complete=False,
+                      multi_agent_minimum_complete=False,
+                      fixed_pose_reference_minimum_complete=False)
+    return result
 
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--name',default='multi_agent_walk_dynamic',help='scenario prefix; timestamp is appended')
+    p.add_argument('--name',default='mapping',help='scenario prefix; timestamp is appended')
     p.add_argument('--domain-id',type=int,default=72)
     p.add_argument('--profile',type=Path,default=CONFIG/'recording.yaml')
     p.add_argument('--pipeline',choices=['single','multi'],default='multi')
@@ -171,8 +179,13 @@ def main():
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*',args.name):p.error('invalid scenario name')
     if not 0<=args.domain_id<=232 or args.cache_mb<1 or args.split_seconds<0:p.error('invalid domain/cache/split value')
     profile=yaml.safe_load(args.profile.read_text())
+    results_only=profile.get('purpose')=='results'
+    if results_only and (args.include_raw or args.with_agent_maps):
+        p.error('The results profile records final outputs only; use an experiment input profile for reprocessing.')
     if args.pipeline=='single':
         profile['robots']=[f'r{args.robot_id}']
+        if results_only:
+            profile['per_robot']=profile['single_agent']['per_robot']
         profile['shared'].pop('alignment_required',None)
         for scope in ('per_robot','shared'):
             for group,entries in profile[scope].items():
@@ -205,14 +218,14 @@ def main():
     def git(*cmd):return subprocess.check_output(['git',*cmd],cwd=ROOT,text=True).strip()
     from rclpy.utilities import get_rmw_implementation_identifier
     meta=dict(pipeline=args.pipeline,capture_role='both_robots' if args.pipeline=='multi' else f'r{args.robot_id}',
-        purpose='mapper-input replay and occupancy/dynamic-filter evaluation',
+        purpose='final map/pose playback' if results_only else 'mapper-input replay and occupancy/dynamic-filter evaluation',
         started_at=now(),host=platform.node(),domain_id=args.domain_id,branch=git('branch','--show-current'),commit=git('rev-parse','HEAD'),
         ros_distribution=os.environ.get('ROS_DISTRO',''),rmw_implementation=get_rmw_implementation_identifier(),
         dds_transport=dds_transport,
         arguments={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
         topics=items,raw_inputs_included=args.include_raw,bag_uri='bag',profile_sha256=hashlib.sha256(args.profile.read_bytes()).hexdigest(),
         timestamp_policy='recording receipt time on capture host; original message headers preserved; live /clock is not recorded',
-        config_note='repository_* YAMLs are references; runtime_parameters.yaml is a best-effort snapshot of actual services')
+        config_note='configs/repository YAMLs are references; runtime_parameters.yaml is a best-effort snapshot of actual services')
     (capture/'working_tree.patch').write_text(git('diff','--binary'))
     (capture/'capture.yaml').write_text(yaml.safe_dump(meta,sort_keys=False))
     command=['ros2','bag','record','--storage','sqlite3','--output',str(capture/'bag'),
@@ -221,7 +234,8 @@ def main():
     (capture/'record_command.json').write_text(json.dumps(command,indent=2))
     print('Capture:',capture,flush=True)
     print('Recorder starts now and discovers topics as both robots start. Ctrl+C stops only this recorder.',flush=True)
-    print('Default: mapper-input filtered clouds and recorded poses. Raw LiDAR/IMU: '+str(args.include_raw),flush=True)
+    print('Recording final map/pose/path/TF outputs.' if results_only else
+          'Recording mapper inputs. Raw LiDAR/IMU: '+str(args.include_raw),flush=True)
     print('Remote subscriptions add network traffic. Wait for required publishers'+(' and alignment LOCKED.' if args.pipeline=='multi' else '.'),flush=True)
     global STOP
     def stop(*_):
@@ -236,7 +250,7 @@ def main():
             rclpy.spin_once(node,timeout_sec=.1)
             if time.monotonic()-last_check<5.:continue
             last_check=time.monotonic();graph=graph_snapshot(node,items)
-            missing=[i['topic'] for i in items if i['group'] in ('mapping_required','pose_required','alignment_required','optional_raw') and
+            missing=[i['topic'] for i in items if i['group'] in ('results_required','mapping_required','pose_required','alignment_required','optional_raw') and
                      not any(v['topic_type']==i['type'] for v in graph[i['topic']])]
             print(now(),'alignment_ready='+str(alignment['ready']),
                 'WAIT required publishers: '+', '.join(missing) if missing else 'Required publishers visible; actual message counts checked on stop.',flush=True)
@@ -270,12 +284,18 @@ def main():
         try:
             audit=audit_bag(capture/'bag',items,profile['sensor_static_frames'])
             (capture/'capture_audit.yaml').write_text(yaml.safe_dump(audit,sort_keys=False))
-            print('Filtered mapping minimum:',audit['filtered_mapping_minimum_complete'],
-                '| multi-agent minimum:',audit['multi_agent_minimum_complete'],flush=True)
+            if results_only:
+                print('Final map/pose playback minimum:',audit['results_replay_minimum_complete'],flush=True)
+            else:
+                print('Filtered mapping minimum:',audit['filtered_mapping_minimum_complete'],
+                    '| multi-agent minimum:',audit['multi_agent_minimum_complete'],flush=True)
             if args.include_raw:print('Full raw replay minimum:',audit['raw_replay_minimum_complete'],flush=True)
             if audit['missing_topics']:print('Missing topics:',', '.join(audit['missing_topics']),flush=True)
-            if not audit['filtered_mapping_minimum_complete']:error=error or 'Required mapper input/pose/static TF check failed'
-            if args.pipeline=='multi' and not audit['multi_agent_minimum_complete']:error=error or 'Multi-agent alignment reference/ready check failed; inspect audit'
+            if results_only:
+                if not audit['results_replay_minimum_complete']:error=error or 'Required final map/pose check failed; inspect audit'
+            else:
+                if not audit['filtered_mapping_minimum_complete']:error=error or 'Required mapper input/pose/static TF check failed'
+                if args.pipeline=='multi' and not audit['multi_agent_minimum_complete']:error=error or 'Multi-agent alignment reference/ready check failed; inspect audit'
             if args.include_raw and not audit['raw_replay_minimum_complete']:error=error or 'Requested raw input check failed'
         except Exception as exc:error=error or 'Bag audit failed: '+str(exc)
         meta['error']=error

@@ -5,4 +5,9 @@ set +u
 source "${ROS_SETUP:-/opt/ros/humble/setup.bash}"
 source "${MAPPING_WORKSPACE:-${repo_dir}}/install/local_setup.bash"
 set -u
-exec python3 "${repo_dir}/scripts/lib/runtime.py" replay "$@"
+# Default: display recorded final results, without recomputing mapping.
+if [[ "${1:-}" == "--reprocess" ]]; then
+  shift
+  exec python3 "${repo_dir}/scripts/lib/runtime.py" replay "$@"
+fi
+exec python3 "${repo_dir}/scripts/tools/replay_results.py" "$@"

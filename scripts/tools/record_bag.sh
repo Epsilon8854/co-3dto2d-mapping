@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run once on r0; never starts/stops either robot's mapping or LiDAR driver.
+# Record final results on r0; never starts/stops mapping or the LiDAR driver.
 set -Eeuo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(git -C "$(dirname -- "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"

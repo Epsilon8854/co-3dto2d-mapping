@@ -36,7 +36,7 @@
 
 ## 기존 실행 명령 유지
 
-- 운영 실행기 `scripts/run_multi_agent.sh`, 도구 `scripts/tools/replay_bag.sh`·`record_bag.sh`·`monitor_pipeline.sh`에서 ROS 초기화 전 정책 적용
+- 운영 실행기 `scripts/run_multi_agent.sh`, 도구 `scripts/tools/record_bag.sh`·`monitor_pipeline.sh`에서 ROS 초기화 전 정책 적용
   - runtime이 시작한 driver·mapper·fusion·RViz는 같은 환경을 상속함
 - 수정은 저장소의 Python 실행기이므로 이번 DDS 변경만 적용하는 데 colcon 재빌드는 불필요
   - 다른 node 변경을 함께 받았다면 해당 변경의 빌드 요구를 준수
@@ -73,7 +73,8 @@ bash scripts/tools/with_dds.sh rqt
   - whitelist는 토픽 접근 제어가 아님
   - 평소에는 pose·진단·병합 지도만 구독
 - 기본 녹화는 raw LiDAR/IMU를 구독하지 않음
-  - 다만 두 agent의 mapper 입력 filtered cloud를 기록하므로 녹화 중에는 그에 따른 원격 대역폭이 추가됨
+  - 기본은 최종 지도·pose·경로·TF 저장
+  - 결과 재생은 로컬 전용 domain 73 사용
 - 기존 ROS daemon이 다른 설정으로 떠 있으면 CLI discovery 관찰과 실노드 상태가 달라질 수 있음
   - `--no-daemon`을 사용하거나 daemon만 별도로 재시작함
   - 매핑 노드 재시작과 혼동하지 않음

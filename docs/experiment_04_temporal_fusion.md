@@ -107,7 +107,6 @@ source install/local_setup.bash
 - 시작 로그 `Central temporal occupancy: enabled=True ...`와 삭제 발생 시 `cleared=... cells (... total)`를 출력
 - 기존 실행기 상태 출력에도 중앙 필터 ON/OFF, 삭제 누적 셀 수와 과거 관측 제외 셀 수를 표시
 - `/multi_agent/alignment_status`에 `temporal_filter_config`, `temporal_fusion`을 추가
-  - 기존 topic 이름은 바꾸지 않음
 - `temporal_fusion.common`: 프레임 수가 아닌 누적 셀 관측 통계 · `cleared_cells`, `free_votes`, `stale_cell_observations`, `same_bin_cell_observations`, `same_bin_free_suppressed`, `timeout_counter_resets`, `range_blocked_free_cells` 등
 - `temporal_fusion.input_counts`: core의 agent별 채택/중복·과거 프레임 수
   - callback에서 먼저 제외한 수는 기존 `local_input_stats`에서 확인
@@ -118,11 +117,9 @@ source install/local_setup.bash
 
 - 중앙 OFF/ON 비교는 동일 local 관측·동일 inter-agent transform으로 수행 필요
   - raw ICP부터 다시 돌리면 경로 차이가 섞일 수 있음
-- 기본 filtered cloud+pose capture는 mapper 후처리용
-  - 기존 raw replay 실행기로 직접 재처리 불가
-- 중앙 입력을 그대로 보존하려면 recorder의 `--with-agent-maps`를 사용
-  - 원격 지도 구독량 증가
-  - local-grid 중앙 재생 경로: [주기 정합·필터 비교](experiment_04_periodic_alignment.md)
+- 운영 기본 녹화는 최종 결과 확인용 · 재계산용 local 관측은 미포함
+  - 동일 입력의 필터 비교는 별도의 실험 input profile 사용
+  - [실험 분석 경로](experiment_04_periodic_alignment.md)
 - 벽/얇은 가구의 손실, 사람 흔적 제거 지연·잔존 면적, 중앙 `merge_runtime_ms`, queue 누락을 함께 확인
 - 제거 효과는 동일 입력의 잔존 면적·제거 지연·정적 구조 보존으로 평가
   - 기존 취득 데이터의 분석 범위·한계: [주기 정합·필터 비교](experiment_04_periodic_alignment.md)

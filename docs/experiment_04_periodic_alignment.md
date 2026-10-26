@@ -2,6 +2,8 @@
 
 ## Scope
 
+- Input requirement: experiment captures containing native local grids and mapping poses
+  - The operational results-only recorder does not provide these algorithm-reprocessing inputs
 - Reuse each agent's recorded native mapping odometry and occupancy observations
   - No ICP recomputation or live sensor is required
 - Compare fixed initial alignment against periodic **r1 → r0** alignment
