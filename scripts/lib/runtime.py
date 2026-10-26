@@ -246,15 +246,18 @@ def graph_preflight(args):
 
 
 def launch(role,rid,config,alignment,odometry,output,sim=False,static=True,pipeline='multi',sensor_config=None):
+    # ros2 launch rejects empty CLI assignments such as sensor_config_file:=.
+    # Fusion needs no sensor config; let the launch default handle omission.
+    sensor_arguments=['sensor_config_file:='+str(sensor_config)] if sensor_config else []
     if pipeline=='single':
         return ['ros2','launch','co_3dto2d_mapping','single_agent.launch.py','robot_id:='+str(rid),
-            'config_file:='+str(config),'odometry_config_file:='+str(odometry),'sensor_config_file:='+str(sensor_config),
+            'config_file:='+str(config),'odometry_config_file:='+str(odometry),*sensor_arguments,
             'output_directory:='+str(output/'maps'),'use_sim_time:='+str(sim).lower(),
             'publish_sensor_static_tf:='+str(static).lower()]
     return ['ros2','launch','co_3dto2d_mapping','multi_agent.launch.py',
         'role:='+role,'robot_id:='+str(rid),'robot_config_file:='+str(config),
         'alignment_config_file:='+str(alignment),'odometry_config_file:='+str(odometry),
-        'sensor_config_file:='+str(sensor_config or ''),
+        *sensor_arguments,
         'output_directory:='+str(output),'use_sim_time:='+str(sim).lower(),
         'publish_sensor_static_tf:='+str(static).lower()]
 

@@ -48,7 +48,7 @@ class RobotSession(Node):
 def main(args=None):
     rclpy.init(args=args);node=RobotSession()
     try:rclpy.spin(node)
-    except KeyboardInterrupt:pass
+    except (KeyboardInterrupt,rclpy.executors.ExternalShutdownException):pass
     finally:
         node.destroy_node()
         if rclpy.ok():rclpy.shutdown()
