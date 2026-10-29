@@ -53,7 +53,7 @@
     z_max: 1000.0
     z_min: -1000.0
     dynamic_evidence_timeout_sec: 5.0
-    dynamic_clear_max_range_m: 6.0
+    dynamic_clear_max_range_m: 10.0
     mapping_log_period_ms: 2000
     pose_correction_enabled: true
     height_filter_enabled: true

@@ -22,6 +22,7 @@ install(PROGRAMS co_3dto2d_mapping/single_agent/imu_frame_republisher.py DESTINA
 install(PROGRAMS co_3dto2d_mapping/single_agent/rear_sector_filter.py DESTINATION lib/${PROJECT_NAME} RENAME pointcloud_rear_sector_filter.py)
 install(PROGRAMS co_3dto2d_mapping/multi_agent/mapping.py DESTINATION lib/${PROJECT_NAME} RENAME multi_agent_mapping.py)
 install(PROGRAMS co_3dto2d_mapping/multi_agent/pose_relay.py DESTINATION lib/${PROJECT_NAME} RENAME multi_agent_pose_relay.py)
+install(PROGRAMS co_3dto2d_mapping/multi_agent/rviz_annotations.py DESTINATION lib/${PROJECT_NAME} RENAME multi_agent_rviz_annotations.py)
 install(PROGRAMS co_3dto2d_mapping/multi_agent/session.py DESTINATION lib/${PROJECT_NAME} RENAME multi_agent_session.py)
 
 if(BUILD_TESTING)

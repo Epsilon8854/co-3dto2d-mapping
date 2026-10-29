@@ -45,7 +45,7 @@ class MultiAgentMapping(Node):
             verification_prior_growth_ratio=.25,verification_translation_range_m=.15,
             merged_dynamic_filter_enabled=True,merged_dynamic_free_clear_count=30,
             merged_dynamic_evidence_timeout_sec=5.,merged_dynamic_observation_bin_sec=.1,
-            merged_dynamic_clear_max_range_m=6.)
+            merged_dynamic_clear_max_range_m=10.)
         for key,value in defaults.items():self.declare_parameter(key,value)
         self.p={key:self.get_parameter(key).value for key in defaults}
         self.world_frame=self.p['world_frame']

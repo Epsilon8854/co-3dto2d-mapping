@@ -41,7 +41,7 @@ central:
   merged_dynamic_free_clear_count: 30
   merged_dynamic_evidence_timeout_sec: 5.0
   merged_dynamic_observation_bin_sec: 0.1
-  merged_dynamic_clear_max_range_m: 6.0
+  merged_dynamic_clear_max_range_m: 10.0
 ```
 
 | 설정 | 의미 |

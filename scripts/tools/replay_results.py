@@ -75,6 +75,9 @@ def rviz_config(pipeline, robot_id, topics):
         if kind == 'Grid':
             displays.append(item)
             continue
+        if kind == 'MarkerArray' and pipeline == 'multi':
+            displays.append(item)
+            continue
         if kind not in ('Map', 'Odometry', 'Path'):
             continue
         topic = item.get('Topic', {}).get('Value')
@@ -129,7 +132,7 @@ def main():
     config_path = run / 'results.rviz'
     config_path.write_text(yaml.safe_dump(rviz_config(pipeline, robot_id, topics), sort_keys=False))
     qos = {name: dict(reliability='reliable', durability='transient_local' if
-           kind == 'nav_msgs/msg/OccupancyGrid' or name == '/tf_static' else 'volatile',
+           kind == 'nav_msgs/msg/OccupancyGrid' or name in ('/tf_static', '/multi_agent/map_status') else 'volatile',
            history='keep_last', depth=100 if kind == 'tf2_msgs/msg/TFMessage' else 10)
            for name, kind in topics.items()}
     qos_path = run / 'playback_qos.yaml'
@@ -144,9 +147,13 @@ def main():
     cycle = 0
     while not STOP:
         cycle += 1
-        viewer = player = None
+        viewer = player = annotations = None
         try:
             if not args.no_rviz:
+                if pipeline == 'multi':
+                    annotations = start(['ros2', 'run', 'co_3dto2d_mapping', 'multi_agent_rviz_annotations.py',
+                                         '--ros-args', '-p', 'use_sim_time:=true', '-p', 'use_odometry_input:=true'],
+                                        run / f'annotations_{cycle:03d}.log', 'annotations')
                 viewer = start(['rviz2', '-d', config_path, '--ros-args', '-p', 'use_sim_time:=true'],
                                run / f'rviz_{cycle:03d}.log', 'rviz')
             player = start(['ros2', 'bag', 'play', str(bag), '--clock', '--rate', str(args.rate),
@@ -155,6 +162,8 @@ def main():
             while not STOP and player.poll() is None:
                 if viewer is not None and viewer.poll() is not None:
                     raise RuntimeError('RViz exited; see playback logs')
+                if annotations is not None and annotations.poll() is not None:
+                    raise RuntimeError('RViz annotations exited; rebuild the package and see playback logs')
                 time.sleep(.1)
             if not STOP and player.returncode:
                 raise RuntimeError('Bag player failed; see playback logs')
@@ -167,6 +176,8 @@ def main():
                 stop_process(player)
             if viewer is not None:
                 stop_process(viewer)
+            if annotations is not None:
+                stop_process(annotations)
             children.clear()
         if not args.loop:
             break

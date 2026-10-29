@@ -66,8 +66,9 @@ bash scripts/run_single_agent.sh --robot-id 0
 ```
 
 - **자동 실행:** driver · mapping · RViz
-- **RViz Fixed Frame:** `r0/odom`
-- **종료:** Ctrl+C · 소유 driver 종료 및 지도 저장
+- **RViz Fixed Frame:** `r0/odom` · Single은 별도 `map` frame 미생성
+- **저장:** 2초마다 자동 저장 · 정상 Ctrl+C 종료 시 최종 지도 저장
+- **종료:** Ctrl+C · 소유 driver 종료
 
 ### 2.3 주요 토픽
 
@@ -134,7 +135,7 @@ bash scripts/run_single_agent.sh --robot-id 0
 | `dynamic_filter_enabled` | `true` | 동적 흔적 제거 ON/OFF |
 | `dynamic_free_clear_count` | `30` | 삭제에 필요한 free 관측 횟수 · 증가 시 보수적 |
 | `dynamic_evidence_timeout_sec` | `5s` | 관측 공백 초과 시 free 횟수만 초기화 |
-| `dynamic_clear_max_range_m` | `6m` | occupied 삭제 증거로 사용할 관측 거리 |
+| `dynamic_clear_max_range_m` | `10m` | occupied 삭제 증거로 사용할 관측 거리 |
 
 ## 3. Multi-agent mapping
 
@@ -179,6 +180,10 @@ bash scripts/run_multi_agent.sh --robot-id 1
 - **초기 배치:** 가급적 두 센서의 전방을 같은 방향으로 정렬 · 초기 yaw 차이 최소화
 - **정합 대기:** 공통 벽·코너 관측 · `LOCKED`까지 정지
 - **시각화:** r0에서 RViz·정합 모니터 자동 실행 · Fixed Frame = `map`
+  - 원점: 큰 XYZ 축·`MAP WORLD ORIGIN` 표식
+  - 전역 pose: 원점 근처 r0(주황)·r1(청록) 수치 패널 · XYZ(m)·roll/pitch/yaw(°)
+  - 수신 공백 2초 초과 시 회색 `STALE` 표시
+  - 표시 토픽: `/multi_agent/visualization_markers`
 - **종료:** r1 먼저 종료 → r0 종료 · 중앙에서 최종 merged map 저장
 
 ### 3.3 주요 토픽
@@ -213,7 +218,7 @@ bash scripts/run_multi_agent.sh --robot-id 1
 | `merged_dynamic_filter_enabled` | `true` | 중앙 동적 흔적 제거 |
 | `merged_dynamic_free_clear_count` | `30` | 셀 삭제에 필요한 free 관측 횟수 |
 | `merged_dynamic_evidence_timeout_sec` | `5s` | 관측 공백 시 free 횟수 초기화 |
-| `merged_dynamic_clear_max_range_m` | `6m` | 삭제 증거로 사용할 관측 거리 |
+| `merged_dynamic_clear_max_range_m` | `10m` | 삭제 증거로 사용할 관측 거리 |
 | `merged_dynamic_observation_bin_sec` | `0.1s` | 같은 셀·시간 구간의 중복 free 집계 방지 |
 
 - **동일 구간 충돌:** occupied 우선 · 두 agent의 free는 한 번만 집계

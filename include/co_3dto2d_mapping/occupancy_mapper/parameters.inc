@@ -39,7 +39,7 @@
     declare_parameter<bool>("dynamic_filter_enabled", false);
     declare_parameter<int>("dynamic_free_clear_count", 10);
     declare_parameter<double>("dynamic_evidence_timeout_sec", 5.0);
-    declare_parameter<double>("dynamic_clear_max_range_m", 6.0);
+    declare_parameter<double>("dynamic_clear_max_range_m", 10.0);
   }
 
   void declarePoseRefinementParameters()

@@ -14,7 +14,7 @@ class TemporalFusionConfig:
     free_clear_count: int = 30
     evidence_timeout_sec: float = 5.0
     observation_bin_sec: float = 0.1
-    clear_max_range_m: float = 6.0
+    clear_max_range_m: float = 10.0
 
     def validated(self):
         if type(self.enabled) is not bool:
