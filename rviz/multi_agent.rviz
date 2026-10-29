@@ -23,9 +23,13 @@ Panels:
 Visualization Manager:
   Class: ""
   Displays:
+    - Class: co_3dto2d_mapping/GlobalPoseOverlay
+      Enabled: true
+      Name: Global Pose (top-left screen)
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MAP Origin and Robot Global Pose Values
+      Name: MAP Origin and Robot Labels
       Namespaces: {}
       Topic:
         Depth: 1

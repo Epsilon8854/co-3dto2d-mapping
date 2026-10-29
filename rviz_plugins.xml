@@ -1,0 +1,7 @@
+<library path="global_pose_overlay">
+  <class name="co_3dto2d_mapping/GlobalPoseOverlay"
+         type="co_3dto2d_mapping::GlobalPoseOverlay"
+         base_class_type="rviz_common::Display">
+    <description>Screen-fixed x/y/yaw readout for both agents in map coordinates.</description>
+  </class>
+</library>

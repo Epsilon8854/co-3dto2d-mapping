@@ -92,7 +92,7 @@ def rviz_config(pipeline, robot_id, topics, frame='map'):
         if kind == 'Grid':
             displays.append(item)
             continue
-        if kind == 'MarkerArray' and pipeline == 'multi':
+        if kind in ('MarkerArray', 'GlobalPoseOverlay') and pipeline == 'multi':
             displays.append(item)
             continue
         if kind not in ('Map', 'Odometry', 'Path'):

@@ -18,19 +18,16 @@ from co_3dto2d_mapping.multi_agent.ros import values_of
 class RvizAnnotations(Node):
     def __init__(self):
         super().__init__('multi_agent_rviz_annotations')
-        defaults = dict(world_frame='map', axis_length_m=2.0, text_height_m=0.32,
-                        pose_panel_y_m=-2.0, pose_panel_half_spacing_m=3.0,
+        defaults = dict(world_frame='map', axis_length_m=0.6, text_height_m=0.20,
                         pose_stale_sec=2.0, use_odometry_input=False)
         for key, value in defaults.items():
             self.declare_parameter(key, value)
         self.config = {key: self.get_parameter(key).value for key in defaults}
         if not self.config['world_frame']:
             raise ValueError('world_frame must not be empty')
-        for key in ('axis_length_m', 'text_height_m', 'pose_panel_half_spacing_m', 'pose_stale_sec'):
+        for key in ('axis_length_m', 'text_height_m', 'pose_stale_sec'):
             if not math.isfinite(self.config[key]) or self.config[key] <= 0:
                 raise ValueError(f'{key} must be finite and positive')
-        if not math.isfinite(self.config['pose_panel_y_m']):
-            raise ValueError('pose_panel_y_m must be finite')
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
         latest = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
@@ -69,11 +66,7 @@ class RvizAnnotations(Node):
         norm = math.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w)
         if norm < 1e-12:
             return
-        x, y, z, w = (v/norm for v in (q.x, q.y, q.z, q.w))
-        roll = math.atan2(2*(w*x+y*z), 1-2*(x*x+y*y))
-        pitch = math.asin(max(-1.0, min(1.0, 2*(w*y-z*x))))
-        yaw = math.atan2(2*(w*z+x*y), 1-2*(y*y+z*z))
-        self.poses[rid] = (values[:3], tuple(math.degrees(a) for a in (roll, pitch, yaw)), time.monotonic())
+        self.poses[rid] = (values[:3], time.monotonic())
 
     def marker(self, namespace, identifier, kind, xyz, color):
         marker = Marker()
@@ -107,38 +100,34 @@ class RvizAnnotations(Node):
             endpoint[axis] = length
             arrow = self.marker('world_axes', axis, Marker.ARROW, (0, 0, 0), color)
             arrow.points = [Point(), Point(x=endpoint[0], y=endpoint[1], z=endpoint[2])]
-            arrow.scale.x, arrow.scale.y, arrow.scale.z = 0.07, 0.18, 0.3
+            arrow.scale.x, arrow.scale.y, arrow.scale.z = length*0.035, length*0.09, length*0.15
             markers.append(arrow)
             label_position = list(endpoint)
-            label_position[axis] += 0.3
+            label_position[axis] += 0.12
             if axis == 2:
-                label_position[0] = -0.5  # Separate Z from the origin in top-down view.
-            markers.append(self.text('axis_labels', axis, label_position, 'XYZ'[axis], color, 0.4))
+                label_position[0] = -0.2  # Separate Z from the origin in top-down view.
+            markers.append(self.text('axis_labels', axis, label_position, 'XYZ'[axis], color, 0.18))
         origin = self.marker('world_origin', 0, Marker.SPHERE, (0, 0, 0), white)
-        origin.scale.x = origin.scale.y = origin.scale.z = 0.2
+        origin.scale.x = origin.scale.y = origin.scale.z = 0.08
         markers.append(origin)
-        markers.append(self.text('world_origin', 1, (0, 0.75, 0.4),
-                                 f'{self.config["world_frame"].upper()} WORLD ORIGIN\n(0, 0, 0) m', white, 0.4))
+        markers.append(self.text('world_origin', 1, (0, 0.3, 0.12),
+                                 f'{self.config["world_frame"]} (0,0)', white, 0.18))
         now = time.monotonic()
         for rid, color in ((0, (1.0, 0.51, 0.16, 1.0)), (1, (0.0, 0.86, 0.86, 1.0))):
-            panel_x = (2*rid-1) * self.config['pose_panel_half_spacing_m']
+            # Remove old world-space numerical panels when replacing a running display.
+            remove_panel = self.marker('pose_panels', rid, Marker.TEXT_VIEW_FACING, (0, 0, 0), color)
+            remove_panel.action = Marker.DELETE
+            markers.append(remove_panel)
             entry = self.poses.get(rid)
             if entry is None:
-                text = f'r{rid} | {self.config["world_frame"]}\nWaiting for global pose'
                 remove = self.marker('robot_labels', rid, Marker.TEXT_VIEW_FACING, (0, 0, 0), color)
                 remove.action = Marker.DELETE
                 markers.append(remove)
             else:
-                (x, y, z), (roll, pitch, yaw), received = entry
-                age = now-received
-                state = f' | STALE {age:.1f}s' if age > self.config['pose_stale_sec'] else ''
-                text = (f'r{rid} | {self.config["world_frame"]}{state}\n'
-                        f'X {x:+.2f} m   Y {y:+.2f} m\nZ {z:+.2f} m\n'
-                        f'Roll {roll:+.1f} deg   Pitch {pitch:+.1f} deg\nYaw {yaw:+.1f} deg')
-                if age > self.config['pose_stale_sec']:
+                (x, y, z), received = entry
+                if now-received > self.config['pose_stale_sec']:
                     color = (0.65, 0.65, 0.65, 1.0)
-                markers.append(self.text('robot_labels', rid, (x, y, z+0.7), f'r{rid}', color, 0.4))
-            markers.append(self.text('pose_panels', rid, (panel_x, self.config['pose_panel_y_m'], 0.5), text, color))
+                markers.append(self.text('robot_labels', rid, (x, y, z+0.4), f'r{rid}', color, 0.24))
         self.publisher.publish(MarkerArray(markers=markers))
 
 
