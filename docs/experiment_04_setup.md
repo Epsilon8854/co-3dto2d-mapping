@@ -67,7 +67,8 @@ bash build.sh humble
 
 - **초기 정합:** 공통 벽·코너 관측 · 가급적 같은 전방 방향 · `LOCKED`까지 정지
 - **시각화:** r0에서 RViz·정합 모니터 자동 실행
-- **RViz Fixed Frame:** Single = `r0/odom` · Multi = `map`
+- **RViz Fixed Frame:** Single·Multi 모두 `map`
+- **Single 지도 저장:** 정상 종료 시 한 번 저장 · 실행 중 주기 저장 없음
 - **종료:** Ctrl+C · 소유 driver 종료 및 지도 저장
 - **결과:** `outputs/single_agent/runs/` 또는 `outputs/multi_agent/runs/`
 - **녹화·재생:** [최종 결과 저장·재생](../README.md#5-최종-결과-녹화재생)

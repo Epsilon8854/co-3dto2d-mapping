@@ -50,7 +50,8 @@ bash scripts/tools/replay_bag.sh --bag /absolute/capture/bag --loop
 
 - **입력:** `bag/` 또는 그 상위 capture 폴더
 - **동작:** single/multi 자동 판별 → RViz 실행 → 저장된 지도·pose·경로 재생
-- **좌표계:** Multi = `map` · Single = 해당 `rN/odom`
+- **좌표계:** Single·Multi 모두 `map`
+  - 이전 Single bag은 기록된 pose의 기준 frame을 읽어 표시
 - **실행 범위:** bag player·RViz · driver/ICP/mapper/정합 노드 미실행
 - **통신:** 로컬 전용 domain 73 · 실센서 연결 불필요
 - **옵션:** `--rate 0.5` = 절반 속도 · `--no-rviz` = player만 실행

@@ -27,11 +27,12 @@ def robot_parameters(profile,robot_id,multi_agent=False,multi_config=None):
     if multi_agent and multi_config:
         values.update(yaml.safe_load(Path(multi_config).read_text()).get('agent_overrides',{}))
     prefix=f'r{robot_id}'
-    frame=f'{prefix}/mapping_odom' if multi_agent else f'{prefix}/odom'
+    frame=f'{prefix}/mapping_odom' if multi_agent else 'map'
     values.update(scan_cloud_topic=f'/{prefix}/mapping/plane_height_filtered',
         odom_topic=f'/{prefix}/mapping/floor_based_odometry',local_frame_id=f'{prefix}/base_link',
         global_frame_id=frame,output_frame_id=frame,use_odom_header_frame=False,
         input_cloud_topic=f'/{prefix}/mapping/lidar_rear_filtered',imu_topic=f'/{prefix}/mapping/imu_filtered',
         input_odometry_topic='odom',output_odometry_topic='mapping/floor_based_odometry',
-        output_cloud_topic='mapping/plane_height_filtered')
+        output_cloud_topic='mapping/plane_height_filtered',
+        anchor_output_to_initial_pose=not multi_agent)
     return values

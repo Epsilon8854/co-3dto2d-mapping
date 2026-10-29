@@ -38,6 +38,9 @@ def setup(context):
             odometry_config_file=value('odometry_config_file'),publish_tf='true',use_sim_time=str(sim).lower()).items()))
     actions.append(Node(package='co_3dto2d_mapping',executable='gravity_height_filter.py',namespace=ns,name='gravity_height_filter',parameters=[params],output='screen'))
     actions.append(Node(package='co_3dto2d_mapping',executable='occupancy_mapper',namespace=ns,name='occupancy_mapper',parameters=[params],output='screen'))
+    if value('multi_agent').lower()!='true':
+        actions.append(Node(package='co_3dto2d_mapping',executable='single_agent_map_frame.py',
+            parameters=[dict(robot_id=rid,use_sim_time=sim)],output='screen'))
     if value('output_directory') and value('multi_agent').lower()!='true':
         actions.append(Node(package='co_3dto2d_mapping',executable='single_agent_map_saver.py',
             parameters=[dict(robot_id=rid,output_directory=value('output_directory'),use_sim_time=sim)]))

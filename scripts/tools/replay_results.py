@@ -59,13 +59,30 @@ def replay_topics(metadata, pipeline, robot_id):
     return pipeline, robot_id, selected
 
 
-def rviz_config(pipeline, robot_id, topics):
+def single_recorded_frame(bag, robot_id):
+    """Read the recorded pose header; older single bags used rN/odom."""
+    import rosbag2_py
+    from nav_msgs.msg import Odometry
+    from rclpy.serialization import deserialize_message
+    reader = rosbag2_py.SequentialReader()
+    reader.open(rosbag2_py.StorageOptions(uri=str(bag), storage_id=''), rosbag2_py.ConverterOptions('', ''))
+    topic = f'/r{robot_id}/mapping/occupancy_mapper_odometry'
+    while reader.has_next():
+        name, data, _ = reader.read_next()
+        if name == topic:
+            frame = deserialize_message(data, Odometry).header.frame_id
+            if not frame:
+                raise ValueError('Recorded mapping pose has no reference frame')
+            return frame
+    raise ValueError('No recorded mapping pose found')
+
+
+def rviz_config(pipeline, robot_id, topics, frame='map'):
     config = yaml.safe_load((ROOT / f'rviz/{pipeline}_agent.rviz').read_text())
     manager = config['Visualization Manager']
     if pipeline == 'single':
         config = yaml.safe_load(yaml.safe_dump(config).replace('r0/', f'r{robot_id}/'))
         manager = config['Visualization Manager']
-    frame = 'map' if pipeline == 'multi' else f'r{robot_id}/odom'
     manager['Global Options']['Fixed Frame'] = frame
     manager['Views']['Current']['Target Frame'] = frame
     displays = []
@@ -124,13 +141,14 @@ def main():
     metadata = yaml.safe_load((bag / 'metadata.yaml').read_text())
     try:
         pipeline, robot_id, topics = replay_topics(metadata, args.pipeline, args.robot_id)
+        frame = 'map' if pipeline == 'multi' else single_recorded_frame(bag, robot_id)
     except ValueError as exc:
         p.error(str(exc))
     run = (args.output_root or ROOT / 'outputs' / f'{pipeline}_agent') / 'replays' / datetime.now(
         ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S')
     run.mkdir(parents=True, exist_ok=False)
     config_path = run / 'results.rviz'
-    config_path.write_text(yaml.safe_dump(rviz_config(pipeline, robot_id, topics), sort_keys=False))
+    config_path.write_text(yaml.safe_dump(rviz_config(pipeline, robot_id, topics, frame), sort_keys=False))
     qos = {name: dict(reliability='reliable', durability='transient_local' if
            kind == 'nav_msgs/msg/OccupancyGrid' or name in ('/tf_static', '/multi_agent/map_status') else 'volatile',
            history='keep_last', depth=100 if kind == 'tf2_msgs/msg/TFMessage' else 10)
@@ -138,11 +156,11 @@ def main():
     qos_path = run / 'playback_qos.yaml'
     qos_path.write_text(yaml.safe_dump(qos, sort_keys=False))
     (run / 'replay.json').write_text(json.dumps(dict(bag=str(bag), pipeline=pipeline,
-        topics=topics, rate=args.rate, domain_id=args.domain_id, recomputation=False), indent=2))
+        topics=topics, frame=frame, rate=args.rate, domain_id=args.domain_id, recomputation=False), indent=2))
     os.environ.update(ROS_DOMAIN_ID=str(args.domain_id), ROS_LOCALHOST_ONLY='1')
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, stop)
-    print(f'Result playback: {bag}\nRViz frame: {"map" if pipeline == "multi" else f"r{robot_id}/odom"}'
+    print(f'Result playback: {bag}\nRViz frame: {frame}'
           f' | local domain {args.domain_id} | no driver/ICP/mapping nodes', flush=True)
     cycle = 0
     while not STOP:

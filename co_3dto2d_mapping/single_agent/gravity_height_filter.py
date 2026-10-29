@@ -23,6 +23,7 @@ from co_3dto2d_mapping.common.gravity import (
     up_from_world_orientation,rotation_matrix_from_quaternion,yaw_from_quaternion,fixed_z_gravity_pose,
 )
 from co_3dto2d_mapping.common.height_filter import filter_points_by_fixed_sensor_height
+from co_3dto2d_mapping.common.planar_transform_utils import invert_planar
 
 
 class GravityHeightFilter(Node):
@@ -33,6 +34,7 @@ class GravityHeightFilter(Node):
             input_cloud_topic='mapping/lidar_rear_filtered',imu_topic='mapping/imu_filtered',
             input_odometry_topic='odom',output_odometry_topic='mapping/floor_based_odometry',
             output_cloud_topic='mapping/plane_height_filtered',local_frame_id='base_link',output_frame_id='',
+            anchor_output_to_initial_pose=False,
             gravity_source='orientation_then_acceleration',imu_timeout_sec=.30,
             acceleration_min_mps2=6.,acceleration_max_mps2=13.,acceleration_blend=.15,
             gravity_filter_gain=.25,gravity_hold_timeout_sec=.75,
@@ -47,6 +49,7 @@ class GravityHeightFilter(Node):
         self.fixed_base_link_height_m=p['fixed_base_link_height_above_floor_m']
         self.lidar_mount_height_m=p['lidar_mount_height_above_floor_m']
         self.local_frame_id=p['local_frame_id'];self.output_frame_id=p['output_frame_id']
+        self.anchor_output=p['anchor_output_to_initial_pose'];self._world_anchor=None
         for key in ('gravity_source','imu_timeout_sec','acceleration_min_mps2','acceleration_max_mps2','acceleration_blend',
                     'filtered_cloud_min_points','orientation_stddev_rad','debug_path_publish_period_ms'):
             setattr(self,key,p[key])
@@ -99,6 +102,10 @@ class GravityHeightFilter(Node):
         try:yaw=yaw_from_quaternion((q.x,q.y,q.z,q.w))
         except ValueError:return
         if not np.all(np.isfinite(values)):return
+        if self.anchor_output and self._world_anchor is None:
+            if odometry.pose.covariance[0]>1000.0:return
+            self._world_anchor=invert_planar((pose.position.x,pose.position.y,yaw))
+            self.get_logger().info(f'Fixed {self.output_frame_id} anchor from initial odometry: {self._world_anchor}')
         output=deepcopy(odometry);output.header.stamp=cloud.header.stamp
         if self.output_frame_id:output.header.frame_id=self.output_frame_id
         if self.enabled:
@@ -108,7 +115,25 @@ class GravityHeightFilter(Node):
                 q=output.pose.pose.orientation;q.x,q.y,q.z,q.w=map(float,quat)
                 output.pose.covariance[14]=0.
                 output.pose.covariance[21]=output.pose.covariance[28]=self.orientation_stddev_rad**2
-        self._publisher.publish(output);self._publish_debug_paths(odometry,output,ns)
+        raw_debug=odometry
+        if self.anchor_output:
+            output=self._to_world(output)
+            raw_debug=self._to_world(odometry)
+        self._publisher.publish(output);self._publish_debug_paths(raw_debug,output,ns)
+
+    def _to_world(self, msg):
+        """Apply the fixed initial XY/yaw anchor to coordinates and covariance."""
+        out=deepcopy(msg);out.header.frame_id=self.output_frame_id
+        x,y,yaw=self._world_anchor;c,s=math.cos(yaw),math.sin(yaw)
+        p=out.pose.pose.position;px,py=p.x,p.y
+        p.x=x+c*px-s*py;p.y=y+s*px+c*py
+        q=out.pose.pose.orientation;qx,qy,qz,qw=q.x,q.y,q.z,q.w
+        ch,sh=math.cos(yaw/2),math.sin(yaw/2)
+        q.x=ch*qx-sh*qy;q.y=sh*qx+ch*qy
+        q.z=ch*qz+sh*qw;q.w=ch*qw-sh*qz
+        rotation=np.eye(6);rotation[:2,:2]=[[c,-s],[s,c]];rotation[3:5,3:5]=[[c,-s],[s,c]]
+        out.pose.covariance=(rotation@np.asarray(msg.pose.covariance).reshape(6,6)@rotation.T).ravel().tolist()
+        return out
 
 
     @staticmethod

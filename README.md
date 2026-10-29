@@ -66,14 +66,16 @@ bash scripts/run_single_agent.sh --robot-id 0
 ```
 
 - **자동 실행:** driver · mapping · RViz
-- **RViz Fixed Frame:** `r0/odom` · Single은 별도 `map` frame 미생성
-- **저장:** 2초마다 자동 저장 · 정상 Ctrl+C 종료 시 최종 지도 저장
+- **RViz Fixed Frame:** `map` · 첫 유효 odometry의 XY·yaw를 기준으로 원점 고정
+- **TF:** `map → r0/odom → r0/base_link → r0/livox_frame`
+- **지도·보정 pose:** `map` 기준 · Raw ICP는 `r0/odom` 기준 유지
+- **저장:** 정상 Ctrl+C 종료 시 최종 지도 한 번 저장 · 실행 중 주기 저장 없음
 - **종료:** Ctrl+C · 소유 driver 종료
 
 ### 2.3 주요 토픽
 
 - **표기:** `N` = `0` 또는 `1`, 메시지 타입 = `패키지/msg/타입`
-- **Mapping 기준 frame:** single = `rN/odom`, multi = `rN/mapping_odom`
+- **Mapping 기준 frame:** single = `map`, multi = `rN/mapping_odom`
 
 | 토픽 | 메시지 타입 | 내용 / header frame |
 |---|---|---|

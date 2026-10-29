@@ -49,7 +49,7 @@ Visualization Manager:
     Color Scheme: map
     Draw Behind: true
     Enabled: true
-    Name: Global Occupancy (fixed-height gravity odometry)
+    Name: Global Occupancy (map)
     Topic:
       Depth: 5
       Durability Policy: Volatile
@@ -172,7 +172,7 @@ Visualization Manager:
     Max Intensity: 1
     Min Color: 0; 0; 0
     Min Intensity: 0
-    Name: Mapper Input (rear + height in fixed-height gravity odometry, yellow)
+    Name: Projected Mapping Cloud (map)
     Position Transformer: XYZ
     Selectable: true
     Size (Pixels): 3
@@ -226,7 +226,7 @@ Visualization Manager:
     Length: 0.20000000298023224
     Line Style: Lines
     Line Width: 0.03500000014901161
-    Name: Fixed-Height Gravity Odometry Path (yellow)
+    Name: Final Mapping Path (map)
     Offset:
       X: 0
       Y: 0
@@ -242,7 +242,7 @@ Visualization Manager:
       Filter size: 10
       History Policy: Keep Last
       Reliability Policy: Reliable
-      Value: /r0/mapping/debug/floor_based_odometry_path
+      Value: /r0/mapping/debug/local_submap_corrected_odometry_path
     Value: true
   - Angle Tolerance: 0.10000000149011612
     Class: rviz_default_plugins/Odometry
@@ -302,7 +302,7 @@ Visualization Manager:
       Value: false
     Enabled: true
     Keep: 1
-    Name: Fixed-Height Gravity Odometry Axes (yellow)
+    Name: Final Mapping Pose Axes (map)
     Position Tolerance: 0
     Shape:
       Alpha: 1
@@ -320,12 +320,12 @@ Visualization Manager:
       Filter size: 10
       History Policy: Keep Last
       Reliability Policy: Reliable
-      Value: /r0/mapping/floor_based_odometry
+      Value: /r0/mapping/occupancy_mapper_odometry
     Value: true
   Enabled: true
   Global Options:
     Background Color: 36; 39; 43
-    Fixed Frame: r0/odom
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
