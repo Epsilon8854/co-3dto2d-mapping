@@ -182,7 +182,7 @@ bash scripts/run_multi_agent.sh --robot-id 1
 - **초기 배치:** 가급적 두 센서의 전방을 같은 방향으로 정렬 · 초기 yaw 차이 최소화
 - **정합 대기:** 공통 벽·코너 관측 · `LOCKED`까지 정지
 - **시각화:** r0에서 RViz·정합 모니터 자동 실행 · Fixed Frame = `map`
-  - 원점: 0.6m XYZ 축·`map (0,0)` 표식
+  - 원점: 1.0m 화살표 XYZ 축·`map WORLD (0,0)` 표식 · 로봇 축 0.55m와 구분
   - 전역 pose: 화면 좌상단 고정 · r0(주황)·r1(청록)의 x·y(m)·yaw(°)
   - 수신 공백 2초 초과 시 회색 `STALE` 표시
   - 3D 표식: `/multi_agent/visualization_markers` · 수치: `aligned_odometry` 토픽 직접 사용

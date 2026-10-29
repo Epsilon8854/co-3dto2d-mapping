@@ -18,7 +18,7 @@ from co_3dto2d_mapping.multi_agent.ros import values_of
 class RvizAnnotations(Node):
     def __init__(self):
         super().__init__('multi_agent_rviz_annotations')
-        defaults = dict(world_frame='map', axis_length_m=0.6, text_height_m=0.20,
+        defaults = dict(world_frame='map', axis_length_m=1.0, text_height_m=0.20,
                         pose_stale_sec=2.0, use_odometry_input=False)
         for key, value in defaults.items():
             self.declare_parameter(key, value)
@@ -111,7 +111,7 @@ class RvizAnnotations(Node):
         origin.scale.x = origin.scale.y = origin.scale.z = 0.08
         markers.append(origin)
         markers.append(self.text('world_origin', 1, (0, 0.3, 0.12),
-                                 f'{self.config["world_frame"]} (0,0)', white, 0.18))
+                                 f'{self.config["world_frame"]} WORLD (0,0)', white, 0.20))
         now = time.monotonic()
         for rid, color in ((0, (1.0, 0.51, 0.16, 1.0)), (1, (0.0, 0.86, 0.86, 1.0))):
             # Remove old world-space numerical panels when replacing a running display.

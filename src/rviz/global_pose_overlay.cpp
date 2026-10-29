@@ -24,6 +24,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/display.hpp>
 #include <rviz_common/display_context.hpp>
+#include <rviz_rendering/render_system.hpp>
 
 namespace co_3dto2d_mapping
 {
@@ -83,6 +84,10 @@ public:
       lines_[rid+1]->setCaption(text.str());
       lines_[rid+1]->setColour(!p.valid || stale ? Ogre::ColourValue(.65f, .65f, .65f) :
         rid == 0 ? Ogre::ColourValue(1.f, .51f, .16f) : Ogre::ColourValue(0.f, .86f, .86f));
+      setStatus(!p.valid || stale ? rviz_common::properties::StatusProperty::Warn :
+        rviz_common::properties::StatusProperty::Ok, QString("r%1").arg(rid),
+        !p.valid ? "Waiting for map-frame aligned_odometry" :
+        stale ? "Pose stream stale (>2 seconds)" : "Receiving map-frame pose");
     }
   }
 
@@ -96,6 +101,8 @@ public:
 protected:
   void onInitialize() override
   {
+    // Creating an Overlay alone does not connect it to RViz's render queue.
+    rviz_rendering::RenderSystem::get()->prepareOverlays(context_->getSceneManager());
     static std::atomic<unsigned> next_id{0};
     const std::string name = "co_mapping_pose_hud_" + std::to_string(next_id++);
     auto & manager = Ogre::OverlayManager::getSingleton();
